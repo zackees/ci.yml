@@ -1,6 +1,6 @@
 # ci.yml
 
-An AI-assisted checker for slow CI in the `zackees` repositories. It runs on a slow, scheduled loop, inspects recent CI runs and workflow configuration, and prepares focused fixes for avoidable build and lint time.
+An AI-assisted checker for slow CI in the `zackees`, `FastLED`, and `TechWatchProject` repositories. It runs on a slow, scheduled loop, inspects recent CI runs and workflow configuration, and prepares focused fixes for avoidable build and lint time.
 
 This repository currently defines the policy and intended behavior. The checker implementation and scheduler have not been added yet.
 
@@ -12,7 +12,7 @@ Rust repositories should have `.github/workflows/ci.yml` as their quick validati
 soldr cargo dylint --all --workspace
 ```
 
-The Linux Dylint job should cover the platform-specific lint cases as well as the common ones. Repeating Dylint compilation in separate macOS, Windows, or platform-matrix jobs is a slow configuration to flag. Platform builds and tests may still run where needed; this policy concerns where Dylint is compiled and run.
+The Linux Dylint job should cover the platform-specific lint cases as well as the common ones. Repeating Dylint compilation in separate macOS, Windows, or platform-matrix jobs is a slow configuration to flag. Platform builds and tests may still run where needed in separate workflows; the quick `ci.yml` path should stay on Linux.
 
 The checker should also flag direct `cargo dylint` invocations, custom Dylint bootstrapping, duplicate lint jobs, and other nonstandard mechanisms that bypass Soldr. It should compare recent job durations and compile logs with the repository's own history so unusually long or repeated Dylint compile cycles become visible. Before proposing a change, it should verify that the Linux job actually exercises every intended platform lint and that the replacement command passes.
 
@@ -29,6 +29,13 @@ pylint <project-python-paths>
 ```
 
 Each repository should select the Python paths and Pylint configuration that match its source tree. The checker should confirm Ruff's import sorting rules are enabled and that formatting is checked, then remove redundant Black or isort jobs only after the equivalent Ruff checks pass.
+
+## Bad patterns to avoid
+
+- Running Windows or macOS runners from `.github/workflows/ci.yml`. Keep the normal PR validation path on Linux; put necessary platform builds and tests in separate workflows.
+- Running Rust lint checks without `soldr cargo dylint --all --workspace`. Other Rust lint paths can trigger slow, repeated compilation.
+- Making normal PRs wait on excessive or slow CI pipelines. Keep the required quick checks focused and move longer validation out of the normal PR path.
+- In Rust projects with Python bindings, using an install step that invokes Maturin directly instead of running it through Soldr.
 
 ## Slow-loop workflow
 
