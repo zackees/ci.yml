@@ -1,0 +1,11 @@
+[package]
+name = "demo"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+json = ["dep:demo-json"]
+
+[dependencies]
+demo-core = { path = "../private/demo-core" }
+demo-json = { path = "../private/demo-json", optional = true }

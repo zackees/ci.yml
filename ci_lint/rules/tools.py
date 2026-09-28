@@ -14,6 +14,7 @@ import shlex
 from pathlib import Path
 
 from ci_lint.finding import Finding
+from ci_lint.repo_files import list_repo_files
 from ci_lint.schema import CiToml
 from ci_lint.workflow_scan import (
     as_dict,
@@ -174,11 +175,18 @@ def _literal_str(node: ast.expr) -> str | None:
 
 
 def _discover_python_command_files(repo_root: Path) -> list[Path]:
-    out: list[Path] = sorted(repo_root.glob("*.py"))
-    ci_dir = repo_root / "ci"
-    if ci_dir.is_dir():
-        out.extend(sorted(ci_dir.rglob("*.py")))
-    return out
+    """Root-level `*.py` and everything under `ci/`, restricted to
+    git-tracked (or not-yet-ignored) files (`ci_lint.repo_files`) so this
+    AST scan never walks into gitignored build output that happens to sit
+    under a `ci/` directory name."""
+
+    out: list[Path] = []
+    for rel in list_repo_files(repo_root):
+        if not rel.endswith(".py"):
+            continue
+        if "/" not in rel or rel.startswith("ci/"):
+            out.append(repo_root / rel)
+    return sorted(out)
 
 
 def _extract_ast_commands(path: Path) -> list[tuple[list[str], int]]:

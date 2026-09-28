@@ -12,10 +12,10 @@ for `ci.sh` (GEN-005) is expected to turn exactly that finding into
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
+from ci_lint.repo_files import list_repo_files
 from ci_lint.schema import CiToml
 from ci_lint.workflow_scan import (
     ParsedYamlFile,
@@ -93,43 +93,12 @@ def _check_steps(
 
 
 def check_tracked_scripts(repo_root: Path) -> list[Finding]:
-    # --others --cached --exclude-standard: every file that is tracked OR
-    # would become tracked on `git add .` (i.e. not gitignored). A fresh
-    # Actions checkout has everything tracked already; this form also lets
-    # an on-disk fixture tree be scanned without a separate `git add` step.
-    try:
-        proc = subprocess.run(
-            ["git", "ls-files", "--others", "--cached", "--exclude-standard"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-    except OSError as exc:
-        return [
-            Finding(
-                rule="GEN-005",
-                status=Status.NEEDS_REVIEW,
-                message=f"'git ls-files' failed ({exc}); cannot scan tracked files for shell/batch scripts",
-                fix="ensure git is on PATH and repo_root is a git worktree",
-            )
-        ]
-    if proc.returncode != 0:
-        return [
-            Finding(
-                rule="GEN-005",
-                status=Status.NEEDS_REVIEW,
-                message=f"'git ls-files' exited {proc.returncode}: {proc.stderr.strip()}",
-                fix="ensure repo_root is a git worktree with a valid index",
-            )
-        ]
-
+    # ci_lint.repo_files.list_repo_files: every git-tracked (or not-yet-
+    # ignored) file inside a git work tree, falling back to a filesystem
+    # walk (skipping VCS/build noise) for a bare on-disk fixture tree that
+    # is not itself inside any git repository.
     findings: list[Finding] = []
-    for rel in proc.stdout.splitlines():
-        rel = rel.strip()
-        if not rel:
-            continue
+    for rel in list_repo_files(repo_root):
         rel_path = Path(rel)
         if rel_path.suffix.lower() in SCRIPT_EXTS:
             findings.append(

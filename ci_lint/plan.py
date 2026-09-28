@@ -51,6 +51,8 @@ class Plan:
     mergeable: bool
     digest: str
     reasons: tuple[str, ...]
+    required_jobs: tuple[str, ...]
+    needs_platform_lanes: bool
     dispatch_sha: str | None = None
 
     def to_json_dict(self) -> dict[str, object]:
@@ -69,8 +71,53 @@ class Plan:
             "mergeable": self.mergeable,
             "digest": self.digest,
             "reasons": list(self.reasons),
+            "required_jobs": list(self.required_jobs),
+            "needs_platform_lanes": self.needs_platform_lanes,
             "dispatch_sha": self.dispatch_sha,
         }
+
+
+def _required_job_ids(needs_platform_lanes: bool, dylint_targets: tuple[str, ...]) -> tuple[str, ...]:
+    """The job `id:`s (`needs:` keys) `ci-lint gate` requires to have
+    `result == "success"` (round-2A brief, part 2d; amended by the
+    orchestrator's round-2A amendment 1). This is the one place that
+    convention is defined; the template's `ci.yml` must name its jobs to
+    match:
+
+      - "precheck" always (the precheck job itself).
+      - "fast" always -- the default linux-x64 build+unit+smoke lane.
+      - "dylint" when any dylint target is selected.
+      - "platform-build" and "platform-run" only when `needs_platform_lanes`
+        is true -- these are matrix jobs (one leg per non-default
+        platform); GitHub aggregates every matrix leg into a single
+        `needs.<id>.result`, so one id each covers the whole matrix.
+
+    "ci-ok" (the gate job itself) is never in this list -- a job cannot
+    require its own result.
+    """
+
+    jobs = ["precheck", "fast"]
+    if dylint_targets:
+        jobs.append("dylint")
+    if needs_platform_lanes:
+        jobs.append("platform-build")
+        jobs.append("platform-run")
+    return tuple(jobs)
+
+
+def _default_fast_lane_platforms(ci: CiToml) -> frozenset[str]:
+    """The fixed platform set the always-required "fast" job covers --
+    `[flow.pr]`'s own declared `platforms` (normally just `linux-x64`),
+    regardless of which flow the current run actually resolves. Round-2A
+    amendment 3: `needs_platform_lanes` is true exactly when the final
+    selection includes anything beyond this fixed baseline, not merely
+    "more than one platform" -- release/nightly's `platforms = "all"`
+    base is itself already beyond this baseline, so they still need the
+    platform-build/platform-run matrix even though nothing was "added" by
+    a tag."""
+
+    pr_flow = resolve_flow(ci, "pr")
+    return frozenset(_expand_platforms(ci, pr_flow.platforms))
 
 
 def _expand_platforms(ci: CiToml, value: tuple[str, ...] | str | None) -> set[str]:
@@ -214,9 +261,15 @@ def compute_plan(
 
     publish = _resolve_publish_mode(ci, flow_publish)
 
+    # Dylint checks every DECLARED platform from one Linux job regardless of
+    # which platforms this run actually builds (issue #6 §2/§3: "Dylint for
+    # every declared platform from one Linux job") -- it is a cheap
+    # check-only pass, not a full cross-build, so it is never narrowed to
+    # the tag-selected `platforms` subset the way real build lanes are
+    # (round-2A brief, part 2f).
     dylint_targets: tuple[str, ...] = ()
     if resolved.dylint == "all-platforms" or (ci.lint_dylint is not None and ci.lint_dylint.targets == "all-platforms"):
-        dylint_targets = tuple(sorted(platforms)) or tuple(sorted(ci.platforms))
+        dylint_targets = tuple(sorted(ci.platforms))
 
     if event_name == "workflow_dispatch":
         if dispatch_sha is None or not DISPATCH_SHA_RE.match(dispatch_sha):
@@ -242,6 +295,8 @@ def compute_plan(
     )
     digest = hashlib.sha256(selection_repr.encode("utf-8")).hexdigest()
 
+    needs_platform_lanes = bool(platforms - _default_fast_lane_platforms(ci))
+
     return Plan(
         flow=flow_id,
         event_name=event_name,
@@ -254,6 +309,8 @@ def compute_plan(
         mergeable=mergeable,
         digest=digest,
         reasons=tuple(reasons),
+        required_jobs=_required_job_ids(needs_platform_lanes, dylint_targets),
+        needs_platform_lanes=needs_platform_lanes,
         dispatch_sha=dispatch_sha,
     )
 

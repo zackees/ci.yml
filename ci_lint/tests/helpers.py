@@ -17,6 +17,7 @@ rules) are never skipped.
 
 from __future__ import annotations
 
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -34,3 +35,20 @@ def fixture(rule: str, kind: str) -> Path:
     if not path.is_dir():
         raise FileNotFoundError(f"missing fixture {rule}/{kind} at {path}")
     return path
+
+
+def init_git_repo(root: Path) -> None:
+    """`git init` a throwaway repo at `root` for tests that must exercise
+    `ci_lint.repo_files.list_repo_files`'s git-tracked-scope path against a
+    gitignored file -- such a file can never be *committed* to ci.yml's own
+    repository (it would defeat the point of the fixture), so those tests
+    build their own tiny repo on the fly in a tempdir instead of relying on
+    a static checked-in fixture."""
+
+    subprocess.run(
+        ["git", "init", "-q"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )

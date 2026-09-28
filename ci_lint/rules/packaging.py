@@ -12,7 +12,8 @@ import tomllib
 from pathlib import Path
 
 from ci_lint.finding import Finding
-from ci_lint.schema import CiToml
+from ci_lint.repo_files import list_repo_files
+from ci_lint.schema import CliBinary, CiToml
 
 SOLDR_PIN_RE = re.compile(r"^soldr==")
 
@@ -117,6 +118,25 @@ def check_pkg_004(repo_root: Path) -> list[Finding]:
     return findings
 
 
+def _bundle_bin_matches(entry: object, cli: CliBinary) -> bool:
+    """`[tool.soldr.pep517].bundle-bins` accepts two shapes (round-2A brief,
+    defect 3): a plain string naming the crate (`"template-cli"`), or a
+    table `{ bin = "<cli command name>", package = "<crate>" }` -- the
+    shape soldr's own docs use and the template repo ships
+    (`[{ bin = "template-cli", package = "template-cli" }]`). A table entry
+    matches on `bin` == `[python].cli.name`; if it also carries `package`,
+    that must equal `[python].cli.crate`."""
+
+    if isinstance(entry, str):
+        return entry == cli.crate
+    if isinstance(entry, dict):
+        if entry.get("bin") != cli.name:
+            return False
+        package = entry.get("package")
+        return package is None or package == cli.crate
+    return False
+
+
 def check_pkg_003(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings: list[Finding] = []
     if ci.python is None:
@@ -144,15 +164,16 @@ def check_pkg_003(ci: CiToml, repo_root: Path) -> list[Finding]:
     pep517 = soldr_tool.get("pep517") if isinstance(soldr_tool, dict) else None
     bundle_bins = pep517.get("bundle-bins") if isinstance(pep517, dict) else None
     bundle_bins = bundle_bins if isinstance(bundle_bins, list) else []
-    if ci.python.cli.crate not in bundle_bins:
+    if not any(_bundle_bin_matches(entry, ci.python.cli) for entry in bundle_bins):
         findings.append(
             Finding(
                 rule="PKG-003",
                 path="pyproject.toml",
                 message=f"[tool.soldr.pep517].bundle-bins {bundle_bins} does not include "
-                f"'{ci.python.cli.crate}'",
-                fix=f'add "{ci.python.cli.crate}" to [tool.soldr.pep517].bundle-bins in '
-                "pyproject.toml",
+                f"'{ci.python.cli.crate}' (as a plain string, or as a table with "
+                f"bin = \"{ci.python.cli.name}\")",
+                fix=f'add "{ci.python.cli.crate}" (or {{ bin = "{ci.python.cli.name}", package = '
+                f'"{ci.python.cli.crate}" }}) to [tool.soldr.pep517].bundle-bins in pyproject.toml',
             )
         )
     return findings
@@ -189,8 +210,12 @@ def _imports_native(node: ast.Try) -> bool:
 
 def check_pkg_005(repo_root: Path) -> list[Finding]:
     findings: list[Finding] = []
-    src_dir = repo_root / "src"
-    py_files = list(src_dir.rglob("*.py")) if src_dir.is_dir() else []
+    # git-tracked (or not-yet-ignored) files under src/ only (ci_lint.repo_files):
+    # round-1A's `src_dir.rglob("*.py")` also walked gitignored build output
+    # such as a stray `src/**/.venv/`, `src/**/__pycache__/` or vendored tree.
+    py_files = [
+        repo_root / rel for rel in list_repo_files(repo_root) if rel.startswith("src/") and rel.endswith(".py")
+    ]
     for f in py_files:
         try:
             tree = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))

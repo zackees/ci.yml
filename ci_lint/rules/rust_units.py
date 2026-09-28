@@ -145,7 +145,7 @@ def check_rust_011(ci: CiToml, crates: list[CargoCrate], repo_root: Path) -> lis
                     "crate compiles unconditionally",
                 )
             )
-        if has_cfg_feature(repo_root / c.dir):
+        if has_cfg_feature(repo_root, c.dir):
             findings.append(
                 Finding(
                     rule="RUST-011",

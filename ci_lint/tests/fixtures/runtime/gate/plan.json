@@ -1,0 +1,18 @@
+{
+  "flow": "pr",
+  "event_name": "pull_request",
+  "tags": [],
+  "platforms": [
+    { "id": "linux-x64", "target": "x86_64-unknown-linux-gnu", "runs_on": "ubuntu-24.04", "group": "linux" }
+  ],
+  "suites": ["smoke", "unit"],
+  "dylint_targets": ["linux-x64"],
+  "cache_mode": "read",
+  "publish": "none",
+  "mergeable": true,
+  "digest": "deadbeef",
+  "reasons": ["event 'pull_request' selects base flow 'pr'"],
+  "required_jobs": ["precheck", "fast", "dylint"],
+  "needs_platform_lanes": false,
+  "dispatch_sha": null
+}

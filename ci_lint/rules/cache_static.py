@@ -97,6 +97,13 @@ def check_cache_002(ci: CiToml, repo_root: Path) -> list[Finding]:
 
 
 def _cardinality(ci: CiToml, per: str | None) -> int:
+    """`per`'s cardinality multiplier. `ci_lint.schema` already rejects any
+    value outside `CACHE_FAMILY_PER_VALUES` as `CT-002` (round-2A amendment
+    2), so `None`/`"none"` are the only ways to reach the `1` fallback
+    here legitimately; an invalid value that somehow arrives anyway still
+    falls back to `1` rather than crashing -- its CT-002 finding is what
+    tells the user it's wrong, not this arithmetic."""
+
     if per == "platform":
         return len(ci.platforms)
     if per == "cross-platform":
@@ -168,13 +175,29 @@ def check_cache_004(ci: CiToml) -> tuple[list[Finding], str]:
         )
         pr_budget = 0
 
-    worst = steady_total + lockfile_total + pr_budget
+    writer_flow_ids = [fid for fid, flow in ci.flows.items() if resolve_flow(ci, fid).cache == "write"]
+    writer_flows_pre_pruned = [resolve_flow(ci, fid).pre_prune for fid in writer_flow_ids]
+    all_pre_pruned = bool(writer_flow_ids) and all(writer_flows_pre_pruned)
+
+    # `pre-prune = true` on every writer flow removes only the
+    # lockfile-change-peak term (the moment old+new lockfile-keyed entries
+    # briefly coexist is pruned before the write) -- it does NOT waive the
+    # rest of the budget proof (round-2A brief, defect 4). Without full
+    # pre-prune, the peak term still applies.
+    if all_pre_pruned:
+        worst = steady_total + pr_budget
+        formula = "worst = steady + [cache.pr].budget (every writer flow pre-prunes: lockfile peak waived)"
+    else:
+        worst = steady_total + lockfile_total + pr_budget
+        formula = "worst = steady + lockfile-change peak + [cache.pr].budget (not every writer flow pre-prunes)"
+
     arithmetic = (
         "CACHE-004 budget arithmetic:\n"
         + "\n".join(lines)
         + f"\n  steady total            = {steady_total} B"
         + f"\n  + lockfile-change peak  = {lockfile_total} B"
         + f"\n  + [cache.pr].budget     = {pr_budget} B"
+        + f"\n  formula applied: {formula}"
         + f"\n  = worst case            = {worst} B"
         + f"\n  budget ([cache].budget) = {budget} B"
     )
@@ -183,19 +206,24 @@ def check_cache_004(ci: CiToml) -> tuple[list[Finding], str]:
         return findings, arithmetic
 
     if worst > budget:
-        writer_flow_ids = [fid for fid, flow in ci.flows.items() if resolve_flow(ci, fid).cache == "write"]
-        writer_flows_pre_pruned = [resolve_flow(ci, fid).pre_prune for fid in writer_flow_ids]
-        if not writer_flow_ids or not all(writer_flows_pre_pruned):
-            findings.append(
-                Finding(
-                    rule="CACHE-004",
-                    path="ci.toml",
-                    message=f"cache budget exceeded: worst case {worst} B > budget {budget} B",
-                    fix="lower family 'max' sizes or their cardinality ('per'), raise [cache].budget "
-                    "(up to 10GB), or set 'pre-prune = true' on every writer flow (cache = \"write\") "
-                    "so the lockfile-change peak is pruned before it accumulates",
-                )
+        fix = (
+            "lower family 'max' sizes or their cardinality ('per'), or raise [cache].budget (up to "
+            "10GB)"
+        )
+        if not all_pre_pruned:
+            fix += (
+                "; setting 'pre-prune = true' on every writer flow (cache = \"write\") removes the "
+                "lockfile-change-peak term, but the remaining steady total + [cache.pr].budget must "
+                "still fit"
             )
+        findings.append(
+            Finding(
+                rule="CACHE-004",
+                path="ci.toml",
+                message=f"cache budget exceeded: worst case {worst} B > budget {budget} B ({formula})",
+                fix=fix,
+            )
+        )
 
     return findings, arithmetic
 

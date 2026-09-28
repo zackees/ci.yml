@@ -24,6 +24,14 @@ LINTER_RE = re.compile(r"^zackees/ci\.yml@([0-9a-fA-F]{40})$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 URL_RE = re.compile(r"^https?://")
 
+# [cache.family.<id>].per's cardinality multiplier (ci_lint.rules.cache_static
+# ._cardinality): "none" is the default (cardinality 1, matching an absent
+# `per`); any other value is a CT-002 schema error rather than a silent
+# fallback to cardinality 1 -- round-2A amendment 2. An unrecognized `per`
+# (e.g. the template's "target") previously undercounted CACHE-004's
+# arithmetic without any indication anything was wrong.
+CACHE_FAMILY_PER_VALUES: frozenset[str] = frozenset({"none", "platform", "cross-platform", "os"})
+
 
 # ── Platforms ─────────────────────────────────────────────────────────────
 
@@ -464,6 +472,18 @@ def _parse_cache(root: Cursor) -> CacheConfig:
         max_ = fsub.str_("max") or ""
         lockfile = fsub.bool_("lockfile", required=False, default=False)
         per = fsub.str_("per", required=False)
+        if per is not None and per not in CACHE_FAMILY_PER_VALUES:
+            root.findings.append(
+                Finding(
+                    rule="CT-002",
+                    path=root.source,
+                    message=f"'cache.family.{fam_id}.per' = {per!r} is not one of "
+                    f"{sorted(CACHE_FAMILY_PER_VALUES)}",
+                    fix=f"set 'cache.family.{fam_id}.per' to one of: "
+                    + ", ".join(sorted(CACHE_FAMILY_PER_VALUES))
+                    + " (or omit it, which defaults to 'none')",
+                )
+            )
         min_ = fsub.str_("min", required=False)
         key = fsub.list_str("key", required=False)
         fsub.finish()

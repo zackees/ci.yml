@@ -44,6 +44,47 @@ class CacheStaticFixtureTest(unittest.TestCase):
         findings, _ = check_cache_004(ci_big)
         self.assertIn("CACHE-004", [f.rule for f in findings])
 
+    def test_cache_004_full_pre_prune_removes_only_the_lockfile_peak_term(self) -> None:
+        """Regression for round-2A defect 4: every writer flow setting
+        `pre-prune = true` must remove only the lockfile-change-peak term
+        from the worst-case sum, not waive the whole CACHE-004 proof. The
+        CACHE-004/green fixture already has `pre-prune = true` on both
+        writer flows (`flow.main`, `flow.nightly`); its steady total is
+        50MB and `[cache.pr].budget` is 1GB, so `worst = steady +
+        pr.budget` = ~1.074GB. Before the fix, the old code treated full
+        pre-prune as "skip the check entirely" and never compared that sum
+        against the budget at all."""
+
+        from dataclasses import replace
+
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        self.assertTrue(ci.flows["main"].pre_prune)
+        self.assertTrue(ci.flows["nightly"].pre_prune)
+
+        # worst_pruned (steady 50MB + pr.budget 1GB) = ~1.074GB > 1GB budget:
+        # the fixed formula must still fail, even though every writer flow
+        # pre-prunes.
+        tight = replace(ci, cache=replace(ci.cache, budget="1GB"))
+        findings, arithmetic = check_cache_004(tight)
+        self.assertIn("CACHE-004", [f.rule for f in findings], msg=arithmetic)
+        self.assertIn("lockfile peak waived", arithmetic)
+
+        # Raise the budget above worst_pruned (but still below worst_unpruned,
+        # i.e. below steady + lockfile-peak + pr.budget = ~1.104GB) to prove
+        # the lockfile-peak term really was dropped, not just shrunk.
+        just_enough = replace(ci, cache=replace(ci.cache, budget="1100MB"))
+        findings2, arithmetic2 = check_cache_004(just_enough)
+        self.assertNotIn("CACHE-004", [f.rule for f in findings2], msg=arithmetic2)
+
+    def test_cache_004_partial_pre_prune_still_counts_the_lockfile_peak(self) -> None:
+        from dataclasses import replace
+
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        one_flow_only = replace(ci, flows={**ci.flows, "nightly": replace(ci.flows["nightly"], pre_prune=False)})
+        findings, arithmetic = check_cache_004(replace(one_flow_only, cache=replace(one_flow_only.cache, budget="1100MB")))
+        self.assertIn("CACHE-004", [f.rule for f in findings], msg=arithmetic)
+        self.assertIn("not every writer flow pre-prunes", arithmetic)
+
 
 class SizeParsingUnitTest(unittest.TestCase):
     def test_parse_size(self) -> None:
