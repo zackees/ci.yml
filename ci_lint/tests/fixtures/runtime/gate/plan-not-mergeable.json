@@ -15,7 +15,7 @@
     "event 'pull_request' selects base flow 'pr'",
     "tag '[no-test]' removes all suites"
   ],
-  "required_jobs": ["precheck", "build-linux-x64", "dylint"],
+  "required_jobs": ["precheck", "fast", "dylint"],
   "needs_platform_lanes": false,
   "dispatch_sha": null
 }

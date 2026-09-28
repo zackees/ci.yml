@@ -113,5 +113,55 @@ class PlanTest(unittest.TestCase):
         self.assertNotEqual(p1.digest, p3.digest)
 
 
+class RequiredJobsAndPlatformLanesTest(unittest.TestCase):
+    """Round-2A amendments 1 and 3: the gate job-id convention and the
+    needs_platform_lanes definition (true exactly when the plan selects
+    any platform other than [flow.pr]'s own default fast-lane platforms,
+    not merely "more than one platform")."""
+
+    def setUp(self) -> None:
+        self.ci = load_ci()
+
+    def test_untagged_pr_is_the_fast_lane_only(self) -> None:
+        plan = compute_plan(self.ci, event_name="pull_request", title="fix a bug")
+        self.assertFalse(plan.needs_platform_lanes)
+        self.assertEqual(("precheck", "fast", "dylint"), plan.required_jobs)
+        self.assertNotIn("ci-ok", plan.required_jobs)
+        self.assertFalse(any(j.startswith("build-") for j in plan.required_jobs))
+
+    def test_ci_windows_tag_needs_platform_lanes_and_matrix_jobs(self) -> None:
+        plan = compute_plan(self.ci, event_name="pull_request", title="[ci-windows] fix")
+        self.assertTrue(plan.needs_platform_lanes)
+        self.assertEqual(
+            ("precheck", "fast", "dylint", "platform-build", "platform-run"), plan.required_jobs
+        )
+
+    def test_release_needs_platform_lanes_even_though_nothing_was_added_by_a_tag(self) -> None:
+        # flow.release's own base is platforms = "all" (both linux-x64 and
+        # windows-x64 in this fixture) -- no tag added anything, but the
+        # selection still goes beyond [flow.pr]'s single-platform default,
+        # so the platform-build/platform-run matrix is still required.
+        plan = compute_plan(self.ci, event_name="pull_request", title="[release] ship it")
+        self.assertEqual({"linux-x64", "windows-x64"}, {p.id for p in plan.platforms})
+        self.assertTrue(plan.needs_platform_lanes)
+        self.assertIn("platform-build", plan.required_jobs)
+        self.assertIn("platform-run", plan.required_jobs)
+
+    def test_nightly_needs_platform_lanes(self) -> None:
+        plan = compute_plan(self.ci, event_name="schedule", title="")
+        self.assertEqual({"linux-x64", "windows-x64"}, {p.id for p in plan.platforms})
+        self.assertTrue(plan.needs_platform_lanes)
+        self.assertIn("platform-build", plan.required_jobs)
+        self.assertIn("platform-run", plan.required_jobs)
+
+    def test_push_main_matches_the_pr_default_fast_lane(self) -> None:
+        # flow.main extends pr, so it inherits the same single-platform
+        # base -- no platform lanes needed on a plain main push.
+        plan = compute_plan(self.ci, event_name="push", title="")
+        self.assertEqual({"linux-x64"}, {p.id for p in plan.platforms})
+        self.assertFalse(plan.needs_platform_lanes)
+        self.assertEqual(("precheck", "fast", "dylint"), plan.required_jobs)
+
+
 if __name__ == "__main__":
     unittest.main()

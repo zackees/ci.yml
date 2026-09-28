@@ -1,0 +1,7 @@
+{
+  "precheck": { "result": "success", "outputs": {} },
+  "fast": { "result": "success", "outputs": {} },
+  "dylint": { "result": "success", "outputs": {} },
+  "platform-build": { "result": "success", "outputs": {} },
+  "platform-run": { "result": "success", "outputs": {} }
+}

@@ -1,4 +1,4 @@
 {
   "precheck": { "result": "success", "outputs": {} },
-  "build-linux-x64": { "result": "success", "outputs": {} }
+  "fast": { "result": "success", "outputs": {} }
 }

@@ -97,6 +97,13 @@ def check_cache_002(ci: CiToml, repo_root: Path) -> list[Finding]:
 
 
 def _cardinality(ci: CiToml, per: str | None) -> int:
+    """`per`'s cardinality multiplier. `ci_lint.schema` already rejects any
+    value outside `CACHE_FAMILY_PER_VALUES` as `CT-002` (round-2A amendment
+    2), so `None`/`"none"` are the only ways to reach the `1` fallback
+    here legitimately; an invalid value that somehow arrives anyway still
+    falls back to `1` rather than crashing -- its CT-002 finding is what
+    tells the user it's wrong, not this arithmetic."""
+
     if per == "platform":
         return len(ci.platforms)
     if per == "cross-platform":

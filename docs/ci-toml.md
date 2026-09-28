@@ -179,7 +179,7 @@ suite, when one is declared).
 | `via` | string | e.g. `"setup-soldr:build-cache"` or `"ci-lint"`. Informational in round 1A. |
 | `max` | string (size) | The per-instance cap, used directly in `CACHE-004`'s arithmetic. |
 | `lockfile` | bool (default `false`) | If true, this family's steady-state size is counted **twice** in `CACHE-004` (steady state, plus the lockfile-change peak where old and new coexist). |
-| `per` | string (optional) | Cardinality multiplier: `"platform"` -> number of declared platforms; `"cross-platform"` -> platforms minus one; `"os"` -> number of distinct platform groups; unset -> `1`. |
+| `per` | string (optional) | Cardinality multiplier. A **strict enum**: `"none"` (the default, same as omitting it) -> `1`; `"platform"` -> number of declared platforms; `"cross-platform"` -> platforms minus one; `"os"` -> number of distinct platform groups. Any other value (e.g. `"target"`) is `CT-002` -- never a silent fallback to `1`, which would undercount `CACHE-004`'s arithmetic without warning. |
 | `min` | string (size, optional) | Informational in round 1A. |
 | `key` | array of strings (optional) | Key components, e.g. `["os", "python", "uv.lock"]`. Scanned by `CACHE-002` for volatile tokens the same way a workflow's `with.key` is. |
 
@@ -288,13 +288,30 @@ platforms this run actually builds, issue #6 §2/§3), `cache_mode`
 whatever `[publish.pypi].mode` resolves a flow's `publish = "pypi"` to),
 `mergeable` (`false` if any tag removed a suite), a `digest` (sha256 of the
 selection), `reasons` (why each lane was selected), `required_jobs` (the
-job `id:`s `ci-lint gate` requires to succeed -- see
-`ci_lint.plan._required_job_ids` for the naming convention the template's
-`ci.yml` must follow), and `needs_platform_lanes` (`true` when more than
-one platform is selected, i.e. the tag-driven cross-build lanes are needed
-beyond the single default fast lane). Tags are read from the PR title, and
-only for the `pull_request` event -- never for
+job `id:`s `ci-lint gate` requires to succeed), and `needs_platform_lanes`
+(`true` exactly when the selection includes any platform other than
+`[flow.pr]`'s own default fast-lane platform(s) -- **not** simply "more
+than one platform": `flow.release`/`flow.nightly`'s `platforms = "all"`
+base is itself already beyond that fixed baseline, so they need the
+platform matrix even though no tag added anything). Tags are read from the
+PR title, and only for the `pull_request` event -- never for
 `push`/`schedule`/`workflow_dispatch`.
+
+### `required_jobs` / the gate job-id convention
+
+`ci_lint.plan._required_job_ids` is the one place this convention is
+defined; the template's `ci.yml` must name its jobs to match:
+
+| Job `id:` | Always required? | What it covers |
+| --- | --- | --- |
+| `precheck` | always | the precheck job itself |
+| `fast` | always | the default `linux-x64` build+unit+smoke lane |
+| `dylint` | when `dylint_targets` is non-empty | the one Linux Dylint job (all declared targets) |
+| `platform-build` | when `needs_platform_lanes` | the Linux cross-build matrix job -- GitHub aggregates every matrix leg into one `needs.platform-build.result` |
+| `platform-run` | when `needs_platform_lanes` | the native-runner execute matrix job -- same aggregation |
+
+`ci-ok` (the gate job itself) is **never** in `required_jobs` -- a job
+cannot require its own result.
 
 | Event | Base flow |
 | --- | --- |

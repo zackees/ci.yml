@@ -29,6 +29,29 @@ class SchemaFixtureTest(unittest.TestCase):
         _, green_findings = load_ci_toml(fixture("CT-002", "green"))
         self.assertNotIn("CT-002", rule_ids(green_findings))
 
+    def test_ct_002_cache_family_per_is_a_strict_enum(self) -> None:
+        """Round-2A amendment 2: [cache.family.<id>].per must be one of
+        none/platform/cross-platform/os -- an unrecognized value (e.g. the
+        real template's "target") is a CT-002 schema error with a fix
+        message listing the allowed values, never a silent fallback to
+        cardinality 1."""
+
+        ci, red_findings = load_ci_toml(fixture("CT-002", "red-cache-per"))
+        self.assertIn("CT-002", rule_ids(red_findings))
+        per_finding = next(f for f in red_findings if f.rule == "CT-002" and "dylint-out.per" in f.message)
+        self.assertIn("target", per_finding.message)
+        self.assertIn("platform", per_finding.fix)
+        self.assertIn("cross-platform", per_finding.fix)
+        self.assertIn("os", per_finding.fix)
+        self.assertIn("none", per_finding.fix)
+        # the raw (invalid) value is still preserved on the parsed object --
+        # CT-002 doesn't null it out, matching every other CT-002 case.
+        assert ci is not None
+        self.assertEqual("target", ci.cache.family["dylint-out"].per)
+
+        _, green_findings = load_ci_toml(fixture("CT-002", "green-cache-per"))
+        self.assertNotIn("CT-002", rule_ids(green_findings))
+
     def test_ct_003_wrong_schema(self) -> None:
         _, red_findings = load_ci_toml(fixture("CT-003", "red"))
         self.assertIn("CT-003", rule_ids(red_findings))

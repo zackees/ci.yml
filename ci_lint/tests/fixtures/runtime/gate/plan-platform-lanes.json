@@ -1,0 +1,23 @@
+{
+  "flow": "pr",
+  "event_name": "pull_request",
+  "tags": ["ci-windows"],
+  "platforms": [
+    { "id": "linux-x64", "target": "x86_64-unknown-linux-gnu", "runs_on": "ubuntu-24.04", "group": "linux" },
+    { "id": "windows-arm64", "target": "aarch64-pc-windows-msvc", "runs_on": "windows-11-arm", "group": "windows" },
+    { "id": "windows-x64", "target": "x86_64-pc-windows-msvc", "runs_on": "windows-2025", "group": "windows" }
+  ],
+  "suites": ["smoke", "unit"],
+  "dylint_targets": ["linux-arm64", "linux-x64", "macos-arm64", "macos-x64", "windows-arm64", "windows-x64"],
+  "cache_mode": "read",
+  "publish": "none",
+  "mergeable": true,
+  "digest": "deadbeef",
+  "reasons": [
+    "event 'pull_request' selects base flow 'pr'",
+    "tag '[ci-windows]' adds platform group 'windows': ['windows-arm64', 'windows-x64']"
+  ],
+  "required_jobs": ["precheck", "fast", "dylint", "platform-build", "platform-run"],
+  "needs_platform_lanes": true,
+  "dispatch_sha": null
+}

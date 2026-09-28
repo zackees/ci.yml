@@ -63,6 +63,24 @@ class GateTest(unittest.TestCase):
         text = render_text(report)
         self.assertIn("ci-lint gate: OK", text)
 
+    def test_platform_lanes_plan_requires_the_matrix_job_ids(self) -> None:
+        """Round-2A amendment 1: when needs_platform_lanes is true, the
+        required jobs are exactly precheck, fast, dylint, platform-build,
+        platform-run -- 'ci-ok' (the gate itself) is never included."""
+
+        plan = _load("plan-platform-lanes.json")
+        self.assertEqual(
+            ["precheck", "fast", "dylint", "platform-build", "platform-run"], plan["required_jobs"]
+        )
+        needs = _load("needs-platform-lanes-success.json")
+        report = compute_gate(plan, needs)
+        self.assertTrue(report.ok, msg=render_text(report))
+        self.assertEqual(
+            ["precheck", "fast", "dylint", "platform-build", "platform-run"],
+            [s.job_id for s in report.statuses],
+        )
+        self.assertNotIn("ci-ok", report.required_jobs)
+
 
 if __name__ == "__main__":
     unittest.main()
