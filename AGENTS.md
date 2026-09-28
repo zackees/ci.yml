@@ -13,7 +13,7 @@ This repository defines fleet CI policy and the planned checker. Read the policy
 ## Working rules
 
 - Preserve required lint, test, platform, and artifact coverage when proposing a faster workflow. Confirm coverage from commands and runs, not from a runner label.
-- Represent Python benchmark inputs, results, and reports internally with dataclasses, never raw dictionaries. JSON and Protocol Buffers are allowed at serialization boundaries; validate decoded data into dataclasses before using it.
+- Represent Python benchmark inputs, results, and reports internally with dataclasses, never raw dictionaries. JSON and Protocol Buffers are allowed at serialization boundaries; type any boundary dictionary with concrete value types, never `Any`. A list of records must be typed at least as `list[dict[str, TypedData]]`, with `TypedData` replaced by a declared concrete type, before validation into dataclasses.
 - Treat a repo-specific deviation as either a documented exception or a finding requiring review; do not silently weaken the fleet policy.
 - Use deterministic checks and GitHub run/job evidence before spending agent context on diagnosis. Label unclear expressions, scripts, and cache states as unknown.
 - Do not add GitHub Actions workflow files unless the user specifically requests them.

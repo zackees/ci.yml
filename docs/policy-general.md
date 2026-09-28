@@ -14,7 +14,7 @@ This policy applies to active code repositories under `zackees`, `FastLED`, and 
 ## Language checks
 
 - Python sources in the quick path run Ruff checks, including import sorting (`I` rules), `ruff format --check`, and Pylint with the repository's source paths and configuration. Remove standalone Black or isort checks only after equivalent Ruff checks pass.
-- Model Python benchmark inputs, results, and reports with dataclasses internally; do not pass raw dictionaries between benchmark code. JSON and Protocol Buffers are valid wire formats. Convert and validate decoded wire data into dataclasses at the boundary, and serialize dataclasses only when crossing that boundary.
+- Model Python benchmark inputs, results, and reports with dataclasses internally; do not pass raw dictionaries between benchmark code. JSON and Protocol Buffers are valid wire formats. At the serialization boundary, type dictionaries with declared, concrete value types; `dict[str, Any]`, untyped `dict`, and equivalent `Any`-valued aliases are not permitted. A list of record dictionaries must be typed at least as `list[dict[str, TypedData]]`, where `TypedData` stands for a declared concrete value type or union. Convert and validate decoded wire data into dataclasses before using it, and serialize dataclasses only when crossing the boundary.
 - Test benchmark model validation and wire-format round trips so missing, mistyped, or changed fields fail clearly instead of silently breaking consumers.
 - Other languages should declare their fast lint and test commands in the profile. Do not infer that an unrecognized workflow has adequate coverage.
 - Apply the additional [Rust policy](policy-rust.md) when the repository builds Rust code.
@@ -35,7 +35,7 @@ The checker should classify each result as **pass**, **violation**, **needs revi
 | `GEN-002` | A job in `ci.yml` uses a non-Linux runner. Resolve matrices, conditions, and reusable calls before deciding. |
 | `GEN-003` | A profile-required check is missing, skipped, or removed without approved coverage replacement. |
 | `GEN-004` | Python quick checks lack Ruff import/format validation or Pylint, or duplicate Black/isort work. Applies only when the profile contains Python. |
-| `PY-001` | Python benchmark inputs, results, or reports use raw dictionaries as internal models instead of dataclasses, or wire data is used without conversion and validation at the boundary. |
+| `PY-001` | Python benchmark inputs, results, or reports use raw dictionaries as internal models instead of dataclasses; boundary dictionaries use `Any` or lack concrete value types (including lists of records); or wire data is used without conversion and validation at the boundary. |
 | `PERF-001` | Repeated PR timing breach under the sample and threshold rule above, with queue and execution reported separately. |
 
 An exception must name the repository, rule ID, reason, owner, compensating coverage, and review date. The documented Soldr dependency cycle in `zackees/running-process` is an example to evaluate for an exception. Exceptions are reviewed when their date arrives or the dependency changes; they do not erase historical findings.
