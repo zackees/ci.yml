@@ -65,11 +65,16 @@ def _parse_package_id(package_id: JsonValue) -> tuple[str, str]:
             return parts[0], parts[1]
         return parts[0], ""
     if "#" in package_id:
-        tail = package_id.rsplit("#", 1)[1]
+        head, _, tail = package_id.rpartition("#")
         if "@" in tail:
             name, version = tail.rsplit("@", 1)
             return name, version
-        return tail, ""
+        # Cargo's package-ID spec omits the name when it equals the final
+        # path component of the source URL: `path+file:///ws/crates/foo#0.1.0`
+        # means package `foo` version `0.1.0`. The fragment is then only a
+        # version, and the name is the URL's last path segment.
+        name = head.rstrip("/").rsplit("/", 1)[-1] if head else ""
+        return name, tail
     return package_id, ""
 
 
