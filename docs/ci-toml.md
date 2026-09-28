@@ -12,6 +12,12 @@ round-2A) checks a real build's output against. It documents what
   --local` (skips checks needing the GitHub API, explicitly) and
   `selftest` (runs this package's own test suite; see
   zackees/zccache#1760).
+- round-3A: the planner's platform-lane matrix outputs (`platform_lanes`,
+  `fast_suites`, `lane_digests` -- see "The planner" below); title-edit
+  **reuse** (`ci_lint plan --reuse`, `ci_lint precheck --reuse
+  --github-output`; see "Title-edit reuse"); and `ci_lint gate --reuse`'s
+  live reuse verification (see "Reuse verification" under "Runtime
+  commands").
 
 `cache save-ok/heal/trim/janitor/budget` and `audit` are still later
 rounds; `python3 -m ci_lint cache|audit ...` currently exits 2 with "not
@@ -297,6 +303,70 @@ platform matrix even though no tag added anything). Tags are read from the
 PR title, and only for the `pull_request` event -- never for
 `push`/`schedule`/`workflow_dispatch`.
 
+### Platform-lane matrix outputs (round-3A)
+
+Three more fields, computed alongside everything above (`ci_lint.plan.Plan`,
+`ci_lint.plan.PlatformLane`):
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `platform_lanes` | array of `{id, target, runs_on, group, wheel, suites}` | Every selected platform **except** `[flow.pr]`'s own default fast-lane platform(s) (normally just `linux-x64`) -- one entry per non-default `platform-build`/`platform-run` matrix leg. `wheel` is `[platforms.<id>].wheel` or `null`. `suites` is `Plan.suites` (below) repeated per lane: every platform lane runs the same resolved suite selection the fast lane does (`unit`/`smoke` always, plus `integration`/`init`/`perf` when a flow or tag selected them, minus anything a tag removed) -- there is no separate per-platform suite composition to derive. Empty exactly when `needs_platform_lanes` is `false`. |
+| `fast_suites` | array of strings | The suites for the `fast` (default-platform) lane -- identical to `Plan.suites`, exposed under its own name so the template can bind the `fast` job's suite input unambiguously alongside each platform lane's own `suites`. |
+| `lane_digests` | object, lane key -> 12-hex-char string | A sha256 digest (truncated to 12 hex chars) of exactly the inputs that determine each lane's work, plus a shared "environment fingerprint" (`ci.toml`'s `linter` pin, and -- when `compute_plan` is given a `repo_root` -- the sha256 blob hashes of `Cargo.lock`, `uv.lock` and `rust-toolchain.toml`, each only if present). Keys: `"fast"` (fast-lane platform id(s)+target(s)+`fast_suites`), `"dylint"` (the sorted `dylint_targets`), and `"platform:<id>"` per platform lane (id+target+runs_on+suites+wheel). The template puts this digest in each job's display name, e.g. `fast [a1b2c3d4e5f6]`, `platform-run (windows-x64) [c1d2e3f4a5b6]` -- see "Title-edit reuse" below, which matches on exactly that bracketed substring. |
+
+`--github-output` (both `ci_lint plan` and, from round-3A, `ci_lint
+precheck --github-output`) adds `platform_lanes_json`, `fast_suites_json`
+and `lane_digests_json` (each the field above, compact-JSON-encoded) on top
+of the round-1A keys (`plan`, `platforms_json`, `cross_platforms_json`,
+`suites_json`, `dylint_targets_json`, `needs_platform_lanes`,
+`mergeable`).
+
+## Title-edit reuse (round-3A)
+
+`ci_lint plan --reuse` (and `ci_lint precheck --reuse`, which computes the
+same thing alongside its `--plan-out`/`--github-output`) looks up whether
+any lane in this run's `lane_digests` already has a **proven-green** job
+for the **identical digest** on the **identical PR head SHA**, so a title
+edit that only adds or removes tags never re-runs work that is still
+valid.
+
+**Security note:** reuse only ever *skips* work already proven green for
+the identical digest on the identical head SHA. It is recomputed fresh on
+every `plan --reuse` invocation (never read from a cached/stale file), it
+is scoped by the GitHub API's own `head_sha=` filter, and (see "Reuse
+verification" below) `ci_lint gate --reuse` re-verifies it live before
+ever treating a skipped required job as a pass. A lane whose inputs
+changed gets a different digest and is never matched against an older
+job's name; a different commit's jobs are excluded by the `head_sha=`
+query itself.
+
+Only consulted for the `pull_request` event, and only when `GITHUB_TOKEN`
+and `GITHUB_REPOSITORY` are both set and the event JSON carries a PR head
+SHA -- `push`/`schedule`/`workflow_dispatch` and any missing precondition
+always produce "reuse nothing" with no network call (`ci_lint.reuse`'s
+`empty_result`). On any GitHub API error, the result is the same "reuse
+nothing", plus a warning printed to stderr -- reuse computation never
+fails the precheck.
+
+**Lookup (`ci_lint.reuse.compute_reuse`, stdlib `urllib`, injectable
+`fetch` in tests -- fixtures under
+`ci_lint/tests/fixtures/runtime/reuse/`):** `GET
+/repos/{repo}/actions/runs?head_sha=<PR head sha>&event=pull_request&per_page=50`,
+keep only runs whose `path` ends with `.github/workflows/ci.yml`, newest
+first, excluding the current run (`GITHUB_RUN_ID`); for each such run `GET
+/repos/{repo}/actions/runs/{id}/jobs?per_page=100`. A lane is reusable
+when some previous job has `conclusion == "success"` and its `name`
+contains the exact bracketed digest (`[<digest>]`) for that lane.
+
+**Output**, added to `plan.json`'s `"reuse"` key and to `--github-output`:
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `reuse_json` | object, lane key -> `{run_id, job_id, html_url}` or `null` | Every lane in `lane_digests`, mapped to the reused job found (or `null`). |
+| `platform_lanes_todo_json` | array, same shape as `platform_lanes` | `platform_lanes` minus every platform lane whose `"platform:<id>"` key in `reuse_json` is non-null -- the platform legs the matrix job(s) still actually need to run. |
+| `fast_reused` | bool | `reuse_json["fast"]` is non-null. |
+| `dylint_reused` | bool | `reuse_json["dylint"]` is non-null. |
+
 ### `required_jobs` / the gate job-id convention
 
 `ci_lint.plan._required_job_ids` is the one place this convention is
@@ -335,9 +405,38 @@ above, which are all static.
 | `ci-lint tests size --repo <path> --artifacts <file.jsonl>` | same artifacts file, `profile.test == true` records with an `executable` | `RUST-012`: an undeclared test binary, a declared one never produced, one over `[rust.tests].max-binary`, or the sum over `[rust.tests].max-total`. Names map `<crate>:lib` / `<crate>:bin:<name>` / `<crate>:test:<name>`. | 1 if any violation |
 | `ci-lint wheel check --repo <path> --wheel <path.whl> [--sdist <path.tar.gz>]` | the wheel's own bytes (stdlib `zipfile`) | `PKG-003`: `<dist>.data/scripts/<cli>[.exe]` exists, has no `#!` shebang, its magic bytes match the wheel's platform tag (ELF/PE/Mach-O + machine/cputype), and no `console_scripts` entry shadows it. `PKG-004`: `*.dist-info/WHEEL`'s `Generator` is reported (`needs_review`, not a violation, if it doesn't mention soldr); the abi tag matches `[python].abi3`; with `--sdist`, its bundled `pyproject.toml` also declares `build-backend = "soldr"`. `PKG-005`: a `_native` extension file exists in the wheel. | 1 if any violation |
 | `ci-lint wheel installed --repo <path> --venv <dir>` | the venv's `bin`/`Scripts` dir + a subprocess run of the installed CLI and the venv's `python` | Same magic-byte check against the current host; `<cli> --version` exits 0 (`PKG-003`); `<venv python> -c "import <pkg>, <pkg>._native as n"` succeeds and `n.__file__` ends in a compiled-extension suffix (`PKG-005`). `<pkg>` is `pyproject.toml`'s `[project].name` with `-` replaced by `_`. | 1 if any violation |
-| `ci-lint gate --repo <path> --plan <plan.json> --needs <needs.json>` | `ci-lint plan`'s own JSON output + GitHub's `toJSON(needs)` verbatim | The `CI OK` aggregator: every job in `plan.required_jobs` must have `needs[job].result == "success"` (a `skipped` job is `TEST-001`; a job id absent from `needs` entirely is `needs_review`, never a silent pass). If `plan.mergeable` is `false`, prints `not mergeable: tag(s) <tags> remove required coverage` to stderr regardless of job results. | 1 if not green |
-| `ci-lint precheck --local` (or env `ACT=true`) | -- | Runs every static group as usual, then adds one `needs_review` finding per check that needs the GitHub API and is not implemented yet (`CACHE-005`/`006`/`008`, `ACT-001`), each explicitly labeled `skipped (local): ...` -- never silently passed. | as `precheck` |
+| `ci-lint gate --repo <path> --plan <plan.json> --needs <needs.json> [--reuse <reuse.json>] [--event <event.json>]` | `ci-lint plan`'s own JSON output + GitHub's `toJSON(needs)` verbatim, plus (round-3A) the plan's reuse map and the PR event JSON | The `CI OK` aggregator: every job in `plan.required_jobs` must have `needs[job].result == "success"`, or be a **verified reuse** (see "Reuse verification" below) when `skipped`. A `skipped` job that is neither is `TEST-001`; a job id absent from `needs` entirely is `needs_review`, never a silent pass. If `plan.mergeable` is `false`, prints `not mergeable: tag(s) <tags> remove required coverage` to stderr regardless of job results. | 1 if not green |
+| `ci-lint precheck --local` (or env `ACT=true`) [`--github-output`] [`--reuse`] | -- | Runs every static group as usual, then adds one `needs_review` finding per check that needs the GitHub API and is not implemented yet (`CACHE-005`/`006`/`008`, `ACT-001`), each explicitly labeled `skipped (local): ...` -- never silently passed. Round-3A: `--github-output` writes the same `$GITHUB_OUTPUT` keys as `ci-lint plan --github-output` (computing a plan internally, same as `--plan-out` already did); `--reuse` adds the title-edit reuse lookup to both `--plan-out`'s written JSON (under a `"reuse"` key) and `--github-output`. | as `precheck` |
 | `ci-lint selftest` | -- | Runs this package's own `unittest` suite (`ci_lint.selftest`; zackees/zccache#1760 -- agents must be able to run this directly). | 0/1 |
+
+### Reuse verification (round-3A, `ci-lint gate --reuse`)
+
+A required job whose `needs[job].result == "skipped"` is treated as
+**success** iff:
+
+1. `--reuse <reuse.json>` (the plan's own `reuse_json`/`"reuse"` map) marks
+   the job's lane(s) as reused, **and**
+2. when a GitHub token is available (env `GITHUB_TOKEN` + `GITHUB_REPOSITORY`
+   both set), the referenced job is **re-fetched live**
+   (`GET /repos/{repo}/actions/jobs/{job_id}`) and confirmed
+   `conclusion == "success"`, its `name` contains the exact bracketed
+   digest (`plan.lane_digests[lane]`) for that lane, and -- when
+   `--event <event.json>` supplies the current run's PR head SHA -- the
+   referenced job's own `head_sha` matches it.
+
+`fast` and `dylint` map to the reuse map's `"fast"`/`"dylint"` keys 1:1.
+`platform-build` and `platform-run` are matrix aggregates (GitHub folds
+every leg of a matrix job into one `needs.<id>.result`), so they verify as
+reused only when **every** currently-selected `"platform:<id>"` lane (read
+from `plan.lane_digests`) is itself reused -- exactly the condition under
+which `platform_lanes_todo_json` is empty.
+
+**Without a token**, a job the plan marks reused but cannot be live-verified
+is `needs_review` (`ci-lint gate` still exits non-zero) -- never a silent
+pass. A job the plan does *not* mark reused, or whose live verification
+fails (wrong digest, wrong head SHA, not `success`), is the pre-existing
+`TEST-001` "a skip is a failure" outcome. The gate's summary table shows
+`reused from run <N>` next to any job whose skip was accepted this way.
 
 Every command above is stdlib-only (`zipfile`, `tarfile`, `subprocess`,
 `tomllib`, `json`) and every finding is a `ci_lint.finding.Finding`

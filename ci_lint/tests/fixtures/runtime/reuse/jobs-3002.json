@@ -1,0 +1,9 @@
+{
+  "total_count": 4,
+  "jobs": [
+    { "id": 9001, "name": "precheck", "conclusion": "success", "head_sha": "deadbeef00000000000000000000000000000000", "html_url": "https://github.com/zackees/template-python-rust-cmd/actions/runs/3002/job/9001" },
+    { "id": 9002, "name": "fast [aaaaaaaaaaaa]", "conclusion": "success", "head_sha": "deadbeef00000000000000000000000000000000", "html_url": "https://github.com/zackees/template-python-rust-cmd/actions/runs/3002/job/9002" },
+    { "id": 9003, "name": "dylint [bbbbbbbbbbbb]", "conclusion": "failure", "head_sha": "deadbeef00000000000000000000000000000000", "html_url": "https://github.com/zackees/template-python-rust-cmd/actions/runs/3002/job/9003" },
+    { "id": 9004, "name": "platform-build (windows-x64) [cccccccccccc]", "conclusion": "success", "head_sha": "deadbeef00000000000000000000000000000000", "html_url": "https://github.com/zackees/template-python-rust-cmd/actions/runs/3002/job/9004" }
+  ]
+}

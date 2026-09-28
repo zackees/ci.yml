@@ -1,0 +1,5 @@
+{
+  "precheck": { "result": "success", "outputs": {} },
+  "fast": { "result": "skipped", "outputs": {} },
+  "dylint": { "result": "success", "outputs": {} }
+}
