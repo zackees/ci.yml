@@ -1,52 +1,45 @@
 # ci.yml
 
-An AI-assisted checker for slow CI in the `zackees`, `FastLED`, and `TechWatchProject` repositories. It runs on a slow, scheduled loop, inspects recent CI runs and workflow configuration, and prepares focused fixes for avoidable build and lint time.
+Policy and planned automation for fast, reliable pull request CI across the `zackees`, `FastLED`, and `TechWatchProject` repositories. The checker and scheduler are not implemented yet.
 
-This repository currently defines the policy and intended behavior. The checker implementation and scheduler have not been added yet.
+## Decision
 
-## First priority: fast Dylint validation
+Standardize each code repository on `.github/workflows/ci.yml` as the entry point for its required quick PR checks. A central checker will evaluate that workflow against a declared repository profile, inspect historical run timings, and open or update one issue per confirmed violation. A finding is resolved by fixing the repository or by changing the policy or recording a reviewed exception.
 
-Rust repositories should have `.github/workflows/ci.yml` as their quick validation workflow. When a repository uses Dylint, that workflow's fast path should run all workspace lints through Soldr on a Linux runner:
+This combines a predictable CI interface with measured evidence. Shared reusable workflows can implement common jobs, but their use alone does not prove that required checks ran or that PR feedback was fast.
 
-```sh
-soldr cargo dylint --all --workspace
-```
+## Policy at a glance
 
-The Linux Dylint job should cover the platform-specific lint cases as well as the common ones. Repeating Dylint compilation in separate macOS, Windows, or platform-matrix jobs is a slow configuration to flag. Platform builds and tests may still run where needed in separate workflows; the quick `ci.yml` path should stay on Linux.
+| Area | Fleet rule |
+| --- | --- |
+| Quick gate | `ci.yml` runs the required checks for ordinary PRs on Linux. Windows, macOS, packaging matrices, and long integration runs belong in separate workflows when needed. |
+| Coverage | A faster gate must preserve the checks required by the repository's profile; removing a workflow is not evidence of an improvement. |
+| Native Linux artifacts | Prefer musl and build musl by default for supported architectures. Also target glibc 2.17 where feasible; verify the artifact's compatibility, or track a scoped exception. |
+| Windows artifacts | Track GNU versus MSVC and x64 versus ARM64 as distinct target cases. A build for one combination cannot satisfy another. |
+| Rust | Use `setup-soldr` and Soldr for compile-bearing Rust checks where the dependency graph permits it. Run Dylint once on Linux and verify intended platform-specific lint coverage. |
+| Python | Run Ruff formatting/import checks and Pylint on the relevant Python paths. Avoid duplicate Black or isort jobs. |
+| Python benchmark data | Use dataclasses as the internal model for benchmark inputs, results, and reports; never pass raw dictionaries through benchmark code. JSON and Protocol Buffers are allowed on the wire, with data decoded and validated into dataclasses at the boundary. |
+| Rust apps published to PyPI or npm | Test the installed Python wheel or packed npm artifact in the quick Linux gate; keep full platform artifact matrices in release or slower validation workflows. |
+| Timing | Measure required PR critical path, runner queue, job and step execution, and known cold/warm cache behavior separately. Do not file a performance violation from one outlier. |
+| Exceptions | Record the rule, reason, owner, and review date. An undocumented exception does not silently satisfy the policy. |
 
-The checker should also flag direct `cargo dylint` invocations, custom Dylint bootstrapping, duplicate lint jobs, and other nonstandard mechanisms that bypass Soldr. It should compare recent job durations and compile logs with the repository's own history so unusually long or repeated Dylint compile cycles become visible. Before proposing a change, it should verify that the Linux job actually exercises every intended platform lint and that the replacement command passes.
+The exact Dylint command is not a text-match rule. For example, `soldr cargo dylint --all --workspace` and an equivalent `soldr dylint` invocation can satisfy the policy if they cover the intended workspace and targets. Direct Dylint tool installation and duplicate native Dylint jobs are candidates for review.
 
-## Python in the fast path
+## Evidence behind the policy
 
-If a repository contains Python, the quick `ci.yml` validation should run both Ruff and Pylint. Ruff should handle formatting and import ordering through `ruff format` and the `I` rules in `ruff check`. CI should not invoke Black or isort as separate tools.
+- [Issue #1](https://github.com/zackees/ci.yml/issues/1) records Dylint cache identity drift, cold versus warm timing, missing cross-target toolchain components, and platform coverage risks.
+- [Issue #2](https://github.com/zackees/ci.yml/issues/2) inventories slow PR paths, current workflow violations, already fixed cases, and gaps in the sampled fleet. Its findings include `running-process`, `fbuild-ide`, `reld`, and historical `datalake-core` runs.
+- [Issue #4](https://github.com/zackees/ci.yml/issues/4) proposes the composable CI contract, full coverage checks, release candidate gate, Linux libc and Windows ABI target model, and fbuild acceptance fixture.
+- The sampled Rust workflows did not reveal a pinned manual Soldr installation without `setup-soldr`. The checker should still detect that pattern without asserting it exists fleet-wide.
 
-A representative validation is:
+## Documentation
 
-```sh
-ruff check .
-ruff format --check .
-pylint <project-python-paths>
-```
-
-Each repository should select the Python paths and Pylint configuration that match its source tree. The checker should confirm Ruff's import sorting rules are enabled and that formatting is checked, then remove redundant Black or isort jobs only after the equivalent Ruff checks pass.
-
-## Bad patterns to avoid
-
-- Running Windows or macOS runners from `.github/workflows/ci.yml`. Keep the normal PR validation path on Linux; put necessary platform builds and tests in separate workflows.
-- Running Rust lint checks without `soldr cargo dylint --all --workspace`. Other Rust lint paths can trigger slow, repeated compilation.
-- Making normal PRs wait on excessive or slow CI pipelines. Keep the required quick checks focused and move longer validation out of the normal PR path.
-- In Rust projects with Python bindings, using an install step that invokes Maturin directly instead of running it through Soldr.
-
-## Slow-loop workflow
-
-1. Periodically inventory the configured repositories and their recent `ci.yml` runs.
-2. Read workflow files, lint configuration, job logs, and timing history. Record the actual slow step and the evidence for it.
-3. Prioritize Dylint duplication, missing Soldr adoption, and missing fast-path coverage. Then inspect Python lint duplication and other repeatable CI delays.
-4. Make a small change in the affected repository, run the relevant quick validation, and compare its result and duration with the baseline.
-5. Open a reviewable pull request with the measurements, the coverage preserved, and any uncertainty. Recheck subsequent runs before treating the issue as resolved.
-
-The loop should avoid speculative rewrites: a faster workflow is only a fix when the required lints still run and pass. Timing comparisons should distinguish cold and warm caches and account for ordinary run-to-run variation.
+- [General code repository policy](docs/policy-general.md): quick gate, coverage, timing, and exceptions.
+- [Rust repository policy](docs/policy-rust.md): common Rust checks, libraries, and apps published to PyPI or npm.
+- [Agent operating guide](docs/agent-guide.md): mechanical scan, evidence, issue lifecycle, and regression cases.
+- [Detailed proposal](proposal.md): proposed schema, repository inventory, target variants, release lifecycle, and acceptance tests.
+- [AGENTS.md](AGENTS.md): index and instructions for agents working in this repository.
 
 ## Status
 
-Policy and scope are documented here. Automated discovery, model execution, scheduling, and repository changes are future work.
+These files define the intended policy and checker behavior. Repository profiles, the scanner, scheduling, and automated issue management are future implementation work. Do not treat the documented checks as already enforced.
