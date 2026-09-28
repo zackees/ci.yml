@@ -5,7 +5,9 @@ workflow_dispatch release; unknown [ci-foo]."""
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from ci_lint.plan import PlanError, compute_plan
 from ci_lint.schema import load_ci_toml
@@ -161,6 +163,93 @@ class RequiredJobsAndPlatformLanesTest(unittest.TestCase):
         self.assertEqual({"linux-x64"}, {p.id for p in plan.platforms})
         self.assertFalse(plan.needs_platform_lanes)
         self.assertEqual(("precheck", "fast", "dylint"), plan.required_jobs)
+
+
+class PlatformLanesFastSuitesLaneDigestsTest(unittest.TestCase):
+    """Round-3A brief, Part 1: platform_lanes_json, fast_suites_json,
+    lane_digests_json."""
+
+    def setUp(self) -> None:
+        self.ci = load_ci()
+
+    def test_untagged_pr_has_no_platform_lanes(self) -> None:
+        plan = compute_plan(self.ci, event_name="pull_request", title="fix a bug")
+        self.assertEqual((), plan.platform_lanes)
+        self.assertEqual(set(plan.suites), set(plan.fast_suites))
+        self.assertEqual({"fast", "dylint"}, set(plan.lane_digests))
+
+    def test_ci_windows_produces_one_platform_lane(self) -> None:
+        plan = compute_plan(self.ci, event_name="pull_request", title="[ci-windows] fix")
+        self.assertEqual(1, len(plan.platform_lanes))
+        lane = plan.platform_lanes[0]
+        self.assertEqual("windows-x64", lane.id)
+        self.assertEqual("x86_64-pc-windows-msvc", lane.target)
+        self.assertEqual("windows-2025", lane.runs_on)
+        self.assertEqual("windows", lane.group)
+        self.assertIsNone(lane.wheel)  # this fixture's windows-x64 declares no `wheel`
+        self.assertEqual(set(plan.suites), set(lane.suites))
+        self.assertEqual({"fast", "dylint", "platform:windows-x64"}, set(plan.lane_digests))
+
+    def test_platform_lane_wheel_is_carried_when_declared(self) -> None:
+        ci, findings = load_ci_toml(fixture("_e2e", "green"))
+        assert ci is not None, findings
+        plan = compute_plan(ci, event_name="pull_request", title="[ci-windows] fix")
+        lane = next(pl for pl in plan.platform_lanes if pl.id == "windows-x64")
+        self.assertIsNone(lane.wheel)  # _e2e/green also declares no wheel for windows-x64
+
+    def test_lane_digests_are_12_hex_chars(self) -> None:
+        plan = compute_plan(self.ci, event_name="pull_request", title="[ci-windows] fix")
+        for lane_id, digest in plan.lane_digests.items():
+            self.assertRegex(digest, r"^[0-9a-f]{12}$", msg=f"lane {lane_id!r}: {digest!r}")
+
+    def test_lane_digest_is_stable_across_calls(self) -> None:
+        p1 = compute_plan(self.ci, event_name="pull_request", title="[ci-windows] add feature x")
+        p2 = compute_plan(self.ci, event_name="pull_request", title="[ci-windows] add feature y")
+        self.assertEqual(p1.lane_digests, p2.lane_digests)
+
+    def test_lane_digest_changes_when_suites_change(self) -> None:
+        base = compute_plan(self.ci, event_name="pull_request", title="[ci-windows] x")
+        full = compute_plan(self.ci, event_name="pull_request", title="[ci-windows][ci-test-integration] x")
+        self.assertNotEqual(base.lane_digests["fast"], full.lane_digests["fast"])
+        self.assertNotEqual(
+            base.lane_digests["platform:windows-x64"], full.lane_digests["platform:windows-x64"]
+        )
+        # dylint's digest only depends on the target set, which tags never
+        # change (issue #6 Section 2/3: Dylint covers every declared
+        # platform regardless of what this run builds) -- unaffected here.
+        self.assertEqual(base.lane_digests["dylint"], full.lane_digests["dylint"])
+
+    def test_repo_root_lockfile_hash_changes_the_digest(self) -> None:
+        without_repo = compute_plan(self.ci, event_name="pull_request", title="x")
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            (repo_root / "Cargo.lock").write_text("version = 3\n", encoding="utf-8")
+            with_repo = compute_plan(
+                self.ci, event_name="pull_request", title="x", repo_root=repo_root
+            )
+            (repo_root / "Cargo.lock").write_text("version = 4\n", encoding="utf-8")
+            with_repo_changed = compute_plan(
+                self.ci, event_name="pull_request", title="x", repo_root=repo_root
+            )
+        self.assertNotEqual(without_repo.lane_digests["fast"], with_repo.lane_digests["fast"])
+        self.assertNotEqual(with_repo.lane_digests["fast"], with_repo_changed.lane_digests["fast"])
+
+    def test_no_platform_lanes_means_empty_platform_lane_digests(self) -> None:
+        plan = compute_plan(self.ci, event_name="push", title="")
+        self.assertFalse(plan.needs_platform_lanes)
+        self.assertEqual((), plan.platform_lanes)
+        self.assertEqual(set(), {k for k in plan.lane_digests if k.startswith("platform:")})
+
+    def test_to_json_dict_carries_the_new_fields(self) -> None:
+        plan = compute_plan(self.ci, event_name="pull_request", title="[ci-windows] x")
+        payload = plan.to_json_dict()
+        self.assertIn("platform_lanes", payload)
+        self.assertIn("fast_suites", payload)
+        self.assertIn("lane_digests", payload)
+        lanes = payload["platform_lanes"]
+        assert isinstance(lanes, list)
+        self.assertEqual(1, len(lanes))
+        self.assertEqual({"id", "target", "runs_on", "group", "wheel", "suites"}, set(lanes[0]))
 
 
 if __name__ == "__main__":

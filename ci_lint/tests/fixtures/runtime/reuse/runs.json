@@ -1,0 +1,8 @@
+{
+  "total_count": 3,
+  "workflow_runs": [
+    { "id": 3003, "path": ".github/workflows/ci.yml", "event": "pull_request", "head_sha": "deadbeef00000000000000000000000000000000" },
+    { "id": 3002, "path": ".github/workflows/ci.yml", "event": "pull_request", "head_sha": "deadbeef00000000000000000000000000000000" },
+    { "id": 3001, "path": ".github/workflows/other.yml", "event": "pull_request", "head_sha": "deadbeef00000000000000000000000000000000" }
+  ]
+}
