@@ -9,6 +9,7 @@ This repository defines fleet CI policy and the planned checker. Read the policy
 3. [docs/agent-guide.md](docs/agent-guide.md) defines how agents gather evidence, classify findings, and manage issues. Read it before auditing or filing a fleet violation.
 4. [README.md](README.md) is the public summary and links to the source issues.
 5. [proposal.md](proposal.md) is the consolidated CI normalization proposal, repository evidence inventory, fbuild mapping, and implementation acceptance plan. Its proposed release-cycle and event-selection rules supersede earlier design examples; enforcement is not implemented.
+6. `docs/case-studies/` holds evidence-first writeups of a specific repository incident or investigation, such as [clud-ci-cost.md](docs/case-studies/clud-ci-cost.md). A case study is not policy: it becomes binding only once its candidate rules are reviewed and written into `policy-general.md` or `policy-rust.md`.
 
 ## Working rules
 
