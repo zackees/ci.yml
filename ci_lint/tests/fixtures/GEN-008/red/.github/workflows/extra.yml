@@ -1,0 +1,10 @@
+name: Extra
+on:
+  push:
+    branches: [main]
+jobs:
+  noop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: python3 -c "pass"

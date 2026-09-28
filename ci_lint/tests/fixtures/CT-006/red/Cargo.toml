@@ -1,0 +1,5 @@
+[workspace]
+members = []
+
+[workspace.metadata.soldr]
+targets = ["x86_64-unknown-linux-gnu"]
