@@ -1,0 +1,21 @@
+name: CI Precheck
+on:
+  workflow_call:
+    outputs:
+      platforms_json:
+        value: ${{ jobs.plan.outputs.platforms_json }}
+permissions:
+  contents: read
+concurrency:
+  group: ci-precheck-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      platforms_json: ${{ steps.plan.outputs.platforms_json }}
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - id: plan
+        run: python3 -m ci_lint plan --repo . --event-name pull_request --github-output

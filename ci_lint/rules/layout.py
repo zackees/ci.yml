@@ -1,0 +1,131 @@
+"""Group 6: platform-code layout (LAYOUT-001).
+
+Host selection belongs in exactly one facade per language: the globs in
+`[allow].platform-code`, or the single file named by `[allow].platform-
+selector`. Everything else -- including tests -- is in scope. `dylints/**`
+(lint-crate fixtures legitimately exercise host cfg) and `ci_lint/**` (this
+package's own RED fixtures do too) are excluded.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from ci_lint.finding import Finding
+from ci_lint.globs import matches_any
+from ci_lint.schema import CiToml
+
+RUST_CFG_RE = re.compile(r"#\[cfg(_attr)?\s*\(|cfg!\s*\(|cfg_select!")
+RUST_SELECTORS: tuple[str, ...] = (
+    "windows",
+    "unix",
+    "target_os",
+    "target_family",
+    "target_arch",
+    "target_env",
+    "target_abi",
+    "target_vendor",
+    "target_endian",
+    "target_pointer_width",
+)
+RUST_HOST_PATHS: tuple[str, ...] = ("std::os::", "libc::", "windows_sys::")
+PY_SELECTORS: tuple[str, ...] = ("sys.platform", "platform.system(", "os.name")
+EXCLUDED_PREFIXES: tuple[str, ...] = ("dylints/", "ci_lint/")
+PY_SCAN_PREFIXES: tuple[str, ...] = ("src/", "tests/", "ci/")
+
+
+WALK_EXCLUDED_DIRS: frozenset[str] = frozenset(
+    {".git", "target", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", ".ruff_cache"}
+)
+
+
+def _tracked_files(repo_root: Path) -> list[str]:
+    """Every regular file under repo_root, skipping VCS/build noise. A
+    plain filesystem walk (not `git ls-files`) so an on-disk fixture tree
+    needs no separate `git add` step to be scanned."""
+
+    out: list[str] = []
+    for path in repo_root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(repo_root)
+        if any(part in WALK_EXCLUDED_DIRS for part in rel.parts):
+            continue
+        out.append(rel.as_posix())
+    return sorted(out)
+
+
+def _check_rust_file(repo_root: Path, rel: str) -> list[Finding]:
+    findings: list[Finding] = []
+    try:
+        lines = (repo_root / rel).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    for i, line in enumerate(lines, start=1):
+        if RUST_CFG_RE.search(line) and any(sel in line for sel in RUST_SELECTORS):
+            findings.append(
+                Finding(
+                    rule="LAYOUT-001",
+                    path=rel,
+                    line=i,
+                    message=f"host selector outside the platform facade: {line.strip()}",
+                    fix="move this platform-specific code into an [allow].platform-code path, or "
+                    "into the one file named by [allow].platform-selector",
+                )
+            )
+        for hp in RUST_HOST_PATHS:
+            if hp in line:
+                findings.append(
+                    Finding(
+                        rule="LAYOUT-001",
+                        path=rel,
+                        line=i,
+                        message=f"references '{hp}' outside the platform facade: {line.strip()}",
+                        fix="move this code behind the platform facade (e.g. crate::platform::*), "
+                        "or into the one file named by [allow].platform-selector",
+                    )
+                )
+    return findings
+
+
+def _check_python_file(repo_root: Path, rel: str) -> list[Finding]:
+    findings: list[Finding] = []
+    try:
+        lines = (repo_root / rel).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    for i, line in enumerate(lines, start=1):
+        for sel in PY_SELECTORS:
+            if sel in line:
+                findings.append(
+                    Finding(
+                        rule="LAYOUT-001",
+                        path=rel,
+                        line=i,
+                        message=f"references '{sel}' outside the platform facade: {line.strip()}",
+                        fix="move this platform-specific check into an [allow].platform-code path",
+                    )
+                )
+    return findings
+
+
+def check_group6(ci: CiToml, repo_root: Path) -> list[Finding]:
+    tracked = _tracked_files(repo_root)
+
+    platform_code = ci.allow.platform_code
+    selector = ci.allow.platform_selector
+
+    findings: list[Finding] = []
+    for rel in tracked:
+        if rel.startswith(EXCLUDED_PREFIXES):
+            continue
+        if rel == selector:
+            continue
+        if matches_any(rel, platform_code):
+            continue
+        if rel.endswith(".rs"):
+            findings.extend(_check_rust_file(repo_root, rel))
+        elif rel.endswith(".py") and rel.startswith(PY_SCAN_PREFIXES):
+            findings.extend(_check_python_file(repo_root, rel))
+    return findings
