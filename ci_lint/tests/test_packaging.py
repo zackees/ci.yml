@@ -24,6 +24,22 @@ class PackagingFixtureTest(unittest.TestCase):
         ci, _ = load_ci_toml(repo)
         self.assertNotIn("PKG-003", [f.rule for f in check_pkg_003(ci, repo)])
 
+    def test_pkg_003_accepts_the_table_shaped_bundle_bins(self) -> None:
+        """Regression for round-2A defect 3: the template's real
+        `[tool.soldr.pep517] bundle-bins` shape is a list of tables
+        (`[{ bin = "template-cli", package = "template-cli" }]`), not the
+        plain-string list round-1A's check assumed. A table entry matches
+        on `bin` (and, if present, `package` must equal `[python].cli.crate`)."""
+
+        repo = fixture("PKG-003", "green-bundle-table")
+        ci, _ = load_ci_toml(repo)
+        self.assertEqual([], check_pkg_003(ci, repo))
+
+    def test_pkg_003_table_shaped_bundle_bins_still_flags_a_mismatch(self) -> None:
+        repo = fixture("PKG-003", "red-bundle-table-mismatch")
+        ci, _ = load_ci_toml(repo)
+        self.assertIn("PKG-003", [f.rule for f in check_pkg_003(ci, repo)])
+
     def test_pkg_005_try_except_around_native_import(self) -> None:
         self.assertIn("PKG-005", [f.rule for f in check_pkg_005(fixture("PKG-005", "red"))])
         self.assertNotIn("PKG-005", [f.rule for f in check_pkg_005(fixture("PKG-005", "green"))])

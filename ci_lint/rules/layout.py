@@ -14,6 +14,9 @@ from pathlib import Path
 
 from ci_lint.finding import Finding
 from ci_lint.globs import matches_any
+from ci_lint.py_lexer import strip_comments_and_strings as py_strip
+from ci_lint.repo_files import list_repo_files
+from ci_lint.rust_lexer import strip_comments_and_strings as rust_strip
 from ci_lint.schema import CiToml
 
 RUST_CFG_RE = re.compile(r"#\[cfg(_attr)?\s*\(|cfg!\s*\(|cfg_select!")
@@ -35,33 +38,13 @@ EXCLUDED_PREFIXES: tuple[str, ...] = ("dylints/", "ci_lint/")
 PY_SCAN_PREFIXES: tuple[str, ...] = ("src/", "tests/", "ci/")
 
 
-WALK_EXCLUDED_DIRS: frozenset[str] = frozenset(
-    {".git", "target", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", ".ruff_cache"}
-)
-
-
-def _tracked_files(repo_root: Path) -> list[str]:
-    """Every regular file under repo_root, skipping VCS/build noise. A
-    plain filesystem walk (not `git ls-files`) so an on-disk fixture tree
-    needs no separate `git add` step to be scanned."""
-
-    out: list[str] = []
-    for path in repo_root.rglob("*"):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(repo_root)
-        if any(part in WALK_EXCLUDED_DIRS for part in rel.parts):
-            continue
-        out.append(rel.as_posix())
-    return sorted(out)
-
-
 def _check_rust_file(repo_root: Path, rel: str) -> list[Finding]:
     findings: list[Finding] = []
     try:
-        lines = (repo_root / rel).read_text(encoding="utf-8", errors="replace").splitlines()
+        text = (repo_root / rel).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
+    lines = rust_strip(text).splitlines()
     for i, line in enumerate(lines, start=1):
         if RUST_CFG_RE.search(line) and any(sel in line for sel in RUST_SELECTORS):
             findings.append(
@@ -92,9 +75,10 @@ def _check_rust_file(repo_root: Path, rel: str) -> list[Finding]:
 def _check_python_file(repo_root: Path, rel: str) -> list[Finding]:
     findings: list[Finding] = []
     try:
-        lines = (repo_root / rel).read_text(encoding="utf-8", errors="replace").splitlines()
+        text = (repo_root / rel).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
+    lines = py_strip(text).splitlines()
     for i, line in enumerate(lines, start=1):
         for sel in PY_SELECTORS:
             if sel in line:
@@ -111,7 +95,7 @@ def _check_python_file(repo_root: Path, rel: str) -> list[Finding]:
 
 
 def check_group6(ci: CiToml, repo_root: Path) -> list[Finding]:
-    tracked = _tracked_files(repo_root)
+    tracked = list_repo_files(repo_root)
 
     platform_code = ci.allow.platform_code
     selector = ci.allow.platform_selector

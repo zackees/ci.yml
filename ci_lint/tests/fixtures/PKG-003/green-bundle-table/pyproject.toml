@@ -1,0 +1,12 @@
+[build-system]
+requires = ["soldr==1.2.3"]
+build-backend = "soldr"
+
+[project]
+name = "demo"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[[tool.soldr.pep517.bundle-bins]]
+bin = "demo-cli"
+package = "demo-cli"

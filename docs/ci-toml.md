@@ -126,7 +126,7 @@ One entry per flow id (`pr`, `main`, `release`, `nightly`, ...).
 | `wheels` | string (optional) | e.g. `"all"`. Informational in round 1A. |
 | `publish` | string (optional) | `"pypi"` (the real release path -- mapped through `[publish.pypi].mode`), `"rehearsal"`, or `"none"`. |
 | `janitor` | bool (default `false`) | Marks a flow that runs the cache janitor. Informational in round 1A (no runtime implementation yet). |
-| `pre-prune` | bool (default `false`) | A writer flow that prunes stale cache entries before writing. `CACHE-004`'s budget-exceeded violation is suppressed only when **every** writer flow (`cache = "write"`) sets `pre-prune = true`. |
+| `pre-prune` | bool (default `false`) | A writer flow that prunes stale cache entries before writing. When **every** writer flow (`cache = "write"`) sets `pre-prune = true`, `CACHE-004`'s worst-case sum drops the lockfile-change-peak term (`worst = steady + [cache.pr].budget`); the budget-exceeded violation still fires if that smaller sum still exceeds `[cache].budget`. |
 
 ## `[tags.<id>]`
 
@@ -174,7 +174,7 @@ suite, when one is declared).
 | `min` | string (size, optional) | Informational in round 1A. |
 | `key` | array of strings (optional) | Key components, e.g. `["os", "python", "uv.lock"]`. Scanned by `CACHE-002` for volatile tokens the same way a workflow's `with.key` is. |
 
-`CACHE-004`'s formula: `worst = Σ(family.max × cardinality) + Σ(family.max × cardinality, families with lockfile=true) + [cache.pr].budget`. Precheck always prints the arithmetic.
+`CACHE-004`'s formula: `worst = Σ(family.max × cardinality) + Σ(family.max × cardinality, families with lockfile=true) + [cache.pr].budget` -- unless **every** writer flow (`cache = "write"`) sets `pre-prune = true`, in which case the middle (lockfile-change-peak) term is dropped: `worst = Σ(family.max × cardinality) + [cache.pr].budget`. Either way, `worst > [cache].budget` is always a violation; pre-prune narrows the sum, it never waives the comparison. Precheck always prints the arithmetic and which formula it applied.
 
 ## `[local]`
 
@@ -264,7 +264,7 @@ when neither PyYAML nor `yq` is available).
 | `PKG-005` | A `try/except ImportError` around an import of `._native`. | Import it unconditionally so a missing native module fails loudly. |
 | `CACHE-001` | A raw `actions/cache` (or any of its sub-actions) used directly. | Use a declared cache family instead. |
 | `CACHE-002` | A volatile component (`github.sha`, `github.run_id`, `github.run_number`) in a `key:`/`cache-key-suffix:` input or a `[cache.family].key` entry. | Key on `hashFiles(...)` or a date rotation instead. |
-| `CACHE-004` | The proven worst-case cache footprint exceeds `[cache].budget`, or `[cache].budget` exceeds 10GB. | Lower family sizes/cardinality, raise the budget (up to 10GB), or set `pre-prune = true` on every writer flow. |
+| `CACHE-004` | The proven worst-case cache footprint exceeds `[cache].budget`, or `[cache].budget` exceeds 10GB. `pre-prune = true` on every writer flow removes only the lockfile-change-peak term from the sum -- it does not waive the rest of the proof; `worst = steady + [cache.pr].budget` still must fit. | Lower family sizes/cardinality, raise the budget (up to 10GB), and/or set `pre-prune = true` on every writer flow (removes the lockfile-peak term only). |
 
 ## The planner
 

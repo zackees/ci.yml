@@ -15,6 +15,9 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from ci_lint.repo_files import list_repo_files
+from ci_lint.rust_lexer import strip_comments_and_strings
+
 
 @dataclass(frozen=True)
 class CargoBinTarget:
@@ -241,15 +244,22 @@ def has_any_rust_test_attr(crate_src_dir: Path) -> bool:
     return False
 
 
-def has_cfg_feature(crate_dir: Path) -> bool:
-    src_dir = crate_dir / "src"
-    if not src_dir.is_dir():
-        return False
-    for f in src_dir.rglob("*.rs"):
+def has_cfg_feature(repo_root: Path, crate_dir_rel: str) -> bool:
+    """True if any git-tracked `.rs` file under `<crate_dir_rel>/src` uses
+    `cfg(feature = ...)` / `cfg_attr(feature = ...)` in real code -- not
+    merely mentioned inside a `//`/`///`/`//!`/`/* */` doc comment or a
+    string literal (round-2A brief, defect 2: a doc comment mentioning
+    `cfg(feature = "json")` was flagged as though it were real code)."""
+
+    prefix = f"{crate_dir_rel}/src/" if crate_dir_rel != "." else "src/"
+    for rel in list_repo_files(repo_root):
+        if not (rel.startswith(prefix) and rel.endswith(".rs")):
+            continue
         try:
-            text = f.read_text(encoding="utf-8", errors="replace")
+            text = (repo_root / rel).read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if "cfg(feature" in text or "cfg_attr(feature" in text:
+        code = strip_comments_and_strings(text)
+        if "cfg(feature" in code or "cfg_attr(feature" in code:
             return True
     return False

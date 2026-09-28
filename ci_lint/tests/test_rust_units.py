@@ -48,6 +48,18 @@ class RustUnitsFixtureTest(unittest.TestCase):
         crates = discover_workspace(repo)
         self.assertNotIn("RUST-011", [f.rule for f in check_rust_011(ci, crates, repo)])
 
+    def test_rust_011_doc_comment_mentioning_cfg_feature_is_not_a_violation(self) -> None:
+        """Regression for round-2A defect 2: `crates/private/template-json/
+        src/lib.rs` in the real template repo has a doc comment mentioning
+        `cfg(feature = "json")` to explain the amalgam-wiring pattern; the
+        crate itself has no real `cfg(feature = ...)`. `has_cfg_feature`
+        must ignore comment content."""
+
+        repo = fixture("RUST-011", "green-doc-comment")
+        ci, _ = load_ci_toml(repo)
+        crates = discover_workspace(repo)
+        self.assertEqual([], check_rust_011(ci, crates, repo))
+
 
 class CargoScanUnitTest(unittest.TestCase):
     def test_expected_target_names_naming_scheme(self) -> None:
