@@ -1,12 +1,21 @@
 # `ci.toml` schema 3 reference
 
 This is the field-by-field reference for `ci.toml` schema 3, the contract
-`ci_lint` (this repository) loads, validates, and plans against. It
-documents what round-1A of [issue #6](https://github.com/zackees/ci.yml/issues/6)
-implements: the `ci_lint` package's static **precheck** and its **planner**.
-Runtime commands (`units`, `tests`, `cache save-ok/heal/trim/janitor/budget`,
-`audit`) are later rounds; `python3 -m ci_lint <that command>` currently
-exits 2 with "not implemented in round 1" (see `ci_lint/runtime_stub.py`).
+`ci_lint` (this repository) loads, validates, plans against, and (from
+round-2A) checks a real build's output against. It documents what
+[issue #6](https://github.com/zackees/ci.yml/issues/6) implements so far:
+
+- round-1A: the `ci_lint` package's static **precheck** and its **planner**.
+- round-2A: the runtime commands that need a real build, wheel or venv --
+  `python3 -m ci_lint units`, `tests size`, `wheel check`, `wheel
+  installed`, and `gate` (the `CI OK` aggregator) -- plus `precheck
+  --local` (skips checks needing the GitHub API, explicitly) and
+  `selftest` (runs this package's own test suite; see
+  zackees/zccache#1760).
+
+`cache save-ok/heal/trim/janitor/budget` and `audit` are still later
+rounds; `python3 -m ci_lint cache|audit ...` currently exits 2 with "not
+implemented yet" (see `ci_lint/runtime_stub.py`).
 
 The canonical example is [`examples/rust-pypi-app/ci.toml`](../examples/rust-pypi-app/ci.toml),
 copied verbatim from the design draft in
@@ -271,12 +280,20 @@ when neither PyYAML nor `yq` is available).
 `python3 -m ci_lint plan` computes `selection = (flow base ∪ tag adds) − tag
 removes` for one event, and writes it as `plan.json` (see
 `ci_lint.plan.Plan`): `flow`, `event_name`, `tags`, `platforms`
-(`{id, target, runs_on, group}`), `suites`, `dylint_targets`, `cache_mode`
+(`{id, target, runs_on, group}`), `suites`, `dylint_targets` (**every**
+declared platform when `[lint.dylint].targets = "all-platforms"` -- Dylint
+checks every declared target from one Linux job regardless of which
+platforms this run actually builds, issue #6 §2/§3), `cache_mode`
 (`"read"`/`"write"`), `publish` (`"none"`/`"rehearsal"`/`"mock"`, or
 whatever `[publish.pypi].mode` resolves a flow's `publish = "pypi"` to),
 `mergeable` (`false` if any tag removed a suite), a `digest` (sha256 of the
-selection), and `reasons` (why each lane was selected). Tags are read from
-the PR title, and only for the `pull_request` event -- never for
+selection), `reasons` (why each lane was selected), `required_jobs` (the
+job `id:`s `ci-lint gate` requires to succeed -- see
+`ci_lint.plan._required_job_ids` for the naming convention the template's
+`ci.yml` must follow), and `needs_platform_lanes` (`true` when more than
+one platform is selected, i.e. the tag-driven cross-build lanes are needed
+beyond the single default fast lane). Tags are read from the PR title, and
+only for the `pull_request` event -- never for
 `push`/`schedule`/`workflow_dispatch`.
 
 | Event | Base flow |
@@ -285,6 +302,29 @@ the PR title, and only for the `pull_request` event -- never for
 | `push` (to the default branch) | `main` |
 | `schedule` | `nightly` |
 | `workflow_dispatch` | `release` (requires a 40-hex `sha` input, recorded as `dispatch_sha`) |
+
+`--github-output` (writes to `$GITHUB_OUTPUT`) adds: `plan` (the compact
+JSON), `platforms_json`, `cross_platforms_json`, `suites_json`,
+`dylint_targets_json`, `needs_platform_lanes`, `mergeable`.
+
+## Runtime commands (round-2A)
+
+These run *after* a build/wheel/install, unlike the precheck rule groups
+above, which are all static.
+
+| Command | Reads | Checks | Exit |
+| --- | --- | --- | --- |
+| `ci-lint units --repo <path> --artifacts <file.jsonl> [--json]` | `cargo ... --message-format=json` lines (`ci_lint.cargo_messages`; non-artifact lines ignored) | `RUST-011`: a private crate ([rust].private) compiled with more than one distinct feature set in the same profile; the public crate ([rust].public) compiled with a feature set not in `[rust].ship`. Prints a table per crate of every distinct `(features, profile, target kind, target triple)` combination actually compiled -- the target triple is read from the build output path, matched against `[platforms].*.target`, else `"host"`. | 1 if any violation |
+| `ci-lint tests size --repo <path> --artifacts <file.jsonl>` | same artifacts file, `profile.test == true` records with an `executable` | `RUST-012`: an undeclared test binary, a declared one never produced, one over `[rust.tests].max-binary`, or the sum over `[rust.tests].max-total`. Names map `<crate>:lib` / `<crate>:bin:<name>` / `<crate>:test:<name>`. | 1 if any violation |
+| `ci-lint wheel check --repo <path> --wheel <path.whl> [--sdist <path.tar.gz>]` | the wheel's own bytes (stdlib `zipfile`) | `PKG-003`: `<dist>.data/scripts/<cli>[.exe]` exists, has no `#!` shebang, its magic bytes match the wheel's platform tag (ELF/PE/Mach-O + machine/cputype), and no `console_scripts` entry shadows it. `PKG-004`: `*.dist-info/WHEEL`'s `Generator` is reported (`needs_review`, not a violation, if it doesn't mention soldr); the abi tag matches `[python].abi3`; with `--sdist`, its bundled `pyproject.toml` also declares `build-backend = "soldr"`. `PKG-005`: a `_native` extension file exists in the wheel. | 1 if any violation |
+| `ci-lint wheel installed --repo <path> --venv <dir>` | the venv's `bin`/`Scripts` dir + a subprocess run of the installed CLI and the venv's `python` | Same magic-byte check against the current host; `<cli> --version` exits 0 (`PKG-003`); `<venv python> -c "import <pkg>, <pkg>._native as n"` succeeds and `n.__file__` ends in a compiled-extension suffix (`PKG-005`). `<pkg>` is `pyproject.toml`'s `[project].name` with `-` replaced by `_`. | 1 if any violation |
+| `ci-lint gate --repo <path> --plan <plan.json> --needs <needs.json>` | `ci-lint plan`'s own JSON output + GitHub's `toJSON(needs)` verbatim | The `CI OK` aggregator: every job in `plan.required_jobs` must have `needs[job].result == "success"` (a `skipped` job is `TEST-001`; a job id absent from `needs` entirely is `needs_review`, never a silent pass). If `plan.mergeable` is `false`, prints `not mergeable: tag(s) <tags> remove required coverage` to stderr regardless of job results. | 1 if not green |
+| `ci-lint precheck --local` (or env `ACT=true`) | -- | Runs every static group as usual, then adds one `needs_review` finding per check that needs the GitHub API and is not implemented yet (`CACHE-005`/`006`/`008`, `ACT-001`), each explicitly labeled `skipped (local): ...` -- never silently passed. | as `precheck` |
+| `ci-lint selftest` | -- | Runs this package's own `unittest` suite (`ci_lint.selftest`; zackees/zccache#1760 -- agents must be able to run this directly). | 0/1 |
+
+Every command above is stdlib-only (`zipfile`, `tarfile`, `subprocess`,
+`tomllib`, `json`) and every finding is a `ci_lint.finding.Finding`
+(`--json` prints the same fields as `precheck --json`'s `findings` array).
 
 A `[tags.<id>]` entry with `flow` set switches the base flow itself (e.g.
 `[release]` on a PR runs the `release` flow as a rehearsal, with

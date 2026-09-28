@@ -29,6 +29,41 @@ from ci_lint.rules.tools import check_group4
 from ci_lint.rules.workflows import check_group2
 from ci_lint.schema import CiToml, load_ci_toml
 
+# Checks issue #6 §9 documents as needing live GitHub Actions API/cache
+# state ("cache (live)": CACHE-005/006/008, plus the local `act`-store
+# variant ACT-001) but that are not implemented yet (round 4). Round-2A
+# brief, part 2e: `--local` (or env ACT=true) must not leave their absence
+# unexplained -- it reports each one explicitly as skipped, with
+# `needs_review` (never `passed`), so a local run is never mistaken for
+# having covered live cache state. When round 4 implements the real
+# checks, each entry here is replaced by an actual function call gated the
+# same way.
+LOCAL_SKIPPED_CHECKS: tuple[tuple[str, str], ...] = (
+    ("CACHE-005", "live cache poisoned/superseded-entry audit (GitHub Actions cache API)"),
+    ("CACHE-006", "live cache usage-near-budget audit (GitHub Actions cache API)"),
+    (
+        "CACHE-008",
+        "PR cache save/trim policy audit against live cache entries "
+        "(GitHub Actions cache API + GraphQL PR state)",
+    ),
+    ("ACT-001", "local act cache-store audit against the remote cache policy"),
+)
+
+
+def _local_skip_findings() -> list[Finding]:
+    return [
+        Finding(
+            rule=rule,
+            status=Status.NEEDS_REVIEW,
+            message=f"skipped (local): {desc}",
+            fix="run 'ci-lint precheck' without --local (in CI, where the GitHub API is reachable, "
+            "or under bosn -> act's remote-equivalent lane) to cover this check; it is never treated "
+            "as passing in a --local/ACT=true run",
+        )
+        for rule, desc in LOCAL_SKIPPED_CHECKS
+    ]
+
+
 GROUP_LABELS: dict[int, str] = {
     1: "contract (CT-001..006, TAG-001, TAG-002)",
     2: "workflows (GEN-001/002/008, TAG-003, SEC-003/004, RUN-001, WF-001..003, CT-004)",
@@ -49,13 +84,22 @@ class PrecheckResult:
     elapsed_seconds: float
     ci: CiToml | None
     cache_arithmetic: str | None
+    local: bool = False
 
 
-def run_precheck(repo_root: Path, *, title: str = "") -> PrecheckResult:
+def is_local_run(local_flag: bool) -> bool:
+    """`--local` OR env `ACT=true` (bosn -> act's local runner sets this,
+    matching `actions/checkout`'s own convention) -- round-2A brief, part 2e."""
+
+    return local_flag or os.environ.get("ACT") == "true"
+
+
+def run_precheck(repo_root: Path, *, title: str = "", local: bool = False) -> PrecheckResult:
     start = time.monotonic()
     ci, findings = load_ci_toml(repo_root)
     all_findings: list[Finding] = list(findings)
     cache_arithmetic: str | None = None
+    local_run = is_local_run(local)
 
     if ci is not None:
         all_findings.extend(check_tag_001(ci, title))
@@ -75,14 +119,27 @@ def run_precheck(repo_root: Path, *, title: str = "") -> PrecheckResult:
         outcome = apply_exceptions(ci, all_findings)
         all_findings = outcome.findings
 
+        if local_run:
+            # Never run through apply_exceptions: these are an explicit,
+            # administrative "not covered locally" notice, not a violation
+            # an exception entry could legitimately waive.
+            all_findings.extend(_local_skip_findings())
+
     elapsed = time.monotonic() - start
     return PrecheckResult(
-        findings=tuple(all_findings), elapsed_seconds=elapsed, ci=ci, cache_arithmetic=cache_arithmetic
+        findings=tuple(all_findings),
+        elapsed_seconds=elapsed,
+        ci=ci,
+        cache_arithmetic=cache_arithmetic,
+        local=local_run,
     )
 
 
 def render_text(result: PrecheckResult) -> str:
     lines: list[str] = []
+    if result.local:
+        lines.append("ci-lint precheck: --local/ACT=true -- checks needing the GitHub API are skipped (see below).")
+        lines.append("")
     by_rule: dict[str, list[Finding]] = {}
     for f in result.findings:
         by_rule.setdefault(f.rule, []).append(f)

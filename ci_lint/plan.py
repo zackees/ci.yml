@@ -51,6 +51,8 @@ class Plan:
     mergeable: bool
     digest: str
     reasons: tuple[str, ...]
+    required_jobs: tuple[str, ...]
+    needs_platform_lanes: bool
     dispatch_sha: str | None = None
 
     def to_json_dict(self) -> dict[str, object]:
@@ -69,8 +71,30 @@ class Plan:
             "mergeable": self.mergeable,
             "digest": self.digest,
             "reasons": list(self.reasons),
+            "required_jobs": list(self.required_jobs),
+            "needs_platform_lanes": self.needs_platform_lanes,
             "dispatch_sha": self.dispatch_sha,
         }
+
+
+def _required_job_ids(platforms: tuple[PlanPlatform, ...], dylint_targets: tuple[str, ...]) -> tuple[str, ...]:
+    """The job `id:`s (`needs:` keys) `ci-lint gate` requires to have
+    `result == "success"` (round-2A brief, part 2d). This is the one place
+    that convention is defined; the template's `ci.yml` must name its jobs
+    to match:
+
+      - "precheck" always (the precheck job itself).
+      - "build-<platform-id>" for every selected platform -- the job that
+        cross-builds, unit-tests and wheel-smokes that platform (compiled
+        on Linux, executed on that platform's own runner per D4).
+      - "dylint" when any dylint target is selected.
+    """
+
+    jobs = ["precheck"]
+    jobs.extend(f"build-{p.id}" for p in platforms)
+    if dylint_targets:
+        jobs.append("dylint")
+    return tuple(jobs)
 
 
 def _expand_platforms(ci: CiToml, value: tuple[str, ...] | str | None) -> set[str]:
@@ -214,9 +238,15 @@ def compute_plan(
 
     publish = _resolve_publish_mode(ci, flow_publish)
 
+    # Dylint checks every DECLARED platform from one Linux job regardless of
+    # which platforms this run actually builds (issue #6 §2/§3: "Dylint for
+    # every declared platform from one Linux job") -- it is a cheap
+    # check-only pass, not a full cross-build, so it is never narrowed to
+    # the tag-selected `platforms` subset the way real build lanes are
+    # (round-2A brief, part 2f).
     dylint_targets: tuple[str, ...] = ()
     if resolved.dylint == "all-platforms" or (ci.lint_dylint is not None and ci.lint_dylint.targets == "all-platforms"):
-        dylint_targets = tuple(sorted(platforms)) or tuple(sorted(ci.platforms))
+        dylint_targets = tuple(sorted(ci.platforms))
 
     if event_name == "workflow_dispatch":
         if dispatch_sha is None or not DISPATCH_SHA_RE.match(dispatch_sha):
@@ -254,6 +284,8 @@ def compute_plan(
         mergeable=mergeable,
         digest=digest,
         reasons=tuple(reasons),
+        required_jobs=_required_job_ids(plan_platforms, dylint_targets),
+        needs_platform_lanes=len(plan_platforms) > 1,
         dispatch_sha=dispatch_sha,
     )
 
