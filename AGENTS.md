@@ -34,7 +34,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 | `BIN` | 001–002 | `BIN-003` | 001, 002 |
 | `PY` | 001 | `PY-002` | 001 (scoped to `[suites.perf].run`'s declared entry point(s); `ci_lint`'s own source follows the rule by construction too) |
 | `PERF` | 001 | `PERF-002` | 001 (distinct from the implemented `ci-lint perf compare` runtime command -- see policy-general.md) |
-| `REL` | 001–005 | `REL-006` | 001, 002 (003–005 candidates -- issue #8) |
+| `REL` | 001–005 | `REL-006` | 001, 002, 003, 004, 005 (issue #8/#74) |
 
 ## Working rules
 
