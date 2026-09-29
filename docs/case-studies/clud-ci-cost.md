@@ -162,23 +162,37 @@ This matches the failure mode `AGENTS.md` already names for the fleet:
 applied by convention is not a mechanism; only an enforced branch protection
 rule or merge queue is.
 
-## Candidate policy rules (not yet adopted — pending review)
+## Candidate policy rules — adopted (round 6A, zackees/ci.yml#6)
 
-These are drafted from this case study's evidence. They are not yet written
-into [policy-rust.md](../policy-rust.md) or
-[policy-general.md](../policy-general.md); the finding IDs below are
-proposals, chosen to avoid colliding with the existing tables.
+These were drafted from this case study's evidence. `RUST-005` and `RUST-006`
+are now written into [policy-rust.md](../policy-rust.md) (see its rule
+catalog and "Features are private crates" section for their adoption status —
+`RUST-005` is enforced today, in a narrower declared-budget form than
+originally proposed here; `RUST-006` is declared but not yet fully enforced,
+pending candidate `CACHE-007`). The third finding below is now
+**`GEN-010`**, not `GEN-005`: `GEN-005` was already the ID `ci-lint` uses for
+the shell/Python-delegation budget rule (proposal.md, [issue #3](https://github.com/zackees/ci.yml/issues/3),
+implemented as `ci_lint`'s `GEN-005` — see policy-general.md), a collision
+this case study's original numbering did not anticipate. The renumbering is
+recorded in [issue #6](https://github.com/zackees/ci.yml/issues/6) ("Housekeeping found while writing this").
 
-| Candidate ID | Mechanical signal |
-| --- | --- |
-| `RUST-005` | Per-crate top-level `tests/*.rs` integration-test link-target count is not evaluated against the crate's dependency-graph size; no consolidation into category `tests/<name>/main.rs` targets once the per-target link weight is large, even below a raw file-count threshold. |
-| `RUST-006` | A linked test binary, bench, example-for-tests, or doctest product is admitted into a cross-run cache or persistent store, classified by contents rather than by the store's own cache-vs-artifact label. |
-| `GEN-005` | A repository's documentation or CI code asserts that full/required validation is enforced at a merge queue or protected branch, but the repository has no corresponding branch protection rule or merge queue configured. Coverage claims must be verified against enforcement, not against workflow code that assumes enforcement exists. |
+| Candidate ID | Mechanical signal | Status |
+| --- | --- | --- |
+| `RUST-005` | Per-crate top-level `tests/*.rs` integration-test link-target count is not evaluated against the crate's dependency-graph size; no consolidation into category `tests/<name>/main.rs` targets once the per-target link weight is large, even below a raw file-count threshold. | Enforced by ci-lint, narrower form — see policy-rust.md |
+| `RUST-006` | A linked test binary, bench, example-for-tests, or doctest product is admitted into a cross-run cache or persistent store, classified by contents rather than by the store's own cache-vs-artifact label. | Declared (`[cache].never`), not yet fully enforced — see policy-rust.md and `CACHE-007` in policy-general.md |
+| `GEN-010` (was proposed here as `GEN-005`) | A repository's documentation or CI code asserts that full/required validation is enforced at a merge queue or protected branch, but the repository has no corresponding branch protection rule or merge queue configured. Coverage claims must be verified against enforcement, not against workflow code that assumes enforcement exists. | Candidate — not yet implemented; see policy-general.md |
 
 `RUST-005` and `RUST-006` generalize Part 1 (soldr's incident, clud's
-preemptive fix, zccache's admission bug). `GEN-005` generalizes Part 2 and is
+preemptive fix, zccache's admission bug). `GEN-010` generalizes Part 2 and is
 not Rust-specific — it applies to any repository whose quick-gate design
-depends on a slower gate elsewhere that turns out not to be configured.
+depends on a slower gate elsewhere that turns out not to be configured. It is
+a distinct rule from `GEN-006` (docs/case-studies/fbuild-ci-cost.md, now
+implemented): `GEN-006` fires when protection exists but is misconfigured
+(`strict` without a queue); `GEN-010` fires when a documented/intended gate
+has *no* enforcement mechanism at all and a human or agent is compensating by
+hand, which is exactly what fbuild's own `GEN-006` finding says clud's gap
+"mirrors ... in category" (docs/case-studies/fbuild-ci-cost.md) while being a
+distinct mechanism.
 
 ## Sources
 
