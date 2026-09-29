@@ -168,6 +168,39 @@ def _has_console_script(entry_points_text: str, cli_name: str) -> bool:
     return False
 
 
+# zackees/ci.yml#71: soldr stamps `Generator: soldr <version> (maturin ...)`
+# into `*.dist-info/WHEEL` since 0.9.26 (zackees/soldr#3450, shipped in
+# v0.9.26). A repository whose `[build-system].requires` soldr floor is at or
+# above this version can only have produced an unstamped wheel by bypassing
+# soldr, so a missing stamp is a hard PKG-004 violation there; below it (or
+# with no readable floor) the stamp may legitimately be absent -> needs_review.
+GENERATOR_STAMP_MIN_SOLDR: tuple[int, int, int] = (0, 9, 26)
+
+_SOLDR_FLOOR_RE = re.compile(r"^soldr\s*(?:==|>=|~=|>)\s*(\d+)\.(\d+)(?:\.(\d+))?")
+
+
+def soldr_requires_floor(repo_root: Path) -> tuple[int, int, int] | None:
+    """The soldr version floor declared in `repo_root/pyproject.toml`'s
+    `[build-system].requires` (`soldr>=X.Y.Z`, `==`, `~=`, `>`), or None
+    when absent/unreadable."""
+    try:
+        with (repo_root / "pyproject.toml").open("rb") as fh:
+            doc = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    build_system = doc.get("build-system")
+    requires = build_system.get("requires") if isinstance(build_system, dict) else None
+    if not isinstance(requires, list):
+        return None
+    for req in requires:
+        if not isinstance(req, str):
+            continue
+        m = _SOLDR_FLOOR_RE.match(req.strip())
+        if m:
+            return (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+    return None
+
+
 def _parse_wheel_generator(wheel_metadata_text: str) -> str | None:
     for line in wheel_metadata_text.splitlines():
         if line.lower().startswith("generator:"):
@@ -226,7 +259,17 @@ def _check_sdist_backend(sdist_path: Path) -> list[Finding]:
     return []
 
 
-def check_wheel(ci: CiToml, wheel_path: Path, sdist_path: Path | None = None) -> WheelCheckReport:
+def check_wheel(
+    ci: CiToml,
+    wheel_path: Path,
+    sdist_path: Path | None = None,
+    *,
+    soldr_floor: tuple[int, int, int] | None = None,
+) -> WheelCheckReport:
+    """`soldr_floor` is the repository's `[build-system].requires` soldr
+    floor (`soldr_requires_floor`); at or above `GENERATOR_STAMP_MIN_SOLDR`
+    a WHEEL Generator that does not name soldr is a PKG-004 violation,
+    otherwise it is needs_review (ci.yml#71)."""
     findings: list[Finding] = []
     cli_name = ci.python.cli.name if ci.python is not None else ""
 
@@ -343,17 +386,32 @@ def check_wheel(ci: CiToml, wheel_path: Path, sdist_path: Path | None = None) ->
             wheel_text = zf.read(wheel_meta_member).decode("utf-8", errors="replace")
             generator = _parse_wheel_generator(wheel_text)
             if generator is None or "soldr" not in generator.lower():
-                findings.append(
-                    Finding(
-                        rule="PKG-004",
-                        status=Status.NEEDS_REVIEW,
-                        path=f"{wheel_path.name}:{wheel_meta_member}",
-                        message=f"WHEEL Generator is {generator!r}, which does not mention soldr",
-                        fix="confirm this wheel was actually produced by soldr's PEP 517 backend; if "
-                        "Soldr does not yet stamp a Generator naming itself, file that upstream "
-                        "(zackees/ci.yml#6 open question 11) rather than silently trusting it",
+                floor_text = ".".join(str(x) for x in GENERATOR_STAMP_MIN_SOLDR)
+                if soldr_floor is not None and soldr_floor >= GENERATOR_STAMP_MIN_SOLDR:
+                    findings.append(
+                        Finding(
+                            rule="PKG-004",
+                            path=f"{wheel_path.name}:{wheel_meta_member}",
+                            message=f"WHEEL Generator is {generator!r}, which does not mention soldr, "
+                            f"but pyproject.toml requires soldr >= {floor_text} (which stamps "
+                            "'Generator: soldr <version> (...)' on every wheel it builds)",
+                            fix="build the wheel through soldr (the soldr PEP 517 backend via 'uv build', "
+                            "or 'soldr wheel'), never bare maturin/pip wheel; a soldr-built wheel "
+                            "carries the stamp automatically",
+                        )
                     )
-                )
+                else:
+                    findings.append(
+                        Finding(
+                            rule="PKG-004",
+                            status=Status.NEEDS_REVIEW,
+                            path=f"{wheel_path.name}:{wheel_meta_member}",
+                            message=f"WHEEL Generator is {generator!r}, which does not mention soldr",
+                            fix=f"raise pyproject.toml's [build-system].requires floor to "
+                            f"'soldr>={floor_text}' (the first soldr that stamps its Generator), "
+                            "rebuild, and confirm the wheel came from soldr's PEP 517 backend",
+                        )
+                    )
 
         if ci.python is not None and ci.python.abi3:
             if parts.abi_tag != "abi3":
