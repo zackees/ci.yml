@@ -50,6 +50,29 @@ class RustUnitsFixtureTest(unittest.TestCase):
         crates = discover_workspace(repo)
         self.assertNotIn("RUST-011", [f.rule for f in check_rust_011(ci, crates, repo)])
 
+    def test_rust_011_features_default_on_empty_default_matches_empty_ship_set(self) -> None:
+        """zackees/ci.yml#89: `--features default` names the empty graph when
+        the public crate's default is empty/absent (GREEN), while a feature
+        outside [rust].ship = [[]] is still RUST-011 (RED)."""
+
+        import shutil
+
+        for features, expect in (("default", False), ("extra", True)):
+            with self.subTest(features=features), tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp) / "repo"
+                shutil.copytree(fixture("RUST-011", "green"), repo)
+                wf = repo / ".github" / "workflows"
+                wf.mkdir(parents=True, exist_ok=True)
+                (wf / "unit.yml").write_text(
+                    "on: [push]\njobs:\n  t:\n    runs-on: ubuntu-24.04\n    steps:\n"
+                    f"      - run: cargo test --features {features}\n",
+                    encoding="utf-8",
+                )
+                ci, _ = load_ci_toml(repo)
+                crates = discover_workspace(repo)
+                msgs = [f.message for f in check_rust_011(ci, crates, repo) if "--features" in f.message]
+                self.assertEqual(expect, bool(msgs), msgs)
+
     def test_rust_011_doc_comment_mentioning_cfg_feature_is_not_a_violation(self) -> None:
         """Regression for round-2A defect 2: `crates/private/template-json/
         src/lib.rs` in the real template repo has a doc comment mentioning

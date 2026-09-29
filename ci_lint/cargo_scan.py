@@ -274,3 +274,20 @@ def has_cfg_feature(repo_root: Path, crate_dir_rel: str) -> bool:
             if _CFG_FEATURE_RE.search(span.text):
                 return True
     return False
+
+
+def effective_features(
+    features: tuple[str, ...] | list[str], declared: dict[str, tuple[str, ...]]
+) -> frozenset[str]:
+    """zackees/ci.yml#89: `default` names no graph of its own -- it is
+    exactly its members. Replace it with the feature names it lists (an
+    empty `default = []`, or no `default` at all, contributes nothing), so
+    `[]` and `["default"]` compare equal when default is empty. Members that
+    are `dep:`/`crate/feature` wiring are not feature names and are dropped
+    (Cargo's own artifact record already lists the features they enable)."""
+
+    out = set(features)
+    if "default" in out:
+        out.discard("default")
+        out.update(m for m in declared.get("default", ()) if m in declared)
+    return frozenset(out)

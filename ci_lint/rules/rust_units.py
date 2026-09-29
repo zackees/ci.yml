@@ -9,7 +9,14 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ci_lint.cargo_scan import CargoCrate, discover_workspace, expected_target_names, has_any_rust_test_attr, has_cfg_feature
+from ci_lint.cargo_scan import (
+    CargoCrate,
+    discover_workspace,
+    effective_features,
+    expected_target_names,
+    has_any_rust_test_attr,
+    has_cfg_feature,
+)
 from ci_lint.finding import Finding
 from ci_lint.globs import matches_any
 from ci_lint.rules.soldr_pin import check_rust_013
@@ -174,7 +181,8 @@ def check_rust_011(ci: CiToml, crates: list[CargoCrate], repo_root: Path) -> lis
                         )
                     )
 
-    ship_sets = [frozenset(s) for s in ci.rust.ship] if ci.rust.ship else [frozenset()]
+    declared = public_crate.features if public_crate is not None else {}
+    ship_sets = [effective_features(s, declared) for s in ci.rust.ship] if ci.rust.ship else [frozenset()]
     for tokens, path, loc in _iter_all_commands(repo_root):
         if not tokens or tokens[0] != "cargo":
             continue
@@ -212,7 +220,7 @@ def check_rust_011(ci: CiToml, crates: list[CargoCrate], repo_root: Path) -> lis
             idx = tokens.index("--features")
             if idx + 1 < len(tokens):
                 value = tokens[idx + 1]
-                feats = frozenset(f for f in FEATURE_FLAG_RE.split(value) if f)
+                feats = effective_features([f for f in FEATURE_FLAG_RE.split(value) if f], declared)
                 if feats not in ship_sets:
                     findings.append(
                         Finding(

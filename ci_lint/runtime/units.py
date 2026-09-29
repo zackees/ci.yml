@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ci_lint.cargo_messages import CompilerArtifact
-from ci_lint.cargo_scan import CargoCrate
+from ci_lint.cargo_scan import CargoCrate, effective_features
 from ci_lint.finding import Finding
 from ci_lint.globs import matches_any
 from ci_lint.schema import CiToml
@@ -107,7 +107,8 @@ def _rust_011_findings(
 
     private_names = {c.name for c in crates if matches_any(c.dir, (ci.rust.private,))}
     public_crate = next((c for c in crates if c.dir == ci.rust.public), None)
-    ship_sets = {frozenset(s) for s in ci.rust.ship} if ci.rust.ship else set()
+    declared = public_crate.features if public_crate is not None else {}
+    ship_sets = {effective_features(s, declared) for s in ci.rust.ship} if ci.rust.ship else set()
 
     by_package = {r.package: r for r in crate_reports}
 
@@ -140,7 +141,7 @@ def _rust_011_findings(
         report = by_package[public_crate.name]
         seen_bad: set[tuple[str, ...]] = set()
         for u in report.units:
-            if frozenset(u.features) not in ship_sets and u.features not in seen_bad:
+            if effective_features(u.features, declared) not in ship_sets and u.features not in seen_bad:
                 seen_bad.add(u.features)
                 findings.append(
                     Finding(

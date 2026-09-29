@@ -7,6 +7,7 @@ part 2a), never a real cargo invocation.
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from ci_lint.cargo_messages import parse_compiler_artifacts
 from ci_lint.cargo_scan import discover_workspace
@@ -63,6 +64,44 @@ class UnitsRuntimeTest(unittest.TestCase):
         text = render_text(report)
         self.assertIn("demo-core", text)
         self.assertIn("demo", text)
+
+
+class EmptyDefaultFeatureTest(unittest.TestCase):
+    """zackees/ci.yml#89: `default = []` is the empty graph, so a public
+    crate compiled with `['default']` matches `[rust].ship = [[]]` (GREEN);
+    a genuinely extra feature, or a non-empty default expanding to one, is
+    still RUST-011 (RED)."""
+
+    def setUp(self) -> None:
+        repo = FIXTURES / "runtime" / "workspace"
+        ci, findings = load_ci_toml(repo)
+        assert ci is not None and ci.rust is not None, findings
+        self.ci = replace(ci, rust=replace(ci.rust, ship=((),)))
+        self.crates = discover_workspace(repo)
+        lines = (FIXTURES / "runtime" / "units" / "basic.jsonl").read_text(encoding="utf-8").splitlines()
+        self.demo = next(a for a in parse_compiler_artifacts(lines) if a.package_name == "demo" and not a.features)
+
+    def _public_findings(self, default: tuple[str, ...], compiled: tuple[str, ...]) -> list[str]:
+        crates = [
+            replace(c, features={**c.features, "default": default}) if c.name == "demo" else c for c in self.crates
+        ]
+        report = compute_units(self.ci, crates, [replace(self.demo, features=compiled)])
+        return [f.message for f in report.findings if f.rule == "RUST-011" and "public crate" in f.message]
+
+    def test_green_default_on_empty_default_is_the_empty_set(self) -> None:
+        self.assertEqual([], self._public_findings((), ("default",)))
+        self.assertEqual([], self._public_findings((), ()))
+
+    def test_green_ship_default_spelling_still_accepted(self) -> None:
+        assert self.ci.rust is not None
+        self.ci = replace(self.ci, rust=replace(self.ci.rust, ship=(("default",),)))
+        self.assertEqual([], self._public_findings((), ()))
+
+    def test_red_extra_feature_still_rust_011(self) -> None:
+        self.assertEqual(1, len(self._public_findings((), ("extra",))))
+
+    def test_red_nonempty_default_expands_to_its_members(self) -> None:
+        self.assertEqual(1, len(self._public_findings(("extra",), ("default", "extra"))))
 
 
 if __name__ == "__main__":
