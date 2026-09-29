@@ -18,10 +18,18 @@ round-2A) checks a real build's output against. It documents what
   --github-output`; see "Title-edit reuse"); and `ci_lint gate --reuse`'s
   live reuse verification (see "Reuse verification" under "Runtime
   commands").
+- round-4A: the cache runtime (`python3 -m ci_lint cache ...`) -- key
+  building, `save-ok` (issue #6 §6's do-not-save table, CACHE-008), the
+  live `audit` (CACHE-001/003/005/006/008/009 + the budget check),
+  `trim`/`janitor`/`heal`/`preprune` (live deletes), PR delta mechanics
+  (`cache delta manifest|pack|apply`), and `precheck --live`. See "Cache
+  runtime (round-4A)" below.
 
-`cache save-ok/heal/trim/janitor/budget` and `audit` are still later
-rounds; `python3 -m ci_lint cache|audit ...` currently exits 2 with "not
-implemented yet" (see `ci_lint/runtime_stub.py`).
+`ci_lint audit` (the fleet-inventory/settings audit compared against
+observed GitHub runs, proposal.md's "ci-lint history") is still a later
+round; `python3 -m ci_lint audit ...` still exits 2 with "not implemented
+yet" (see `ci_lint/runtime_stub.py`). This is unrelated to `ci_lint cache
+audit`, which round-4A did implement -- see below.
 
 The canonical example is [`examples/rust-pypi-app/ci.toml`](../examples/rust-pypi-app/ci.toml),
 copied verbatim from the design draft in
@@ -182,14 +190,200 @@ suite, when one is declared).
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `via` | string | e.g. `"setup-soldr:build-cache"` or `"ci-lint"`. Informational in round 1A. |
-| `max` | string (size) | The per-instance cap, used directly in `CACHE-004`'s arithmetic. |
-| `lockfile` | bool (default `false`) | If true, this family's steady-state size is counted **twice** in `CACHE-004` (steady state, plus the lockfile-change peak where old and new coexist). |
+| `via` | string | Which builder owns this family's real cache-key shape, and (round-4A) which prefix `ci_lint.cache.audit` expects a live key to start with. A **strict allowlist** (`ci_lint.cache.families.ALLOWED_VIA_VALUES`; unrecognized value is `CT-002`) -- see "Cache runtime (round-4A)" below for the full via -> prefix table. |
+| `max` | string (size) | The per-instance cap, used directly in `CACHE-004`'s arithmetic and (round-4A) `cache save-ok`'s rule 6 and `cache preprune`'s live forecast. |
+| `lockfile` | bool (default `false`) | If true, this family's steady-state size is counted **twice** in `CACHE-004` (steady state, plus the lockfile-change peak where old and new coexist), and (round-4A) `cache preprune` only prunes superseded entries of `lockfile = true` families. |
 | `per` | string (optional) | Cardinality multiplier. A **strict enum**: `"none"` (the default, same as omitting it) -> `1`; `"platform"` -> number of declared platforms; `"cross-platform"` -> platforms minus one; `"os"` -> number of distinct platform groups. Any other value (e.g. `"target"`) is `CT-002` -- never a silent fallback to `1`, which would undercount `CACHE-004`'s arithmetic without warning. |
-| `min` | string (size, optional) | Informational in round 1A. |
-| `key` | array of strings (optional) | Key components, e.g. `["os", "python", "uv.lock"]`. Scanned by `CACHE-002` for volatile tokens the same way a workflow's `with.key` is. |
+| `min` | string (size, optional) | Round-4A: the poison-guard floor `cache save-ok`'s rule 6 and the live `cache audit`'s `CACHE-005` both check payload/entry size against. A live entry at or below 1KB is always poisoned regardless of whether a family declares `min` at all. |
+| `key` | array of strings (optional) | Key components, e.g. `["os", "python", "uv.lock"]`. Scanned by `CACHE-002` for volatile tokens the same way a workflow's `with.key` is, and (round-4A, `via = "ci-lint"` families only) built by `ci-lint cache key <family>` -- `"os"` resolves to `--platform`'s id, `"python"` to `[python].pythons[0]` (the floor version), anything else to the first-16-hex-chars of that repo-relative file's sha256. |
 
 `CACHE-004`'s formula: `worst = Σ(family.max × cardinality) + Σ(family.max × cardinality, families with lockfile=true) + [cache.pr].budget` -- unless **every** writer flow (`cache = "write"`) sets `pre-prune = true`, in which case the middle (lockfile-change-peak) term is dropped: `worst = Σ(family.max × cardinality) + [cache.pr].budget`. Either way, `worst > [cache].budget` is always a violation; pre-prune narrows the sum, it never waives the comparison. Precheck always prints the arithmetic and which formula it applied.
+
+## Cache runtime (round-4A)
+
+`python3 -m ci_lint cache ...` (`ci_lint.cache.*`), built on issue #6 §6
+("Cache strategy"). Every live command is stdlib `urllib` through an
+injectable `FetchFn`/`DeleteFn`/`GraphQLFn` (`ci_lint.github_api`), exactly
+like round-3A's reuse lookup -- no test in this package ever touches the
+network; fixtures live under
+[`ci_lint/tests/fixtures/runtime/cache/`](../ci_lint/tests/fixtures/runtime/cache/)
+(one, `caches-live-template.json`, copied verbatim from `gh api
+repos/zackees/template-python-rust-cmd/actions/caches`; the others are
+small synthetic API-shaped JSON built to exercise a rule the live repo
+doesn't currently exhibit -- each file's own `"_note"` key says which).
+
+### Family resolution table
+
+`ci_lint.cache.families.SETUP_SOLDR_FAMILY_SHAPES` -- every `via` value a
+`[cache.family.<id>]` may declare, and the literal GitHub Actions
+cache-key prefix it resolves to. Each `setup-soldr:*` row is cited against
+the exact line of setup-soldr's own source that builds it (read from the
+reference clone named in the round-4A brief, on its default branch,
+verified 2026-09-28); `via = "ci-lint"` is this package's own convention
+(no setup-soldr source to cite), and `delta` is the PR-delta wrapper
+(`ci_lint.cache.keys.build_delta_key`), not a `[cache.family].via` value at
+all.
+
+| `via` | Key prefix | Source |
+| --- | --- | --- |
+| `setup-soldr:build-cache` | `setup-soldr-buildcache-v2-` | `resolve-setup.ts:829` |
+| `setup-soldr:cargo-registry` | `setup-soldr-cargoregistry-v1-` | `resolve-setup.ts:1055` (v2 only if `cargoRegistryArchiveFormat()` resolves `"soldr-v2"`; v1 is what template-python-rust-cmd's main uses today) |
+| `setup-soldr:cook` | `cook-base-v2-` | `cook-cache.ts:247` |
+| `setup-soldr:cook-delta` | `cook-delta-v2-` | `cook-cache.ts:248` (retired fleet-wide, setup-soldr#533; declared only so a `[cache].retired` entry resolves to a real prefix) |
+| `setup-soldr:cross-targets` | `setup-soldr-prepare-v3-` | `blessed-cross-prepare.ts:89` |
+| `setup-soldr:dylint` | `setup-soldr-dylint-v2-` | `resolve-setup.ts:1185-1186` (one entry covers the dylint tool/driver/foundation together; v1 when `dylintModeEnabled` is false) |
+| `setup-soldr:dylint-output` | `setup-soldr-dylint-output-v1-` | `resolve-setup.ts:1204` |
+| `setup-soldr:soldr-mini` | `soldr-mini-v2-` | `soldr-mini-cache.ts:85` |
+| `setup-soldr:solo-toolchain` | `solo-toolchain-v3-` | `solo-toolchain-cache.ts:276,280` (retired in the template, issue #6 D14; declared only so a `[cache].retired` entry resolves to a real prefix) |
+| `ci-lint` | `<family-id>-v1-` | this package (`ci_lint.cache.keys.build_family_key`); the round-4A brief writes this generically as `ci-lint:<family> -> <family>-v1-`, and `via = "ci-lint"` (the literal value schema-3 has always accepted, no colon) is treated as that same convention -- a round-4A decision, not a second `via` spelling |
+| *(delta wrapper, not a `via` value)* | `delta-v1-pr<N>-<family>-<platform>-b<base8>` | `ci_lint.cache.keys.build_delta_key` |
+
+Round-4A added `setup-soldr:soldr-mini` and `setup-soldr:dylint` to the
+allowlist and to `examples/rust-pypi-app/ci.toml`'s `[cache.family]`: the
+live template repo saves `soldr-mini-v2-...` today, undeclared -- exactly
+the "undeclared-but-saved family is `CACHE-001`" case the brief predicted
+(reproduced in `ci_lint/tests/test_cache_audit.py`'s
+`ClassifyLiveTemplateTest` before/after the two families were added).
+
+### `ci-lint cache key`
+
+`ci-lint cache key <family> --repo . [--platform ID] [--pr N] [--base-key
+K]` -- two distinct things depending on `--pr`:
+
+- **Without `--pr`:** builds a `via = "ci-lint"` family's own base key from
+  its declared `[cache.family.<id>].key` components (`"os"` ->
+  `--platform`'s id, `"python"` -> `[python].pythons[0]`, anything else ->
+  the first 16 hex chars of that repo-relative file's sha256), e.g.
+  `uv-v1-linux-x64-3.11-<16-hex>`. A `setup-soldr:*` family has no `key`
+  components to build from (setup-soldr computes its real key itself, per
+  issue #6 §6's "two builders" rule) -- this still resolves and returns its
+  bare prefix, useful for e.g. `cache heal`'s exact-key deletes.
+- **With `--pr N` (also needs `--platform` and `--base-key`):** builds the
+  PR delta key `delta-v1-pr<N>-<family>-<platform>-b<base8>`, where `base8`
+  is the first 8 hex chars of `sha256(--base-key)` -- `--base-key` is the
+  literal restored base cache's key string (whatever built it: setup-soldr
+  or `ci-lint`), so a delta always self-heals the moment its base moves
+  (issue #6 §6: "A delta whose `b<hash>` doesn't match the restored base is
+  discarded").
+
+Exit 2 on bad input (undeclared family, missing `--platform`/`--base-key`
+with `--pr`, a missing key-component file).
+
+### `ci-lint cache save-ok`
+
+`ci-lint cache save-ok <family> --repo . --flow F --event E [--pr N]
+[--fork] [--act] [--build-ok|--build-failed] [--exact-hit] [--new-units K]
+[--payload-bytes B] [--base-key K --current-base-key K2]
+[--lockfile-changed] [--tags "..."] [--rerun-saved] [--json]` evaluates
+issue #6 §6's "when we do NOT save" table (`ci_lint.cache.save_ok
+.evaluate_save_ok`), rule ID `CACHE-008`, **in order** -- the first rule
+that applies wins:
+
+| # | Fires when | CLI input |
+| --- | --- | --- |
+| 1 | fork or act | `--fork` / `--act` |
+| 2 | a base-layer save (`--pr` absent) on a flow not in `[cache].write-on` | `--flow`, `[cache].write-on` |
+| 3 | the family is in `[cache].retired` | (its own id) |
+| 4 | the build step failed/cancelled (a test failure alone never blocks a save) | `--build-failed` |
+| 5 | exact key hit, or fewer than the minimum new compile units (a fixed default of 1 -- ci.toml has no declared `-save-min-compiles` field) | `--exact-hit` / `--new-units` |
+| 6 | payload below the family's `min`, or above its `max` | `--payload-bytes`, `[cache.family.<id>].min`/`.max` |
+| 7 | (`--pr` given) the delta's restored base != the current base | `--base-key` != `--current-base-key` |
+| 8 | (`--pr` given) the delta exceeds `[cache.pr].max-per-pr` | `--payload-bytes`, `[cache.pr].max-per-pr` |
+| 9 | (`--pr` given) `--lockfile-changed` without a `[ci-cache-save]` tag | `--tags` |
+| 10 | a re-run that already saved this exact key | `--rerun-saved` |
+
+Prints `save: yes`, or `save: no (rule <n>: <reason>)`; exits 0 either way
+(the reason is always in stdout/`--json`, never only inferred from the exit
+code), exit 2 on bad input (family neither declared nor retired). Rule 8's
+"...or the PR budget is still full after trimming closed PRs and evicting
+by LRU" half needs live cache-account state across every open PR, which a
+single `save-ok` call does not have -- that half is enforced by `cache
+audit`/`ops` instead (a round-4A decision). `--tags` accepts either a raw
+PR-title-shaped string (`"[ci-cache-save]"`) or a bare list
+(`"ci-cache-save"`).
+
+### `ci-lint cache audit` (live, read-only)
+
+`ci-lint cache audit --repo . [--default-branch main] [--json]` --
+`actions: read`, `GITHUB_TOKEN` + `GITHUB_REPOSITORY`. Lists every cache
+(`GET /repos/{repo}/actions/caches`, paginated) and classifies each by
+`[cache.family]` prefix (`ci_lint.cache.audit.classify`):
+
+| Rule | Fires on |
+| --- | --- |
+| `CACHE-001` | a key matching no declared family prefix (and not a delta, not retired) |
+| `CACHE-003` | a declared **base**-layer family's key saved on a ref other than `refs/heads/<--default-branch>` |
+| `CACHE-005` | an entry <= 1KB (any family), or below its family's declared `min` |
+| `CACHE-006` | >= 2 entries of the same family whose keys differ only in a trailing lockfile/version hash (best-effort: strips trailing hyphen-hex segments and groups what's left) -- all but the most-recently-accessed are flagged |
+| `CACHE-008` | a `delta-v1-pr<N>-...` entry whose PR is closed/merged (one GraphQL query, all referenced PR numbers batched via aliased fields), or whose `b<base8>` matches none of the family's live base entries' own key hashes |
+| `CACHE-009` | a key matching a `[cache].retired` prefix |
+| `CACHE-004` | (appended, not a live-only rule) total live bytes >= 90% of `[cache].budget` |
+
+A PR delta's family/platform are parsed against `ci.toml`'s own declared
+platform ids (`_split_family_platform`), not a hyphen-blind regex --
+`compile`/`linux-x64` both legitimately contain hyphens, so a naive
+`(?P<family>.+)-(?P<platform>[^-]+)-...` mis-splits them.
+
+Exit 1 if any finding, 0 clean (`cache audit`'s own findings are all
+`violation` status -- it is `precheck --live`, below, that downgrades all
+but `CACHE-009` to a warning).
+
+### `ci-lint cache trim` / `janitor` / `heal` / `preprune` (live, read-write)
+
+All four need `actions: write`; `--dry-run` (or omitting a delete
+function) never calls `DELETE` -- it only prints the plan.
+
+| Command | Deletes | Extra output |
+| --- | --- | --- |
+| `cache trim [--max-deletes N] [--dry-run]` | `CACHE-008` entries only (closed/merged + stale-base PR deltas) | -- |
+| `cache janitor [--dry-run] [--max-deletes N] [--stale-days D=5]` | `CACHE-001/003/005/006/009` entries, plus anything not accessed in >= `D` days | a before/after table (count, bytes per family label) |
+| `cache heal --key K [--ref R] [--dry-run]` | exactly `key` (`DELETE .../actions/caches?key=<key>`, no id lookup) -- a writer flow's self-heal after an unusable restore | -- |
+| `cache preprune --lockfile-changed [--max-deletes N] [--dry-run]` | the superseded (`CACHE-006`) entries of `lockfile = true` families, but only when the forecast is over budget | the forecast (same steady + lockfile-peak + PR-budget arithmetic as `CACHE-004`, but using each family's live max observed size where one exists, else its declared `max`) |
+
+Never deletes anything unclassified, and never on a fork PR (the CLI
+requires `GITHUB_TOKEN`/`GITHUB_REPOSITORY`, which a fork PR's default
+token does not carry the scope for in the first place).
+
+### `ci-lint cache delta manifest|pack|apply`
+
+Pure filesystem (stdlib `tarfile`/`hashlib`/`json`), no network, no
+`ci.toml` -- the PR-delta packing/unpacking mechanics behind issue #6 §6's
+"PR caches: a small delta, never a base".
+
+- `cache delta manifest --dir D --out M` -- a sorted `(relpath, size)` list
+  of every file under `D`, plus a sha256 digest of that list (a size-based
+  integrity check, not a full content hash -- cheap even over a large
+  restored cache directory).
+- `cache delta pack --dir D --base-manifest M --out T --family F --platform
+  P --pr N` -- packs only the files under `D` absent from `M` or present
+  with a different size into `T` (`.tar.gz`), whose first member is a small
+  JSON header (`base_digest`, `family`, `platform`, `pr`).
+- `cache delta apply --dir D --delta T --base-manifest M` -- verifies the
+  header's `base_digest` equals `M`'s digest; on a mismatch, refuses with
+  **exit 3** ("stale base, treat as miss" -- issue #6 §6's self-heal, the
+  same property `cache key`'s `b<base8>` wrapper gives the key string
+  itself). On a match, extracts every non-header member into `D`, overlaying
+  whatever base restore is already there. Exit 2 on any other bad input
+  (missing dir/manifest/delta file, malformed header).
+
+### `ci-lint precheck --live`
+
+`--live` (default off; the template's precheck turns it on) additionally
+runs `cache audit` and folds its findings into the precheck report as
+**warnings only** -- `CACHE-009` (a retired family actually present in the
+live account) is the one exception, which still fails, matching issue #6
+§9's precheck (live) row: "Warns only ... except CACHE-009". Missing
+`GITHUB_TOKEN`/`GITHUB_REPOSITORY`, or a live-audit error, degrades to one
+`needs_review` finding (never a crash, never a silent pass) -- the same
+pattern round-3A's reuse lookup uses.
+
+`--local` (without `--live`) keeps reporting `CACHE-005`/`006`/`008` as
+explicitly "skipped (local)" `needs_review` findings (`ci_lint.precheck
+.LOCAL_SKIPPED_CHECKS`) exactly as before -- `--live` is what actually
+covers them now, so passing `--local --live` together drops those three
+from the "skipped" list (their real findings appear instead) while leaving
+`ACT-001` (the local act cache-store audit -- a different mechanism this
+round did not build) as still explicitly skipped.
 
 ## `[local]`
 
@@ -269,7 +463,7 @@ when neither PyYAML nor `yq` is available).
 | `WF-003` | `continue-on-error` anywhere. | Remove it; fix or gate the step instead. |
 | `TOOL-001` | Bare `cargo`/`rustc`/`rustup`/`cargo-*`/`maturin`/`cross`/`cibuildwheel`/`pip`/`pipx`/`twine`/`curl`/`wget` as a command (in `run:` lines or `ci/*.py`/root `*.py` subprocess literals). | Wrap it through `soldr` or `uv`. |
 | `TOOL-002` | A dependency-resolving `cargo` subcommand (`build`/`test`/`check`/`clippy`/`doc`/`run`/`nextest`) without `--locked`. | Add `--locked`. |
-| `CACHE-009` | `zackees/setup-soldr` used outside `[allow].setup-soldr.only-in`, missing/wrong `require` inputs, or an input enabling a retired cache family. | Call it only from the wrapper, with the required inputs. |
+| `CACHE-009` | Static: `zackees/setup-soldr` used outside `[allow].setup-soldr.only-in`, missing/wrong `require` inputs, or an input enabling a retired cache family. Live (round-4A, `cache audit`/`precheck --live`): a live cache entry's key actually matches a `[cache].retired` prefix. | Call it only from the wrapper, with the required inputs; delete a live retired entry (`ci-lint cache janitor`). |
 | `LAYOUT-001` | A host selector (`cfg(...)`, `sys.platform`, ...) outside `[allow].platform-code`/`platform-selector`. | Move it behind the platform facade. |
 | `RUST-005` | More integration-test targets exist than are declared in `[rust.tests].binaries`. | Declare each target, or consolidate `tests/*.rs`. |
 | `RUST-011` | A private crate without `publish = false` / with `[features]` / with an optional dependency / with `cfg(feature)`; the public crate's `[features]` not of the form `x = ["dep:<private-crate>"]`; or `--all-features`/`cargo hack`/`--feature-powerset`/an out-of-`[rust].ship` `--features` value. | Fix the crate's manifest, or use only a `[rust].ship` feature set. |
@@ -277,9 +471,13 @@ when neither PyYAML nor `yq` is available).
 | `PKG-003` | `[project.scripts]`/`[project.gui-scripts]` shadows `[python].cli.name`, or `[tool.soldr.pep517].bundle-bins` omits `[python].cli.crate`. | Remove the Python shim entry; add the crate to `bundle-bins`. |
 | `PKG-004` | `pyproject.toml`'s build backend isn't `"soldr"`, `requires` lacks an exact `soldr==` pin, maturin appears in build requires/dependency-groups, or `uv.lock` has a non-soldr package depending on maturin. | Use `soldr` as the sole backend and maturin dependent. |
 | `PKG-005` | A `try/except ImportError` around an import of `._native`. | Import it unconditionally so a missing native module fails loudly. |
-| `CACHE-001` | A raw `actions/cache` (or any of its sub-actions) used directly. | Use a declared cache family instead. |
+| `CACHE-001` | Static: a raw `actions/cache` (or any of its sub-actions) used directly. Live (round-4A): a cache entry whose key matches no declared `[cache.family]` prefix. | Use a declared cache family instead; declare one for a live undeclared entry, or stop writing it (`ci-lint cache janitor`). |
 | `CACHE-002` | A volatile component (`github.sha`, `github.run_id`, `github.run_number`) in a `key:`/`cache-key-suffix:` input or a `[cache.family].key` entry. | Key on `hashFiles(...)` or a date rotation instead. |
-| `CACHE-004` | The proven worst-case cache footprint exceeds `[cache].budget`, or `[cache].budget` exceeds 10GB. `pre-prune = true` on every writer flow removes only the lockfile-change-peak term from the sum -- it does not waive the rest of the proof; `worst = steady + [cache.pr].budget` still must fit. | Lower family sizes/cardinality, raise the budget (up to 10GB), and/or set `pre-prune = true` on every writer flow (removes the lockfile-peak term only). |
+| `CACHE-003` | (round-4A, live) A declared **base**-layer family's cache entry was saved on a ref other than the default branch. | Delete it (`ci-lint cache janitor`); check the writer job's ref condition and `save-ok` call site. |
+| `CACHE-004` | The proven worst-case cache footprint exceeds `[cache].budget`, or `[cache].budget` exceeds 10GB; (round-4A, live) total live bytes >= 90% of budget. `pre-prune = true` on every writer flow removes only the lockfile-change-peak term from the sum -- it does not waive the rest of the proof; `worst = steady + [cache.pr].budget` still must fit. | Lower family sizes/cardinality, raise the budget (up to 10GB), and/or set `pre-prune = true` on every writer flow (removes the lockfile-peak term only); live, run `ci-lint cache janitor`. |
+| `CACHE-005` | (round-4A, live) A cache entry is poisoned: <= 1KB regardless of family, or below its family's declared `min`. | Delete the exact key (`ci-lint cache heal --key <key>`) so the next writer run repopulates it. |
+| `CACHE-006` | (round-4A, live) >= 2 entries of the same declared family whose keys differ only in a trailing lockfile/version hash -- the family is superseded, not per-platform-distinct. | Delete the superseded (non-newest) entry (`ci-lint cache janitor`); disambiguate with `[cache.family.<id>].per` if more than one entry is legitimate. |
+| `CACHE-008` | (round-4A, live) A `delta-v1-pr<N>-...` entry whose PR is closed/merged, or whose base hash matches none of that family's live base entries. | Delete it (`ci-lint cache trim`); the next PR push (if still open) rebuilds and saves fresh. |
 
 ## The planner
 

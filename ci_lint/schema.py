@@ -17,6 +17,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from ci_lint.cache.families import ALLOWED_VIA_VALUES
 from ci_lint.finding import Finding
 from ci_lint.toml_cursor import Cursor, TomlValue
 
@@ -469,6 +470,19 @@ def _parse_cache(root: Cursor) -> CacheConfig:
     for fam_id, fam_raw in sub.raw_table_of_tables("family", required=True).items():
         fsub = Cursor(fam_raw, f"cache.family.{fam_id}", root.findings, root.source)
         via = fsub.str_("via") or ""
+        if via and via not in ALLOWED_VIA_VALUES:
+            root.findings.append(
+                Finding(
+                    rule="CT-002",
+                    path=root.source,
+                    message=f"'cache.family.{fam_id}.via' = {via!r} is not one of "
+                    f"{sorted(ALLOWED_VIA_VALUES)}",
+                    fix=f"set 'cache.family.{fam_id}.via' to a recognized value (see docs/ci-toml.md's "
+                    "cache-family table) -- a new setup-soldr-owned family needs a new "
+                    "ci_lint.cache.families.FamilyShape entry, cited against setup-soldr's source, "
+                    "before ci.toml can declare it",
+                )
+            )
         max_ = fsub.str_("max") or ""
         lockfile = fsub.bool_("lockfile", required=False, default=False)
         per = fsub.str_("per", required=False)

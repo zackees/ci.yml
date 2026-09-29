@@ -104,7 +104,9 @@ registry   = { via = "setup-soldr:cargo-registry",  max = "100MB", lockfile = tr
 deps       = { via = "setup-soldr:cook",            max = "150MB", lockfile = true, per = "platform" }
 compile    = { via = "setup-soldr:build-cache",     max = "150MB", lockfile = true, per = "platform", min = "1MB" }
 sdk        = { via = "setup-soldr:cross-targets",   max = "500MB", per = "cross-platform" }
+dylint     = { via = "setup-soldr:dylint",          max = "750MB", min = "1MB" }               # tool/driver/foundation, one host (round-4A: the live template saves this today, undeclared)
 dylint-out = { via = "setup-soldr:dylint-output",   max = "150MB", lockfile = true, per = "platform", min = "1MB" }
+soldr-mini = { via = "setup-soldr:soldr-mini",      max = "30MB",  per = "platform", min = "1MB" }  # round-4A: ditto
 uv         = { via = "ci-lint", key = ["os", "python", "uv.lock"], max = "100MB", per = "os" }
 
 # ── Local runs: bosn → act (§11) ─────────────────────────────────────────────

@@ -31,13 +31,15 @@ from ci_lint.schema import CiToml, load_ci_toml
 
 # Checks issue #6 §9 documents as needing live GitHub Actions API/cache
 # state ("cache (live)": CACHE-005/006/008, plus the local `act`-store
-# variant ACT-001) but that are not implemented yet (round 4). Round-2A
-# brief, part 2e: `--local` (or env ACT=true) must not leave their absence
-# unexplained -- it reports each one explicitly as skipped, with
-# `needs_review` (never `passed`), so a local run is never mistaken for
-# having covered live cache state. When round 4 implements the real
-# checks, each entry here is replaced by an actual function call gated the
-# same way.
+# variant ACT-001). Round-4A implemented CACHE-001/003/005/006/008/009 as
+# `ci_lint.cache.audit` (`ci-lint cache audit`, and `precheck --live` --
+# see `_cmd_precheck` in ci_lint/cli.py, which is the layer that actually
+# calls the GitHub API and folds the live findings in, keeping this module
+# itself network-free). ACT-001 (the local act cache-store audit) is still
+# a later round's scope. `--local` (or env ACT=true) without `--live` must
+# not leave CACHE-005/006/008's absence unexplained -- it reports each one
+# explicitly as skipped, with `needs_review` (never `passed`), so a local
+# run is never mistaken for having covered live cache state.
 LOCAL_SKIPPED_CHECKS: tuple[tuple[str, str], ...] = (
     ("CACHE-005", "live cache poisoned/superseded-entry audit (GitHub Actions cache API)"),
     ("CACHE-006", "live cache usage-near-budget audit (GitHub Actions cache API)"),
@@ -49,8 +51,17 @@ LOCAL_SKIPPED_CHECKS: tuple[tuple[str, str], ...] = (
     ("ACT-001", "local act cache-store audit against the remote cache policy"),
 )
 
+# The subset of LOCAL_SKIPPED_CHECKS that `--live` actually covers (round
+# 4A). ACT-001 is deliberately excluded: it audits the *local* act cache
+# store, a different mechanism `--live` (the remote GitHub Actions cache
+# API) does not touch.
+LIVE_COVERED_RULES: frozenset[str] = frozenset({"CACHE-005", "CACHE-006", "CACHE-008"})
 
-def _local_skip_findings() -> list[Finding]:
+
+def _local_skip_findings(*, live: bool = False) -> list[Finding]:
+    checks = LOCAL_SKIPPED_CHECKS
+    if live:
+        checks = tuple((rule, desc) for rule, desc in checks if rule not in LIVE_COVERED_RULES)
     return [
         Finding(
             rule=rule,
@@ -60,7 +71,7 @@ def _local_skip_findings() -> list[Finding]:
             "or under bosn -> act's remote-equivalent lane) to cover this check; it is never treated "
             "as passing in a --local/ACT=true run",
         )
-        for rule, desc in LOCAL_SKIPPED_CHECKS
+        for rule, desc in checks
     ]
 
 
@@ -94,7 +105,7 @@ def is_local_run(local_flag: bool) -> bool:
     return local_flag or os.environ.get("ACT") == "true"
 
 
-def run_precheck(repo_root: Path, *, title: str = "", local: bool = False) -> PrecheckResult:
+def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live: bool = False) -> PrecheckResult:
     start = time.monotonic()
     ci, findings = load_ci_toml(repo_root)
     all_findings: list[Finding] = list(findings)
@@ -123,7 +134,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False) -> Pr
             # Never run through apply_exceptions: these are an explicit,
             # administrative "not covered locally" notice, not a violation
             # an exception entry could legitimately waive.
-            all_findings.extend(_local_skip_findings())
+            all_findings.extend(_local_skip_findings(live=live))
 
     elapsed = time.monotonic() - start
     return PrecheckResult(

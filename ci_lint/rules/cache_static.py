@@ -113,6 +113,15 @@ def _cardinality(ci: CiToml, per: str | None) -> int:
     return 1
 
 
+def cardinality(ci: CiToml, per: str | None) -> int:
+    """Public alias of `_cardinality`, for callers outside this module
+    (round-4A: `ci_lint.cache.ops.preprune` reuses the exact same `per`
+    arithmetic CACHE-004 uses, with live sizes substituted where known --
+    one implementation of the cardinality rule, not two)."""
+
+    return _cardinality(ci, per)
+
+
 def check_cache_004(ci: CiToml) -> tuple[list[Finding], str]:
     findings: list[Finding] = []
     budget = parse_size(ci.cache.budget)
