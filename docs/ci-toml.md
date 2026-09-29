@@ -121,7 +121,7 @@ Required when `profile = "rust-pypi-app"`.
 | --- | --- | --- |
 | `public` | string | The repo-relative directory of the public "amalgam" crate: re-exports and `dep:` feature wiring only. Its `[features]` are checked by `RUST-011`. |
 | `private` | string (glob) | e.g. `"crates/private/*"`. Every matching crate is checked by `RUST-011`: `publish = false`, no `[features]`, no optional dependencies, no `cfg(feature)` in its sources. |
-| `ship` | array of string arrays | The **only** amalgam feature sets ever compiled, e.g. `[[], ["json"]]`. Any `--features`/`--all-features`/`cargo hack`/`--feature-powerset` outside this set is `RUST-011`. |
+| `ship` | array of string arrays | The **only** amalgam feature sets ever compiled, e.g. `[[], ["json"]]`. Any `--features`/`--all-features`/`cargo hack`/`--feature-powerset` outside this set is `RUST-011`. `default` is compared as its members (both here and in `ci-lint units`' compiled sets), so with `default = []` (or no `default`) `["default"]` and `[]` are the same set -- ci.yml#89. |
 
 ### `[rust.tests]`
 
