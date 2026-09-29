@@ -404,6 +404,31 @@ Exit 1 if any finding, 0 clean (`cache audit`'s own findings are all
 `violation` status -- it is `precheck --live`, below, that downgrades all
 but `CACHE-009` to a warning).
 
+### `ci-lint cache save-check` (runtime, from `--log` evidence)
+
+`ci-lint cache save-check --log <file> [--log <file> ...] --conclusion
+<success|failure|...> [--run-url <url>] [--unusable-threshold 2] [--json]`
+-- issue #7: `CACHE-010`'s static kill-switch check has no visibility into
+whether a run actually saved anything, so these two rules read real job-log
+evidence instead (`gh run view --job <id> --log`, or any captured stdout of
+the same -- same "no live network assumed, inject `--log`" convention as
+`ci-lint dylint coverage`/`ci-lint suite check`):
+
+| Rule | Fires on |
+| --- | --- |
+| `CACHE-011` | `--conclusion` is exactly `success`, and the log shows a declared layer's save skipped for a reason other than an exact hit (`<layer>: ... skipping save`, `final <layer> session stats: missing`), or a `final ... summary: ...` line reporting `saved id=-1`. Never fires on a non-`success` conclusion -- a failed/cancelled build legitimately skips saving. |
+| `CACHE-012` | `--log` files given OLDEST-FIRST show the SAME layer's restore reporting `produced an unusable payload: archive=<N>B extracted_files=0 extracted_bytes=0` on `--unusable-threshold` (default 2) or more CONSECUTIVE logs, with no successful save of that layer in between. |
+
+Pure filesystem -- no `GITHUB_TOKEN`/`GITHUB_REPOSITORY` needed (unlike
+`cache audit`'s live listing); the caller supplies the run's actual
+conclusion since ci-lint cannot infer it from a log body alone. RED
+evidence: zackees/clud `main` run `36463271709`, job `109067163056`
+(`CACHE-011` -- conclusion `success`, both Dylint layers skip their save,
+`saved id=-1`) and PR run `36467947289`'s restore (`CACHE-012` -- `archive=22B
+extracted_files=0 extracted_bytes=0`, reproduced on repeated pushes since
+the writer that should replace it is the same broken one `CACHE-011`
+names). Exit 1 if any finding, 2 if a `--log` file is unreadable, 0 clean.
+
 ### `ci-lint cache trim` / `janitor` / `heal` / `preprune` (live, read-write)
 
 All four need `actions: write`; `--dry-run` (or omitting a delete
@@ -546,6 +571,9 @@ when neither PyYAML nor `yq` is available).
 | `TOOL-002` | A dependency-resolving `cargo` subcommand (`build`/`test`/`check`/`clippy`/`doc`/`run`/`nextest`) without `--locked`. | Add `--locked`. |
 | `TOOL-003` | In a Rust repo (`pyproject.toml` with `[build-system]`, or `Cargo.toml` with `[workspace]`): a plain `uv run`/`uv sync` (in a `run:` line, `ci/**/*.py` subprocess argv, or a `uv run` shebang) missing `--no-project`/`--no-sync`/`--script`. | Add `--no-project`/`--no-sync`/`--script`, or set job-level `UV_NO_SYNC: "1"`. |
 | `CACHE-009` | Static: `zackees/setup-soldr` used outside `[allow].setup-soldr.only-in`, missing/wrong `require` inputs (round-4B: a `require` value of `"plan"` means the actual input must be an expression derived from the precheck plan, not a literal), or an input enabling a retired cache family. Live (round-4A, `cache audit`/`precheck --live`): a live cache entry's key actually matches a `[cache].retired` prefix. | Call it only from the wrapper, with the required inputs; delete a live retired entry (`ci-lint cache janitor`). |
+| `CACHE-010` (issue #7) | Static: a workflow/job/step env sets a kill-switch var (`ZCCACHE_DISABLE`, `SOLDR_NO_CACHE`, `SOLDR_CACHE_DISABLE`, `SOLDR_DYLINT_NO_CACHE`) truthy while `ci.toml` declares a `[cache.family]` via a `setup-soldr:*`/`zccache*` backend. | Remove the env var (or set it falsy); if intentional, retire the matching `[cache.family]` entry instead. |
+| `CACHE-011` (issue #7) | Runtime, `ci-lint cache save-check --log ... --conclusion success`: a successful run's log shows a declared layer's save skipped for a non-exact-hit reason, or `saved id=-1`. | Inspect the writer job's cache-save gate for that layer (setup-soldr's success-marker identity check, or the invocation path that should write it). |
+| `CACHE-012` (issue #7) | Runtime, `ci-lint cache save-check`: a layer's restore reports an unusable (0-extracted) payload on >= 2 consecutive `--log` files with no writer save in between. | Delete the poisoned entry (`ci-lint cache heal`) AND fix the writer flow (see the matching `CACHE-011` finding). |
 | `RUST-002` (round-6E) | Dylint invoked from more than one job; a Dylint job whose `runs-on` doesn't resolve to Linux (`needs_review` for an unresolvable matrix/expression); bare `cargo dylint`/`cargo-dylint`/`dylint-link` (not `soldr dylint`/`soldr cargo dylint`) in a `run:` line or one level into a `ci/*.py` script (GEN-004's own follow-one-level convention, reused); `cargo install cargo-dylint`/`dylint-link`; `--workspace` without `--all` on any Dylint-related invocation. | Consolidate into one Linux `dylint` job; wrap every invocation through `soldr dylint`/`soldr cargo dylint`; drop the `cargo install`; add `--all`. |
 | `LAYOUT-001` | A host selector (`cfg(...)`, `sys.platform`, ...) outside `[allow].platform-code`/`platform-selector`. | Move it behind the platform facade. |
 | `RUST-005` | More integration-test targets exist than are declared in `[rust.tests].binaries`. | Declare each target, or consolidate `tests/*.rs`. |
