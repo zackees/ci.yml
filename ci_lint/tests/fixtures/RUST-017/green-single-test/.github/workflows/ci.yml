@@ -1,0 +1,10 @@
+name: ci
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # ci.yml#136 (kernal-api): one named ignored test that drives a live display.
+      - run: soldr cargo test --locked --all-features --lib live_webkit_viewport_png_completes_capture_operation -- --ignored --test-threads=1
+      - run: soldr cargo test --locked --features gpu -- gpu::tests::one_case --exact --test-threads 1
