@@ -28,7 +28,7 @@ CASES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
     ("GEN-016", ("red", "red-needs"), ("green",)),
     ("GEN-017", ("red", "red-missing"), ("green",)),
     ("GEN-018", ("red", "red-pip"), ("green",)),
-    ("CACHE-013", ("red", "red-no-pr"), ("green", "green-event", "green-no-save")),
+    ("CACHE-013", ("red", "red-no-pr"), ("green", "green-event", "green-no-save", "green-restore-only")),
 )
 
 
