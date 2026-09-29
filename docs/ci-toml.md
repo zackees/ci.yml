@@ -314,7 +314,7 @@ not a `[cache.family].via` value at all.
 | `setup-soldr:dylint-output` | `setup-soldr-dylint-output-v2-` | `resolve-setup.ts:1258` (v2 since setup-soldr v0.9.82; list the literal `setup-soldr-dylint-output-v1` in `[cache].retired` to delete the old generation) |
 | `setup-soldr:soldr-mini` | `soldr-mini-v2-` | `soldr-mini-cache.ts:85` |
 | `setup-soldr:solo-toolchain` | `solo-toolchain-v3-` | `solo-toolchain-cache.ts:276,280` (retired in the template, issue #6 D14; declared only so a `[cache].retired` entry resolves to a real prefix) |
-| `setup-uv` | `setup-uv-2-` | astral-sh/setup-uv `src/cache/restore-cache.ts:12,105` -- `CACHE_VERSION = "2"`, `` `setup-uv-${CACHE_VERSION}-${getArch()}-${platform}-${osNameVersion}-${version}${pruned}${python}${cacheDependencyPathHash}${suffix}` ``. See "astral-sh/setup-uv's own cache" below. |
+| `setup-uv` | `setup-uv-2-` | astral-sh/setup-uv `src/cache/restore-cache.ts:12,105` -- `CACHE_VERSION = "2"`, `` `setup-uv-${CACHE_VERSION}-${getArch()}-${platform}-${osNameVersion}-${version}${pruned}${python}${cacheDependencyPathHash}${suffix}` ``. Also accepts the legacy `setup-uv-1-` generation that setup-uv v6 (e.g. `d0d8abe`, `CACHE_VERSION = "1"`) still writes -- classification only; ci.yml#87. See "astral-sh/setup-uv's own cache" below. |
 | `ci-lint` | `<family-id>-v1-` | this package (`ci_lint.cache.keys.build_family_key`); the round-4A brief writes this generically as `ci-lint:<family> -> <family>-v1-`, and `via = "ci-lint"` (the literal value schema-3 has always accepted, no colon) is treated as that same convention -- a round-4A decision, not a second `via` spelling |
 | *(delta wrapper, not a `via` value)* | `delta-v1-pr-<N>-<family>-<platform>-b<base8>` | `ci_lint.cache.keys.build_delta_key` |
 

@@ -459,3 +459,30 @@ class Rust004DylintOutputCacheSaveTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SetupUvLegacyGenerationTest(unittest.TestCase):
+    """zackees/ci.yml#87: astral-sh/setup-uv v6 writes `setup-uv-1-` keys;
+    a declared `via = "setup-uv"` family must own them (GREEN) while an
+    unknown generation still reports CACHE-001 (RED)."""
+
+    def setUp(self) -> None:
+        ci, findings = load_ci_toml(REPO)
+        assert ci is not None, findings
+        self.ci = ci
+        entries = list_caches(_fetch_from(_load("caches-setup-uv-v1.json")), TOKEN, REPO_SLUG)
+        self.classified = classify(ci, entries)
+        self.by_id = {c.entry.id: c for c in self.classified}
+
+    def test_green_v1_and_v2_generations_classify(self) -> None:
+        self.assertEqual("setup-uv-cache", self.by_id[1].family_id)
+        self.assertEqual("setup-uv-cache", self.by_id[2].family_id)
+
+    def test_red_unknown_generation_stays_cache_001(self) -> None:
+        self.assertIsNone(self.by_id[3].family_id)
+        report = audit_classified(
+            self.ci, self.classified, graphql=None, token=TOKEN, repo=REPO_SLUG, default_branch="main"
+        )
+        c001 = [f for f in report.findings if f.rule == "CACHE-001"]
+        self.assertEqual(1, len(c001))
+        self.assertIn("id=3 ", c001[0].message)
