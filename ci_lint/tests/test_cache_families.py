@@ -14,7 +14,8 @@ from ci_lint.cache.families import (
 
 class FamilyResolutionTest(unittest.TestCase):
     def test_every_shape_from_the_round_4a_brief(self) -> None:
-        # DESIGN SOURCE table, verbatim (round-4A brief, deliverable 1).
+        # DESIGN SOURCE table, verbatim (round-4A brief, deliverable 1),
+        # plus "setup-uv" (same-round amendment).
         expected = {
             "setup-soldr:build-cache": "setup-soldr-buildcache-v2-",
             "setup-soldr:cargo-registry": "setup-soldr-cargoregistry-v1-",
@@ -25,6 +26,7 @@ class FamilyResolutionTest(unittest.TestCase):
             "setup-soldr:soldr-mini": "soldr-mini-v2-",
             "setup-soldr:solo-toolchain": "solo-toolchain-v3-",
             "setup-soldr:cook-delta": "cook-delta-v2-",
+            "setup-uv": "setup-uv-2-",
         }
         for via, prefix in expected.items():
             with self.subTest(via=via):
@@ -41,6 +43,7 @@ class FamilyResolutionTest(unittest.TestCase):
         self.assertIn("ci-lint", ALLOWED_VIA_VALUES)
         self.assertIn("setup-soldr:soldr-mini", ALLOWED_VIA_VALUES)
         self.assertIn("setup-soldr:dylint", ALLOWED_VIA_VALUES)
+        self.assertIn("setup-uv", ALLOWED_VIA_VALUES)
         self.assertNotIn("bogus:family", ALLOWED_VIA_VALUES)
 
     def test_retired_prefix_matches_a_live_key_with_the_same_start(self) -> None:

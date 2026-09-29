@@ -107,7 +107,7 @@ sdk        = { via = "setup-soldr:cross-targets",   max = "500MB", per = "cross-
 dylint     = { via = "setup-soldr:dylint",          max = "750MB", min = "1MB" }               # tool/driver/foundation, one host (round-4A: the live template saves this today, undeclared)
 dylint-out = { via = "setup-soldr:dylint-output",   max = "150MB", lockfile = true, per = "platform", min = "1MB" }
 soldr-mini = { via = "setup-soldr:soldr-mini",      max = "30MB",  per = "platform", min = "1MB" }  # round-4A: ditto
-uv         = { via = "ci-lint", key = ["os", "python", "uv.lock"], max = "100MB", per = "os" }
+uv         = { via = "setup-uv", max = "100MB", per = "os" }   # round-4A amendment: astral-sh/setup-uv's own built-in cache; the template's setup-uv step must set its own save-cache input so it saves ONLY on writer flows (CACHE-003 applies to it on a PR ref exactly like a base layer)
 
 # ── Local runs: bosn → act (§11) ─────────────────────────────────────────────
 [local]

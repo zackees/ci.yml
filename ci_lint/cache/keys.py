@@ -21,7 +21,7 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from ci_lint.cache.families import DELTA_KEY_VERSION, resolve_prefix
+from ci_lint.cache.families import CI_LINT_VIA, DELTA_KEY_VERSION, resolve_prefix
 from ci_lint.schema import CiToml
 
 # Components a [cache.family.<id>].key entry may name besides a literal
@@ -74,10 +74,14 @@ class FamilyKey:
 def build_family_key(ci: CiToml, family_id: str, *, platform_id: str | None, repo_root: Path) -> FamilyKey:
     """Build the base key for a declared `[cache.family.<id>]`. Only
     meaningful for `via = "ci-lint"` families with their own `key`
-    components -- a `setup-soldr:*` family's TRUE base key can only come
-    from setup-soldr itself (its prefix is still resolvable here, e.g. for
-    `ci-lint cache heal`'s exact-key deletes, but this function cannot
-    reproduce setup-soldr's own hash suffix, and does not try to)."""
+    components -- an external family's (`setup-soldr:*`, `setup-uv`) TRUE
+    base key can only come from that action itself (its prefix is still
+    resolvable here, e.g. for `ci-lint cache heal`'s exact-key deletes, but
+    this function cannot reproduce its real hash suffix, and does not try
+    to). A `.key` array declared on a non-`"ci-lint"` family is therefore
+    ignored here -- appending ci-lint-resolved components (os/python/a
+    lockfile hash, in ci-lint's OWN ordering) onto an external prefix would
+    silently fabricate a key shape that action never actually produces."""
 
     fam = ci.cache.family.get(family_id)
     if fam is None:
@@ -87,6 +91,8 @@ def build_family_key(ci: CiToml, family_id: str, *, platform_id: str | None, rep
         raise CacheKeyError(
             f"[cache.family.{family_id}].via = {fam.via!r} is not a recognized via value"
         )
+    if fam.via != CI_LINT_VIA:
+        return FamilyKey(family=family_id, prefix=prefix, components=())
     components = tuple(
         _resolve_component(c, ci=ci, platform_id=platform_id, repo_root=repo_root) for c in (fam.key or ())
     )

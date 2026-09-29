@@ -1,16 +1,18 @@
 """Cache family resolution: `[cache.family.<id>].via` -> the real GitHub
-Actions cache-key prefix/shape it produces (round-4A brief, deliverable 1).
+Actions cache-key prefix/shape it produces (round-4A brief, deliverable 1;
+amended same round to add `setup-uv`).
 
-Every `setup-soldr:*` prefix here is cited against a line in setup-soldr's
-own source, read from the reference clone the round-4A brief pointed at
-(setup-soldr is READ-ONLY for this worker -- see the worker contract's
-"Repositories" section), verified 2026-09-28 on its default branch. A
-`via = "ci-lint"` family is this package's own convention, not
-setup-soldr's, so it needs no such citation -- see `resolve_prefix` below.
+Every `setup-soldr:*`/`setup-uv` prefix here is cited against a line in
+that action's own source, read read-only via `gh api
+repos/<owner>/<repo>/contents/<path>` (setup-soldr and setup-uv are both
+READ-ONLY for this worker -- see the worker contract's "Repositories"
+section), verified 2026-09-28/2026-09-29 on each's default branch. A
+`via = "ci-lint"` family is this package's own convention, not an external
+action's, so it needs no such citation -- see `resolve_prefix` below.
 
 Re-verify this table (and bump the fixtures under
-ci_lint/tests/fixtures/runtime/cache/) whenever setup-soldr bumps a cache
-schema version (the "-vN-" segment in a prefix).
+ci_lint/tests/fixtures/runtime/cache/) whenever one of these actions bumps
+a cache schema version (the "-vN-" segment in a prefix).
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ class FamilyShape:
     note: str = ""
 
 
-SETUP_SOLDR_FAMILY_SHAPES: tuple[FamilyShape, ...] = (
+EXTERNAL_FAMILY_SHAPES: tuple[FamilyShape, ...] = (
     FamilyShape(
         via="setup-soldr:build-cache",
         prefix="setup-soldr-buildcache-v2-",
@@ -83,9 +85,31 @@ SETUP_SOLDR_FAMILY_SHAPES: tuple[FamilyShape, ...] = (
         note="retired in the template (issue #6 D14); declared here only so a [cache].retired "
         "entry naming it resolves to a real prefix for the live audit.",
     ),
+    FamilyShape(
+        via="setup-uv",
+        prefix="setup-uv-2-",
+        source="astral-sh/setup-uv src/cache/restore-cache.ts:12,105 -- "
+        'const CACHE_VERSION = "2"; return `setup-uv-${CACHE_VERSION}-${getArch()}-${platform}-'
+        "${osNameVersion}-${version}${pruned}${python}${cacheDependencyPathHash}${suffix}`;",
+        note="the action's OWN built-in cache (astral-sh/setup-uv's `uv-` step, not a "
+        "ci-lint/setup-soldr wrapper) -- amended into round-4A after the live template audit "
+        "showed it saving today, undeclared. Key encodes, after the fixed prefix: CPU arch "
+        "(getArch(), src/utils/platforms.ts:18-31, e.g. 'x86_64'/'aarch64') + Rust-style platform "
+        "triple (getPlatform():34-47, e.g. 'unknown-linux-gnu'/'apple-darwin'/'pc-windows-msvc'; "
+        "linux additionally resolves musl vs glibc) + OS name/version (getOSNameVersion():86-103, "
+        "e.g. 'ubuntu-24.04'/'macos-15'/'windows-2025') + the resolved Python version + an "
+        "optional '-pruned' (prune-cache input) + an optional '-py' (cache-python input) + a "
+        "sha256 hash of every file matched by the 'cache-dependency-glob' input "
+        "(restore-cache.ts:79-96 via hashFiles(), e.g. uv.lock's hash) + an optional user "
+        "cache-suffix. Distinct per (arch, platform, OS version, python version), so its live "
+        "cardinality can exceed a family declared 'per = \"os\"' (3 groups) -- template-python-"
+        "rust-cmd showed 6+ distinct entries across its 6 declared platforms on 2026-09-29; noted "
+        "as an open question for a future round rather than changed here (the amendment says "
+        "'keep max/per').",
+    ),
 )
 
-SETUP_SOLDR_SHAPES_BY_VIA: dict[str, FamilyShape] = {s.via: s for s in SETUP_SOLDR_FAMILY_SHAPES}
+EXTERNAL_SHAPES_BY_VIA: dict[str, FamilyShape] = {s.via: s for s in EXTERNAL_FAMILY_SHAPES}
 
 # `via = "ci-lint"`: a ci-lint-owned family. Its prefix is the family's OWN
 # declared id (the `[cache.family.<id>]` table key), never a fixed string
@@ -111,8 +135,10 @@ DELTA_PREFIX = f"delta-{DELTA_KEY_VERSION}-pr"
 # Every `via` value schema-3 accepts. `ci_lint.schema` cross-checks
 # `[cache.family.<id>].via` against this at load time (CT-002 on anything
 # else) -- round-4A brief, deliverable 1: "Add setup-soldr:soldr-mini and
-# setup-soldr:dylint to the schema's allowed via values."
-ALLOWED_VIA_VALUES: frozenset[str] = frozenset({CI_LINT_VIA, *SETUP_SOLDR_SHAPES_BY_VIA})
+# setup-soldr:dylint to the schema's allowed via values"; amended same
+# round to add "setup-uv" (astral-sh/setup-uv's own built-in cache is a
+# real, declarable family -- not a permanent CACHE-001 finding).
+ALLOWED_VIA_VALUES: frozenset[str] = frozenset({CI_LINT_VIA, *EXTERNAL_SHAPES_BY_VIA})
 
 
 def resolve_prefix(via: str, family_id: str) -> str | None:
@@ -123,7 +149,7 @@ def resolve_prefix(via: str, family_id: str) -> str | None:
 
     if via == CI_LINT_VIA:
         return f"{family_id}-{CI_LINT_KEY_VERSION}-"
-    shape = SETUP_SOLDR_SHAPES_BY_VIA.get(via)
+    shape = EXTERNAL_SHAPES_BY_VIA.get(via)
     return shape.prefix if shape is not None else None
 
 

@@ -70,29 +70,51 @@ class ClassifyLiveTemplateTest(unittest.TestCase):
         self.assertEqual("compile", self.by_id[8237210113].family_id)
         self.assertEqual("compile", self.by_id[8237266493].family_id)  # the "-dylint-" suffixed shape too
 
-    def test_setup_uv_own_cache_is_undeclared(self) -> None:
-        # astral-sh/setup-uv's own cache mechanism -- a genuinely different
-        # key shape from ci-lint's declared "uv" family (via = "ci-lint",
-        # prefix "uv-v1-"); this is a REAL CACHE-001 finding, not a fixture
-        # artifact.
+    def test_setup_uv_own_cache_classifies_once_declared(self) -> None:
+        # round-4A amendment: astral-sh/setup-uv's own cache is now a
+        # declared family in the fixture repo (via = "setup-uv", prefix
+        # "setup-uv-2-") -- no longer a permanent CACHE-001. All three
+        # entries in this fixture are the "setup-uv-2-..." shape.
         for cache_id in (8238163287, 8237209367, 8236693780):
             with self.subTest(cache_id=cache_id):
-                self.assertIsNone(self.by_id[cache_id].family_id)
-                self.assertFalse(self.by_id[cache_id].is_retired)
+                c = self.by_id[cache_id]
+                self.assertEqual("setup-uv-cache", c.family_id)
+                self.assertFalse(c.is_delta)
+                self.assertFalse(c.is_retired)
 
-    def test_audit_findings_cache_001_and_cache_006(self) -> None:
+    def test_audit_findings_cache_001_cache_003_and_cache_006(self) -> None:
         report = audit_classified(
             self.ci, self.classified, graphql=None, token=TOKEN, repo=REPO_SLUG, default_branch="main"
         )
-        by_rule_id = {(f.rule, f.path) for f in report.findings}
-        self.assertIn(("CACHE-001", "cache:" + self.by_id[8238163287].entry.key), by_rule_id)
-        self.assertEqual(3, sum(1 for f in report.findings if f.rule == "CACHE-001"))
+
+        # Two entries (8237209367 on refs/heads/main, 8236693780 on
+        # refs/pull/17/merge) share an IDENTICAL key string, so `path`
+        # ("cache:<key>") alone can't disambiguate which entry a finding is
+        # about -- match on the SUBJECT "cache id=<N>" the message always
+        # leads with instead (CACHE-006's message also mentions a second,
+        # different id -- "kept newest id=<other>" -- so a bare substring
+        # search on "id=<N>" would false-match that entry too).
+        def findings_for(rule: str, cache_id: int) -> list:
+            needle = f"cache id={cache_id} "
+            return [f for f in report.findings if f.rule == rule and needle in f.message]
+
+        # No more CACHE-001s: setup-uv-2-... is a declared family now.
+        self.assertEqual(0, sum(1 for f in report.findings if f.rule == "CACHE-001"))
+        # ...but two of its three entries live on refs/pull/*, exactly like
+        # a base layer would -- CACHE-003, the same rule, no special case.
+        self.assertEqual(1, len(findings_for("CACHE-003", 8238163287)))  # refs/pull/19/merge
+        self.assertEqual(1, len(findings_for("CACHE-003", 8236693780)))  # refs/pull/17/merge
+        self.assertEqual(0, len(findings_for("CACHE-003", 8237209367)))  # refs/heads/main
+        self.assertEqual(2, sum(1 for f in report.findings if f.rule == "CACHE-003"))
         # the older (less-recently-accessed) of the two "registry" entries
         # that differ only in their trailing lockfile-hash component
-        self.assertIn(("CACHE-006", "cache:" + self.by_id[8237210495].entry.key), by_rule_id)
-        self.assertNotIn(("CACHE-006", "cache:" + self.by_id[8237268308].entry.key), by_rule_id)
+        self.assertEqual(1, len(findings_for("CACHE-006", 8237210495)))
+        self.assertEqual(0, len(findings_for("CACHE-006", 8237268308)))
+        # 8237209367 (main) and 8236693780 (pr17) share an IDENTICAL key
+        # (same shape) -- the older-accessed one (pr17's) is superseded too.
+        self.assertEqual(1, len(findings_for("CACHE-006", 8236693780)))
+        self.assertEqual(0, len(findings_for("CACHE-006", 8237209367)))
         self.assertEqual(250382443, report.total_bytes)
-        self.assertEqual(0, sum(1 for f in report.findings if f.rule == "CACHE-003"))
         self.assertEqual(0, sum(1 for f in report.findings if f.rule == "CACHE-009"))
 
 

@@ -81,6 +81,7 @@ dylint     = { via = "setup-soldr:dylint",         max = "80MB",  min = "1MB" }
 dylint-out = { via = "setup-soldr:dylint-output",  max = "10MB",  lockfile = true, per = "platform", min = "1MB" }
 soldr-mini = { via = "setup-soldr:soldr-mini",     max = "5MB",   per = "platform", min = "1MB" }
 uv         = { via = "ci-lint", key = ["os", "python", "uv.lock"], max = "10MB", per = "os" }
+setup-uv-cache = { via = "setup-uv", key = ["os", "python", "uv.lock"], max = "30MB", per = "os" }
 
 [local]
 runner = "bosn-act"

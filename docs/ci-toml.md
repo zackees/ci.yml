@@ -214,15 +214,16 @@ doesn't currently exhibit -- each file's own `"_note"` key says which).
 
 ### Family resolution table
 
-`ci_lint.cache.families.SETUP_SOLDR_FAMILY_SHAPES` -- every `via` value a
+`ci_lint.cache.families.EXTERNAL_FAMILY_SHAPES` -- every `via` value a
 `[cache.family.<id>]` may declare, and the literal GitHub Actions
-cache-key prefix it resolves to. Each `setup-soldr:*` row is cited against
-the exact line of setup-soldr's own source that builds it (read from the
-reference clone named in the round-4A brief, on its default branch,
-verified 2026-09-28); `via = "ci-lint"` is this package's own convention
-(no setup-soldr source to cite), and `delta` is the PR-delta wrapper
-(`ci_lint.cache.keys.build_delta_key`), not a `[cache.family].via` value at
-all.
+cache-key prefix it resolves to. Each row is cited against the exact line
+of that action's own source that builds it (`setup-soldr:*` from the
+reference clone named in the round-4A brief, verified 2026-09-28;
+`setup-uv` read read-only via `gh api repos/astral-sh/setup-uv/contents/...`,
+verified 2026-09-29 -- both actions are READ-ONLY for this worker); `via =
+"ci-lint"` is this package's own convention (no external source to cite),
+and `delta` is the PR-delta wrapper (`ci_lint.cache.keys.build_delta_key`),
+not a `[cache.family].via` value at all.
 
 | `via` | Key prefix | Source |
 | --- | --- | --- |
@@ -235,6 +236,7 @@ all.
 | `setup-soldr:dylint-output` | `setup-soldr-dylint-output-v1-` | `resolve-setup.ts:1204` |
 | `setup-soldr:soldr-mini` | `soldr-mini-v2-` | `soldr-mini-cache.ts:85` |
 | `setup-soldr:solo-toolchain` | `solo-toolchain-v3-` | `solo-toolchain-cache.ts:276,280` (retired in the template, issue #6 D14; declared only so a `[cache].retired` entry resolves to a real prefix) |
+| `setup-uv` | `setup-uv-2-` | astral-sh/setup-uv `src/cache/restore-cache.ts:12,105` -- `CACHE_VERSION = "2"`, `` `setup-uv-${CACHE_VERSION}-${getArch()}-${platform}-${osNameVersion}-${version}${pruned}${python}${cacheDependencyPathHash}${suffix}` ``. See "astral-sh/setup-uv's own cache" below. |
 | `ci-lint` | `<family-id>-v1-` | this package (`ci_lint.cache.keys.build_family_key`); the round-4A brief writes this generically as `ci-lint:<family> -> <family>-v1-`, and `via = "ci-lint"` (the literal value schema-3 has always accepted, no colon) is treated as that same convention -- a round-4A decision, not a second `via` spelling |
 | *(delta wrapper, not a `via` value)* | `delta-v1-pr<N>-<family>-<platform>-b<base8>` | `ci_lint.cache.keys.build_delta_key` |
 
@@ -245,6 +247,52 @@ the "undeclared-but-saved family is `CACHE-001`" case the brief predicted
 (reproduced in `ci_lint/tests/test_cache_audit.py`'s
 `ClassifyLiveTemplateTest` before/after the two families were added).
 
+#### astral-sh/setup-uv's own cache (round-4A amendment)
+
+The live audit's first run flagged `setup-uv-2-...` as `CACHE-001`
+(undeclared) on every push -- an owner decision then reclassified it as a
+**real, declarable family**, not a permanent finding: `examples/rust-pypi
+-app/ci.toml`'s `uv` family is now `via = "setup-uv"` (kept `max`/`per`
+unchanged; dropped its old `key` array, since a non-`"ci-lint"` family's
+real key is never ci-lint-built -- see `build_family_key`'s docstring,
+which now refuses to append `.key` components onto an external prefix at
+all, rather than silently fabricating a key shape that action never
+produces).
+
+After its fixed `setup-uv-2-` prefix, the key encodes (all from
+astral-sh/setup-uv's own source): CPU arch (`getArch()`,
+`src/utils/platforms.ts:18-31`, e.g. `x86_64`/`aarch64`) + a Rust-style
+platform triple (`getPlatform()`:34-47, e.g. `unknown-linux-gnu` --
+resolving musl vs glibc on Linux -- `apple-darwin`, `pc-windows-msvc`) + OS
+name/version (`getOSNameVersion()`:86-103, e.g. `ubuntu-24.04`,
+`macos-15`, `windows-2025`) + the resolved Python version + an optional
+`-pruned` (the `prune-cache` input) + an optional `-py` (the `cache-python`
+input) + a sha256 hash of every file the `cache-dependency-glob` input
+matches (`restore-cache.ts:79-96`, via `hashFiles()` -- covers `uv.lock` by
+that input's own default glob) + an optional user `cache-suffix`. This
+means its live cardinality is per **(arch, platform, OS version, python
+version)**, which can exceed a family declared `per = "os"` (3 groups) --
+`template-python-rust-cmd` showed 6+ distinct `setup-uv-2-...` keys across
+its 6 declared platforms on 2026-09-29. The amendment says "keep max/per",
+so this is left as an open question for a future round rather than changed
+here.
+
+**The template must set its own `save-cache` input, not leave it at
+`"auto"`.** Read from `astral-sh/setup-uv`'s `action.yml` (verified
+2026-09-29): `enable-cache` defaults `"auto"` (caching on except for
+`release`/tag-push/`pull_request_target`/`workflow_run` -- **`pull_request`
+itself stays enabled**), and `save-cache` defaults `"auto"`, which "disables
+saving for `merge_group` events" only -- a normal PR push is **not**
+excluded. Left at its defaults, `astral-sh/setup-uv` would save on every
+PR, exactly the base-layer-on-a-PR problem `CACHE-003` exists to catch (and
+does: any `uv`-family entry the live audit finds on a `refs/pull/*` ref is
+reported as `CACHE-003`, the identical rule a `setup-soldr:*` base layer
+gets -- `ci_lint.cache.audit._check_cache_003` has no special case per
+family, it fires for any non-delta, non-retired declared family's entry on
+a non-default ref). The template's own `astral-sh/setup-uv` step must set
+`save-cache` to a writer-flow-only condition (e.g. tied to the same ref
+check a `cache = "write"` flow uses), not the bare `"auto"` default.
+
 ### `ci-lint cache key`
 
 `ci-lint cache key <family> --repo . [--platform ID] [--pr N] [--base-key
@@ -253,11 +301,16 @@ K]` -- two distinct things depending on `--pr`:
 - **Without `--pr`:** builds a `via = "ci-lint"` family's own base key from
   its declared `[cache.family.<id>].key` components (`"os"` ->
   `--platform`'s id, `"python"` -> `[python].pythons[0]`, anything else ->
-  the first 16 hex chars of that repo-relative file's sha256), e.g.
-  `uv-v1-linux-x64-3.11-<16-hex>`. A `setup-soldr:*` family has no `key`
-  components to build from (setup-soldr computes its real key itself, per
-  issue #6 §6's "two builders" rule) -- this still resolves and returns its
-  bare prefix, useful for e.g. `cache heal`'s exact-key deletes.
+  the first 16 hex chars of that repo-relative file's sha256), e.g. a
+  hypothetical `mycache-v1-linux-x64-3.11-<16-hex>` for a
+  `via = "ci-lint"` family declared `[cache.family.mycache]`. An external
+  family (any `setup-soldr:*` shape, or `setup-uv`) has no `key` components
+  to build from -- that action computes its real key itself, per issue #6
+  §6's "two builders" rule -- so a `.key` array declared on one is ignored
+  here (never appended onto its prefix, which would fabricate a key shape
+  that action doesn't actually produce); `cache key` still resolves and
+  returns its bare prefix, useful for e.g. `cache heal`'s exact-key
+  deletes.
 - **With `--pr N` (also needs `--platform` and `--base-key`):** builds the
   PR delta key `delta-v1-pr<N>-<family>-<platform>-b<base8>`, where `base8`
   is the first 8 hex chars of `sha256(--base-key)` -- `--base-key` is the

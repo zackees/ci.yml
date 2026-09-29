@@ -59,6 +59,18 @@ class BuildFamilyKeyTest(unittest.TestCase):
         # no declared `key` components: .key drops the dangling trailing hyphen.
         self.assertEqual("setup-soldr-buildcache-v2", fk.key)
 
+    def test_setup_uv_family_ignores_a_declared_key_array(self) -> None:
+        # round-4A amendment: astral-sh/setup-uv builds its OWN real key
+        # (arch/platform/os-version/python/dependency-hash, none of which
+        # is ci-lint's os/python/lockfile-hash convention or ordering) --
+        # a [cache.family.<id>].key array on a non-"ci-lint" family must
+        # never be appended onto its prefix, or this would fabricate a key
+        # shape that action never actually produces.
+        fk = build_family_key(self.ci, "setup-uv-cache", platform_id="linux-x64", repo_root=REPO)
+        self.assertEqual("setup-uv-2-", fk.prefix)
+        self.assertEqual((), fk.components)
+        self.assertEqual("setup-uv-2", fk.key)
+
 
 class BuildDeltaKeyTest(unittest.TestCase):
     def test_matches_the_design_shape(self) -> None:
