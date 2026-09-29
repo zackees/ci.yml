@@ -207,6 +207,8 @@ suite, when one is declared).
 | `pr.max-per-pr` | string (size) | Per-PR delta cap. |
 | `pr.budget` | string (size) | Counted once in `CACHE-004`'s worst-case sum. |
 | `pr.trim` | string | e.g. `"on-close"`. Informational in round 1A. |
+| `pr.expected-open-prs` | int (optional) | M2-17 (ci.yml#42): an estimate of how many PRs may hold an open, saved delta at once (a fleet-scale repository's steady PR count, not a hard cap). When set, `CACHE-014` fails if `max-per-pr x expected-open-prs > pr.budget` -- see "Sizing `[cache.pr]` for repository scale" below. Omit it and this half of `CACHE-014` is silent (no signal to check). |
+| `pr.measured-largest-delta` | string (size, optional) | M2-17 (ci.yml#42): the largest delta size actually observed, e.g. copied from a `ci-lint cache delta manifest` run against a real large PR. When set, `CACHE-014` fails if it exceeds `max-per-pr` (a cap sized below an already-observed delta silently truncates that PR's saved cache on every save). Omit it and this half of `CACHE-014` is silent. |
 
 ### `[cache.family.<id>]`
 
@@ -221,6 +223,59 @@ suite, when one is declared).
 | `key` | array of strings (optional) | Key components, e.g. `["os", "python", "uv.lock"]`. Scanned by `CACHE-002` for volatile tokens the same way a workflow's `with.key` is, and (round-4A, `via = "ci-lint"` families only) built by `ci-lint cache key <family>` -- `"os"` resolves to `--platform`'s id, `"python"` to `[python].pythons[0]` (the floor version), anything else to the first-16-hex-chars of that repo-relative file's sha256. |
 
 `CACHE-004`'s formula: `worst = Σ(family.max × cardinality) + Σ(family.max × cardinality, families with lockfile=true) + [cache.pr].budget` -- unless **every** writer flow (`cache = "write"`) sets `pre-prune = true`, in which case the middle (lockfile-change-peak) term is dropped: `worst = Σ(family.max × cardinality) + [cache.pr].budget`. Either way, `worst > [cache].budget` is always a violation; pre-prune narrows the sum, it never waives the comparison. Precheck always prints the arithmetic and which formula it applied.
+
+### Sizing `[cache.pr]` for repository scale (M2-17, ci.yml#42)
+
+`[cache.pr].max-per-pr`/`budget` are not fleet-wide constants -- they must be
+sized from a repository's own measured delta sizes, the same way
+`docs/case-studies/template-python-rust-cmd.md`'s round 4 derived
+`max-per-pr = "128MB"`/`budget = "1GB"` from that repository's real PR
+deltas. A clud-scale workspace (`docs/case-studies/clud-ci-cost.md`; the
+round-4C clud-scale simulation, branch `sim/clud-scale`, a ballast crate
+with 180 locked packages) produces much larger compile deltas than the
+lean template, and copying the template's numbers verbatim into a
+clud-scale `ci.toml` under-sizes both fields.
+
+**Where the numbers come from.** `ci-lint cache delta manifest` (pure
+filesystem, no network) gives the actual byte size of one PR's delta
+against the current base. Run it against the largest real PR you have (or
+a synthetic worst case like the clud-scale simulation) and record the
+result in `[cache.pr].measured-largest-delta`. `[cache].budget`'s own
+forecast -- `ci-lint cache preprune --lockfile-changed`'s live arithmetic,
+identical in shape to `CACHE-004`'s static formula (steady + lockfile
+peak + PR budget) -- tells you how much of the 10GB repository cap the
+non-PR part of the cache already consumes; what's left over each PR delta
+must share is `[cache].budget - (steady + lockfile peak)`, which
+`[cache.pr].budget` should not exceed. Two measured examples from the
+template's own case study, both well inside its `9GB`/`10GB` caps:
+
+| Run | steady | lockfile peak | PR budget | forecast | `[cache].budget` |
+| --- | --- | --- | --- | --- | --- |
+| 36509863041 (`Cargo.lock`-only libc bump, D4) | 4,948,230,144 B | 957,349,888 B | 1,073,741,824 B | 6,979,321,856 B | 9,663,676,416 B (9GB) |
+| 36514690030 (clud-scale simulation, `sim/clud-scale`, never merged) | 5,153,281,864 B | 1,162,401,608 B | 1,073,741,824 B | 7,389,425,296 B | 9,663,676,416 B (9GB) |
+
+The clud-scale run's steady state is only ~4% larger than the template's
+own -- most of a large compile's growth lands in the PR delta itself, not
+the base layers -- which is why `max-per-pr`/`pr.budget` are the fields
+that need repository-specific sizing, not `[cache].budget`.
+
+**Formula.**
+
+1. Measure the largest real (or worst-plausible) PR delta with
+   `ci-lint cache delta manifest`; set `[cache.pr].max-per-pr` to at least
+   that size (headroom recommended -- a cap sized exactly at one
+   measurement fails on the next slightly larger PR).
+2. Estimate `expected-open-prs`: the repository's typical number of PRs
+   that could simultaneously hold a saved delta (its normal open-PR count,
+   not a spike). Set `[cache.pr].expected-open-prs` to that estimate.
+3. Set `[cache.pr].budget >= max-per-pr x expected-open-prs`.
+4. Confirm `steady + lockfile peak + [cache.pr].budget <= [cache].budget`
+   (`CACHE-004`'s own formula, above) and `[cache].budget <= 10GB`.
+
+`CACHE-014` checks steps 1 and 3 mechanically whenever the optional inputs
+(`measured-largest-delta`, `expected-open-prs`) are supplied; it is silent
+on whichever half has no input, since sizing without a measurement is a
+repository judgment call, not something `ci_lint` can prove wrong.
 
 ## Cache runtime (round-4A)
 
@@ -611,6 +666,7 @@ when neither PyYAML nor `yq` is available).
 | `CACHE-006` | (round-4A, live) >= 2 entries of the same declared family whose keys differ only in a trailing lockfile/version hash -- the family is superseded, not per-platform-distinct. | Delete the superseded (non-newest) entry (`ci-lint cache janitor`); disambiguate with `[cache.family.<id>].per` if more than one entry is legitimate. |
 | `CACHE-008` | (round-4A, live; widened by #23 §4.1) Any entry of a closed/merged PR -- key with a delimited `pr-<N>` component, a legacy `delta-v1-pr<N>-...` key, or ref `refs/pull/<N>/merge` -- or a PR delta whose base hash matches none of that family's live base entries. A `pr-<N>`-keyed entry is PR-scoped, never a `CACHE-003` base layer. | Delete it (`ci-lint cache janitor` deletes closed-PR entries on every push sweep; `ci-lint cache trim` also covers stale-base deltas). |
 | `CACHE-013` | (#23 §5, static) A cache save reachable from a PR (a workflow with `pull_request`/`workflow_call`, or a composite action) whose key input lacks a delimited `pr-<N>` component: `zackees/setup-soldr` `cache-key-suffix` (unless `save-cache: "false"`), `astral-sh/setup-uv` `cache-suffix` (unless `enable-cache: false` or `save-cache: false`), `actions/cache`/`actions/cache/save` `key`. Accepted: an expression containing `github.event.pull_request.number`, or the plan output `cache_key_pr` (`pr-<N>` on `pull_request`, empty elsewhere, from `ci-lint plan/precheck --github-output`); inside a composite action, an `inputs.*` passthrough. | Set the key input to `${{ needs.precheck.outputs.cache_key_pr }}` (or a `format('pr-{0}', github.event.pull_request.number)` expression). |
+| `CACHE-014` | (M2-17, ci.yml#42, static; only fires when the corresponding optional input is set) `[cache.pr].max-per-pr x expected-open-prs > [cache.pr].budget`, and/or `[cache.pr].max-per-pr < [cache.pr].measured-largest-delta`. | Lower `max-per-pr` or `expected-open-prs`, or raise `[cache.pr].budget`; and/or raise `max-per-pr` to at least the measured largest delta -- see "Sizing `[cache.pr]` for repository scale" above. |
 | `SEC-005` | (round-5, live, `ci-lint audit`) Any repository or `[publish].pypi.environment` environment Actions secret exists; a 403 (needs an admin token) is `needs_review`, never a pass. | This profile is OIDC-only (issue #6 §7): delete the stored secret(s). |
 | `SEC-006` | (round-5, live, `ci-lint audit`) `[publish].pypi.environment` is missing, or its deployment branch policy doesn't restrict deploys to the default branch. | Create/restrict the environment's deployment branch policy to exactly the default branch. |
 | `SEC-007` | (round-5, live, `ci-lint audit`) The repository's default Actions workflow permissions (`GET .../actions/permissions/workflow`) are not `"read"`. | Set "Read repository contents permission" (never "Read and write") in repo Settings -> Actions -> General. |

@@ -1,8 +1,9 @@
-"""CACHE-001, CACHE-002, CACHE-003, CACHE-004 -- ci_lint/rules/cache_static.py."""
+"""CACHE-001, CACHE-002, CACHE-003, CACHE-004, CACHE-010, CACHE-014 -- ci_lint/rules/cache_static.py."""
 
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 
 from ci_lint.rules.cache_static import (
     check_cache_001,
@@ -10,6 +11,7 @@ from ci_lint.rules.cache_static import (
     check_cache_003_setup_uv,
     check_cache_004,
     check_cache_010,
+    check_cache_014,
     parse_size,
 )
 from ci_lint.schema import load_ci_toml
@@ -153,6 +155,41 @@ class CacheStaticFixtureTest(unittest.TestCase):
         findings, arithmetic = check_cache_004(replace(one_flow_only, cache=replace(one_flow_only.cache, budget="1100MB")))
         self.assertIn("CACHE-004", [f.rule for f in findings], msg=arithmetic)
         self.assertIn("not every writer flow pre-prunes", arithmetic)
+
+    @requires_yaml_tooling
+    def test_cache_014_no_optional_inputs_is_silent(self) -> None:
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        findings = check_cache_014(ci)
+        self.assertNotIn("CACHE-014", [f.rule for f in findings])
+
+    @requires_yaml_tooling
+    def test_cache_014_fleet_of_open_prs_exceeds_pr_budget(self) -> None:
+        # max-per-pr=128MB, budget=1GB (from the fixture). 10 open PRs each
+        # hitting the cap = 1.25GB > 1GB budget, even though no single PR
+        # exceeded max-per-pr.
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        red = replace(ci, cache=replace(ci.cache, pr=replace(ci.cache.pr, expected_open_prs=10)))
+        findings = check_cache_014(red)
+        self.assertIn("CACHE-014", [f.rule for f in findings])
+
+        green = replace(ci, cache=replace(ci.cache, pr=replace(ci.cache.pr, expected_open_prs=2)))
+        findings2 = check_cache_014(green)
+        self.assertNotIn("CACHE-014", [f.rule for f in findings2])
+
+    @requires_yaml_tooling
+    def test_cache_014_measured_delta_exceeds_max_per_pr(self) -> None:
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        red = replace(
+            ci, cache=replace(ci.cache, pr=replace(ci.cache.pr, measured_largest_delta="200MB"))
+        )
+        findings = check_cache_014(red)
+        self.assertIn("CACHE-014", [f.rule for f in findings])
+
+        green = replace(
+            ci, cache=replace(ci.cache, pr=replace(ci.cache.pr, measured_largest_delta="64MB"))
+        )
+        findings2 = check_cache_014(green)
+        self.assertNotIn("CACHE-014", [f.rule for f in findings2])
 
 
 class SizeParsingUnitTest(unittest.TestCase):

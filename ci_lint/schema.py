@@ -169,6 +169,8 @@ class PrCache:
     max_per_pr: str
     budget: str
     trim: str
+    expected_open_prs: int | None = None
+    measured_largest_delta: str | None = None
 
 
 @dataclass(frozen=True)
@@ -499,8 +501,18 @@ def _parse_cache(root: Cursor) -> CacheConfig:
         max_per_pr = psub.str_("max-per-pr") or ""
         pr_budget = psub.str_("budget") or ""
         trim = psub.str_("trim") or ""
+        expected_open_prs = psub.int_("expected-open-prs", required=False, default=None)
+        measured_largest_delta = psub.str_("measured-largest-delta", required=False, default=None)
         psub.finish()
-        pr = PrCache(mode=mode, families=families, max_per_pr=max_per_pr, budget=pr_budget, trim=trim)
+        pr = PrCache(
+            mode=mode,
+            families=families,
+            max_per_pr=max_per_pr,
+            budget=pr_budget,
+            trim=trim,
+            expected_open_prs=expected_open_prs,
+            measured_largest_delta=measured_largest_delta,
+        )
     family: dict[str, CacheFamily] = {}
     for fam_id, fam_raw in sub.raw_table_of_tables("family", required=True).items():
         fsub = Cursor(fam_raw, f"cache.family.{fam_id}", root.findings, root.source)

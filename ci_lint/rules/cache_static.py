@@ -15,7 +15,16 @@ documented under "astral-sh/setup-uv's own cache" in docs/ci-toml.md).
 Finally, the total declared cache footprint (steady state + one
 lockfile-change peak + the PR delta budget) must fit under `[cache].budget`,
 which itself may not exceed GitHub's 10GB default repository cap
-(CACHE-004).
+(CACHE-004). CACHE-014 (M2-17, ci.yml#42) sizes `[cache.pr].max-per-pr`
+against two independent signals, each optional so a repository that hasn't
+supplied one gets no finding from that half: `[cache.pr].expected-open-prs`
+(if set) times `max-per-pr` must not exceed `[cache.pr].budget` (a fleet of
+open PRs whose deltas each hit the cap would blow the PR budget even
+though every individual PR stayed under `max-per-pr`), and
+`[cache.pr].measured-largest-delta` (if set, e.g. copied from a
+`ci-lint cache delta manifest` run against a real large PR) must not
+exceed `max-per-pr` (a cap sized below an already-observed delta silently
+truncates that PR's saved cache every time).
 """
 
 from __future__ import annotations
@@ -428,6 +437,66 @@ def check_cache_010(ci: CiToml, repo_root: Path) -> list[Finding]:
     return findings
 
 
+def check_cache_014(ci: CiToml) -> list[Finding]:
+    """M2-17 (ci.yml#42): warn when `[cache.pr].max-per-pr` is sized wrong
+    for the repository's scale, using whichever of the two optional inputs
+    is supplied. Both are warnings (not hard failures): unlike CACHE-004's
+    proven worst-case arithmetic, these depend on inputs a repository may
+    not have measured yet (an open-PR count estimate, a delta measurement)."""
+
+    findings: list[Finding] = []
+    max_per_pr = parse_size(ci.cache.pr.max_per_pr) if ci.cache.pr.max_per_pr else None
+    if max_per_pr is None:
+        return findings
+
+    expected_open_prs = ci.cache.pr.expected_open_prs
+    if expected_open_prs is not None:
+        pr_budget = parse_size(ci.cache.pr.budget) if ci.cache.pr.budget else None
+        if pr_budget is not None:
+            fleet_worst = max_per_pr * expected_open_prs
+            if fleet_worst > pr_budget:
+                findings.append(
+                    Finding(
+                        rule="CACHE-014",
+                        path="ci.toml",
+                        message=(
+                            f"[cache.pr].max-per-pr ({ci.cache.pr.max_per_pr} = {max_per_pr} B) x "
+                            f"[cache.pr].expected-open-prs ({expected_open_prs}) = {fleet_worst} B, "
+                            f"which exceeds [cache.pr].budget ({ci.cache.pr.budget} = {pr_budget} B)"
+                        ),
+                        fix=(
+                            "lower [cache.pr].max-per-pr, lower [cache.pr].expected-open-prs (if the "
+                            "estimate was too high), or raise [cache.pr].budget -- see docs/ci-toml.md "
+                            "'Sizing [cache.pr] for repository scale' for the formula"
+                        ),
+                    )
+                )
+
+    measured = ci.cache.pr.measured_largest_delta
+    if measured:
+        measured_bytes = parse_size(measured)
+        if measured_bytes is not None and measured_bytes > max_per_pr:
+            findings.append(
+                Finding(
+                    rule="CACHE-014",
+                    path="ci.toml",
+                    message=(
+                        f"[cache.pr].max-per-pr ({ci.cache.pr.max_per_pr} = {max_per_pr} B) is below "
+                        f"[cache.pr].measured-largest-delta ({measured} = {measured_bytes} B): the "
+                        "largest observed PR delta would be truncated on save"
+                    ),
+                    fix=(
+                        "raise [cache.pr].max-per-pr to at least [cache.pr].measured-largest-delta "
+                        "(re-measure with 'ci-lint cache delta manifest' against the largest real PR "
+                        "if this value is stale) -- see docs/ci-toml.md 'Sizing [cache.pr] for "
+                        "repository scale'"
+                    ),
+                )
+            )
+
+    return findings
+
+
 def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     findings: list[Finding] = []
     findings.extend(check_cache_001(ci, repo_root))
@@ -436,4 +505,5 @@ def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     findings.extend(check_cache_010(ci, repo_root))
     cache_004_findings, arithmetic = check_cache_004(ci)
     findings.extend(cache_004_findings)
+    findings.extend(check_cache_014(ci))
     return findings, arithmetic
