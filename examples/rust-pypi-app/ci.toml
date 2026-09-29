@@ -129,7 +129,7 @@ platform-selector = "crates/private/template-platform/src/lib.rs"   # the ONE fi
 platform-code     = ["crates/private/template-platform/src/platforms/**", "src/template_python_rust_cmd/platforms/**"]
 # Round-4B (SEC-002 refinement): top-level permissions are capped at contents:read + actions:read
 # (free on every job too); any wider per-job grant must be listed here by job id.
-permissions       = { "id-token: write" = ["publish"], "actions: write" = ["cache-janitor"] }
+permissions       = { "id-token: write" = ["publish"], "actions: write" = ["precheck", "cache-maint"] }
 # Round-4B (CACHE-001 refinement): actions/cache (and /save, /restore) may ONLY appear inside this
 # one SHA-pinned composite-action wrapper; its own key: input must be dynamic (CACHE-002), never a
 # literal -- see .github/actions/cache/action.yml.
