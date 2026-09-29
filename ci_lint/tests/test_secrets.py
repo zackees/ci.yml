@@ -29,6 +29,21 @@ class SecretsFixtureTest(unittest.TestCase):
         rules = [f.rule for f in check_sec_001(fixture("SEC-001", "green"))]
         self.assertEqual([], rules)
 
+    def test_sec_001_honours_allow_secrets(self) -> None:
+        """ci.yml#135: a secret named in [allow].secrets is not SEC-001; the
+        same reference with an empty [allow].secrets (the red fixture) is."""
+
+        repo = fixture("SEC-001", "green-allowed")
+        ci, _ = load_ci_toml(repo)
+        self.assertEqual(("MY_TOKEN",), ci.allow.secrets)
+        rules = [f.rule for f in check_sec_001(repo, ci.allow.secrets)]
+        self.assertNotIn("SEC-001", rules)
+
+        repo = fixture("SEC-001", "red")
+        ci, _ = load_ci_toml(repo)
+        rules = [f.rule for f in check_sec_001(repo, ci.allow.secrets)]
+        self.assertIn("SEC-001", rules)
+
     @requires_yaml_tooling
     def test_sec_002_wide_top_level_permissions(self) -> None:
         repo = fixture("SEC-002", "red")
