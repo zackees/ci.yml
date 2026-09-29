@@ -19,6 +19,7 @@ from pathlib import Path
 from ci_lint.exceptions import apply_exceptions
 from ci_lint.finding import Finding, Status
 from ci_lint.rules.build_parallelism import check_gen_012
+from ci_lint.rules.cache_restore_copy import check_gen_013
 from ci_lint.rules.cache_static import check_group9
 from ci_lint.rules.contract import check_ct_006, check_tag_001, check_tag_002
 from ci_lint.rules.layout import check_group6
@@ -122,6 +123,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
 
         all_findings.extend(check_group2(ci, repo_root))
         all_findings.extend(check_gen_012(repo_root))
+        all_findings.extend(check_gen_013(repo_root))
         all_findings.extend(check_group3(ci, repo_root))
         all_findings.extend(check_group4(ci, repo_root))
         all_findings.extend(check_group5(ci, repo_root))
