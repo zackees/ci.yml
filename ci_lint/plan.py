@@ -369,8 +369,20 @@ def compute_plan(
                     reasons.append(f"tag '[{token}]' adds suites {sorted(added_s)}")
             if rule.remove is not None:
                 if rule.remove.suites == "tests":
-                    reasons.append(f"tag '[{token}]' removes all suites")
-                    suites = set()
+                    # "tests" removes suites of test kind (default kind, e.g.
+                    # unit/smoke/integration/init) but never a non-test suite
+                    # such as a `kind = "bench"` perf suite -- so
+                    # `[ci-perf][no-test]` still runs perf regardless of tag
+                    # order in the title (ci.yml#46: the perf loop must stay
+                    # build+perf only, not empty).
+                    test_suite_ids = {
+                        sid for sid, s in ci.suites.items() if s.kind != "bench"
+                    }
+                    removed_tests = suites & test_suite_ids
+                    reasons.append(
+                        f"tag '[{token}]' removes test suites {sorted(removed_tests)}"
+                    )
+                    suites -= test_suite_ids
                 elif rule.remove.suites is not None:
                     removed = _expand_suites(ci, rule.remove.suites)
                     suites -= removed
