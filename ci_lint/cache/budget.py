@@ -17,9 +17,9 @@ on state it could not read.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from ci_lint.cache.audit import classify
+from ci_lint.cache.audit import _check_cache_003, _check_cache_006, classify
 from ci_lint.cache.github_cache import CacheApiError, list_caches
 from ci_lint.github_api import FetchFn
 from ci_lint.rules.cache_static import parse_size
@@ -36,6 +36,14 @@ class BudgetVerdict:
     own_bytes: int
     pr_budget_bytes: int | None
     reason: str
+    # GEN-009 (issue #5): a same-classification-pass rollup over the
+    # CACHE-003 (off-branch base-layer saves) and CACHE-006 (superseded
+    # generations) counts this verdict can see WITHOUT any extra live call
+    # (no GraphQL PR-state lookup, so CACHE-008 is not counted here --
+    # `ci-lint cache audit`'s GEN-009 is the authoritative, full rollup
+    # including CACHE-004/CACHE-008; this is the cheap same-call summary
+    # `cache budget` can afford). None when neither contributor fired.
+    gen_009_reason: str | None = None
 
     @property
     def failed(self) -> bool:
@@ -49,6 +57,7 @@ class BudgetVerdict:
             "own_bytes": self.own_bytes,
             "pr_budget_bytes": self.pr_budget_bytes,
             "reason": self.reason,
+            "gen_009_reason": self.gen_009_reason,
         }
 
     def render(self) -> str:
@@ -56,7 +65,10 @@ class BudgetVerdict:
         line = f"ci-lint cache budget: {self.verdict.upper()} -- live {self.total_bytes}B / budget {budget}"
         if self.own_bytes:
             line += f"; this PR's own entries {self.own_bytes}B"
-        return f"{line}\n  {self.reason}"
+        line += f"\n  {self.reason}"
+        if self.gen_009_reason:
+            line += f"\n  GEN-009: {self.gen_009_reason}"
+        return line
 
 
 def is_hard_context(event_name: str, ref: str, default_branch: str) -> bool:
@@ -120,6 +132,18 @@ def run_budget(
     classified = classify(ci, entries)
     total = sum(c.entry.size_in_bytes for c in classified)
     own = sum(c.entry.size_in_bytes for c in classified if pr_number is not None and c.pr == pr_number)
-    return evaluate(
+    verdict = evaluate(
         ci, total, own_bytes=own, hard=is_hard_context(event_name, ref, default_branch), pr_number=pr_number
     )
+    contributing = list(_check_cache_003(classified, default_branch)) + list(_check_cache_006(classified))
+    if contributing:
+        counts: dict[str, int] = {}
+        for f in contributing:
+            counts[f.rule] = counts.get(f.rule, 0) + 1
+        by_rule = ", ".join(f"{rule}={counts[rule]}" for rule in sorted(counts))
+        verdict = replace(
+            verdict,
+            gen_009_reason=f"{len(contributing)} contributing finding(s) ({by_rule}) -- run 'ci-lint cache "
+            "audit' for the full rollup including CACHE-004/CACHE-008",
+        )
+    return verdict

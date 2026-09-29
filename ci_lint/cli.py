@@ -598,6 +598,7 @@ def _cmd_audit(args: argparse.Namespace) -> int:
         repo=repo_slug,
         default_branch=args.default_branch,
         gate_check_name=args.gate_check_name,
+        repo_root=repo_root,
     )
     print(json.dumps(settings_audit_to_json_dict(report), indent=2) if args.json else render_settings_audit_text(report))
     return 1 if any(f.status == Status.VIOLATION for f in report.findings) else 0

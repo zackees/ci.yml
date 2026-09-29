@@ -126,6 +126,29 @@ class ClassifyLiveTemplateTest(unittest.TestCase):
         self.assertEqual(250382443, report.total_bytes)
         self.assertEqual(0, sum(1 for f in report.findings if f.rule == "CACHE-009"))
 
+    def test_gen_009_rollup_fires_when_cache_003_and_006_do(self) -> None:
+        """RED: this fixture already produces CACHE-003 and CACHE-006
+        findings (previous test) -- GEN-009 (issue #5) is the single
+        fleet-level rollup a human/agent reads instead of grepping four
+        rule IDs separately; it must fire here and cite both."""
+
+        report = audit_classified(
+            self.ci, self.classified, graphql=None, token=TOKEN, repo=REPO_SLUG, default_branch="main"
+        )
+        gen_009 = [f for f in report.findings if f.rule == "GEN-009"]
+        self.assertEqual(1, len(gen_009), report.findings)
+        self.assertIn("CACHE-003", gen_009[0].message)
+        self.assertIn("CACHE-006", gen_009[0].message)
+
+    def test_gen_009_absent_when_no_rollup_contributor_fires(self) -> None:
+        """GREEN: an empty cache listing has nothing for CACHE-003/004/006/
+        008 to flag, so GEN-009 must not fire either."""
+
+        report = audit_classified(
+            self.ci, (), graphql=None, token=TOKEN, repo=REPO_SLUG, default_branch="main"
+        )
+        self.assertEqual([], [f for f in report.findings if f.rule == "GEN-009"])
+
 
 class ClassifySyntheticRulesTest(unittest.TestCase):
     """caches-synthetic-rules.json + pr-states.json (both synthetic, per

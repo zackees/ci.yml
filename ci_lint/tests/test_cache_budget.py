@@ -122,6 +122,38 @@ class BudgetVerdictTest(unittest.TestCase):
         self.assertEqual("warn", v.verdict)
 
 
+class Gen009BudgetRollupTest(unittest.TestCase):
+    """GEN-009 (issue #5, M2-23): `cache budget`'s cheap same-call rollup
+    over CACHE-003 -- no extra live call, so CACHE-008 (needs GraphQL) is
+    out of scope here; `cache audit` is the full rollup."""
+
+    def _ci(self):
+        ci, findings = load_ci_toml(REPO)
+        assert ci is not None, findings
+        return ci
+
+    def test_red_base_layer_on_pr_ref_sets_gen_009_reason(self) -> None:
+        entries = [
+            (1, "setup-soldr-cargoregistry-v1-abc123", "refs/pull/9/merge", 5 * MB),
+        ]
+        v = run_budget(
+            self._ci(), fetch=_fetch(entries), token="t", repo="o/r",
+            event_name="pull_request", ref="refs/pull/9/merge", pr_number=None,
+        )
+        self.assertIsNotNone(v.gen_009_reason)
+        self.assertIn("CACHE-003", v.gen_009_reason)
+
+    def test_green_default_branch_entry_has_no_gen_009_reason(self) -> None:
+        entries = [
+            (1, "setup-soldr-cargoregistry-v1-abc123", "refs/heads/main", 5 * MB),
+        ]
+        v = run_budget(
+            self._ci(), fetch=_fetch(entries), token="t", repo="o/r",
+            event_name="push", ref="refs/heads/main", pr_number=None,
+        )
+        self.assertIsNone(v.gen_009_reason)
+
+
 class EvictSchemaTest(unittest.TestCase):
     """`[cache.family.<id>].evict`: optional, only "lru" (else CT-002)."""
 

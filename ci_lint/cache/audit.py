@@ -317,6 +317,41 @@ def _check_cache_006(classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
     return findings
 
 
+# GEN-009 (issue #5): a fleet-level rollup, not a new detection signal.
+# policy-general.md already says CACHE-003 (unreachable-ref saves),
+# CACHE-004 (declared byte-budget proof), CACHE-006 (superseded
+# generations), and CACHE-008 (closed-PR/stale-delta trim) implement its
+# mechanics "under those IDs rather than this one" -- so GEN-009 is the
+# single "is this repository's live cache state healthy" verdict a human
+# or agent reads instead of grepping four rule IDs separately. It fires
+# when the current audit already produced >= 1 finding from that rollup
+# set; it emits NOTHING new that CACHE-003/004/006/008 didn't already
+# find, and it clears the moment none of them fire, so it can never be
+# "fixed" independently of its contributors (no allowlist escape hatch).
+GEN_009_ROLLUP_RULES: frozenset[str] = frozenset({"CACHE-003", "CACHE-004", "CACHE-006", "CACHE-008"})
+
+
+def _check_gen_009(
+    contributing: list[Finding], *, total_bytes: int, budget_bytes: int | None
+) -> Finding | None:
+    if not contributing:
+        return None
+    counts: dict[str, int] = {}
+    for f in contributing:
+        counts[f.rule] = counts.get(f.rule, 0) + 1
+    by_rule = ", ".join(f"{rule}={counts[rule]}" for rule in sorted(counts))
+    budget_str = f"{total_bytes}B" + (f" / declared budget {budget_bytes}B" if budget_bytes is not None else "")
+    return Finding(
+        rule="GEN-009",
+        path="cache:fleet-budget",
+        message=f"fleet cache budget rollup: {len(contributing)} contributing finding(s) across "
+        f"{len(counts)} rule(s) ({by_rule}); live usage {budget_str}",
+        fix="this is a rollup, not an independent defect -- fix each listed CACHE-003/004/006/008 "
+        "finding individually (ci-lint cache janitor reclaims what it safely can); GEN-009 clears "
+        "once none of its contributing rules fire, never by suppressing GEN-009 itself",
+    )
+
+
 def _check_cache_009(classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
     findings: list[Finding] = []
     for c in classified:
@@ -596,6 +631,12 @@ def audit_classified(
                 "raise [cache].budget (re-proving CACHE-004's static arithmetic still fits)",
             )
         )
+
+    gen_009 = _check_gen_009(
+        [f for f in findings if f.rule in GEN_009_ROLLUP_RULES], total_bytes=total_bytes, budget_bytes=budget_bytes
+    )
+    if gen_009 is not None:
+        findings.append(gen_009)
 
     return AuditReport(
         classified=classified,
