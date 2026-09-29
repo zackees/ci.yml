@@ -170,11 +170,34 @@ def _iter_run_steps(repo_root: Path) -> list[tuple[str, str, str]]:
     return out
 
 
+TOOL_002 = "TOOL-002"
+
+
 def check_tool_rules_workflows(repo_root: Path) -> list[Finding]:
+    # Deferred: test_invocations imports this module (circular at import time).
+    from ci_lint.rules.test_invocations import (  # pylint: disable=import-outside-toplevel
+        allowed,
+        raw_lines_of,
+        with_yaml_comment,
+    )
+
     findings: list[Finding] = []
+    raw_cache: dict[str, list[str]] = {}
     for run_text, path, loc in _iter_run_steps(repo_root):
         commands = find_commands(run_text)
-        findings.extend(_tool_findings_for_commands(commands, path, loc))
+        step_findings = _tool_findings_for_commands(commands, path, loc)
+        if any(f.rule == TOOL_002 for f in step_findings):
+            # ci.yml#138: a same-line '# ci-lint: allow TOOL-002 <reason>'
+            # excuses that one line's missing --locked (the RUST-015/016/017
+            # convention); every other line of the step is still checked.
+            raw = raw_cache.setdefault(path, raw_lines_of(repo_root / path))
+            kept = "\n".join(
+                ln for ln in run_text.splitlines() if not allowed(with_yaml_comment(ln, raw), TOOL_002)
+            )
+            step_findings = [f for f in step_findings if f.rule != TOOL_002] + [
+                f for f in _tool_findings_for_commands(find_commands(kept), path, loc) if f.rule == TOOL_002
+            ]
+        findings.extend(step_findings)
     return findings
 
 
