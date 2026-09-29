@@ -666,6 +666,10 @@ defined; the template's `ci.yml` must name its jobs to match:
 | `dylint` | when `dylint_targets` is non-empty | the one Linux Dylint job (all declared targets) |
 | `platform-build` | when `needs_platform_lanes` | the Linux cross-build matrix job -- GitHub aggregates every matrix leg into one `needs.platform-build.result` |
 | `platform-run` | when `needs_platform_lanes` | the native-runner execute matrix job -- same aggregation |
+| `init` | when the `init` suite is selected | the from-zero job: no cache restore, template instantiation, precheck + build + smoke of the generated repo |
+| `perf` | when the `perf` suite is selected | the perf job; it must succeed even when the suite is non-gating (gating only decides whether a regression fails it) |
+| `release-verify` | when `publish` is `rehearsal` or `mock` | staged-artifact completeness (`ci-lint release verify`) |
+| `publish` | when `publish` is `mock` | the top-level OIDC mock publisher (PyPI can't trust a reusable workflow, warehouse#11096) |
 
 `ci-ok` (the gate job itself) is **never** in `required_jobs` -- a job
 cannot require its own result.

@@ -254,3 +254,28 @@ class PlatformLanesFastSuitesLaneDigestsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RequiredJobsForSuitesAndPublishTest(unittest.TestCase):
+    """Round-4 follow-up: the gate must also require the from-zero `init`
+    job, the `perf` job, and the release jobs when the plan selects them."""
+
+    def test_suite_and_publish_jobs(self) -> None:
+        from ci_lint.plan import _required_job_ids
+
+        base = ("precheck", "fast", "dylint")
+        self.assertEqual(_required_job_ids(False, ("t",), ("smoke", "unit"), "none"), base)
+        self.assertEqual(
+            _required_job_ids(False, ("t",), ("init", "smoke", "unit"), "none"), base + ("init",)
+        )
+        self.assertEqual(
+            _required_job_ids(False, ("t",), ("perf", "unit"), "none"), base + ("perf",)
+        )
+        self.assertEqual(
+            _required_job_ids(True, ("t",), ("unit",), "rehearsal"),
+            base + ("platform-build", "platform-run", "release-verify"),
+        )
+        self.assertEqual(
+            _required_job_ids(True, ("t",), ("unit",), "mock"),
+            base + ("platform-build", "platform-run", "release-verify", "publish"),
+        )

@@ -125,7 +125,12 @@ class Plan:
         }
 
 
-def _required_job_ids(needs_platform_lanes: bool, dylint_targets: tuple[str, ...]) -> tuple[str, ...]:
+def _required_job_ids(
+    needs_platform_lanes: bool,
+    dylint_targets: tuple[str, ...],
+    suites: tuple[str, ...] = (),
+    publish: str = "none",
+) -> tuple[str, ...]:
     """The job `id:`s (`needs:` keys) `ci-lint gate` requires to have
     `result == "success"` (round-2A brief, part 2d; amended by the
     orchestrator's round-2A amendment 1). This is the one place that
@@ -140,6 +145,17 @@ def _required_job_ids(needs_platform_lanes: bool, dylint_targets: tuple[str, ...
         platform); GitHub aggregates every matrix leg into a single
         `needs.<id>.result`, so one id each covers the whole matrix.
 
+      - "init" when the `init` suite is selected -- the from-zero job
+        (no cache restore, template instantiation), which must run in its
+        own job because it may not share any restored cache.
+      - "perf" when the `perf` suite is selected (its job must succeed even
+        when the suite is non-gating; gating only decides whether a
+        regression fails it).
+      - "release-verify" when publish is "rehearsal" or "mock" -- the
+        staged-artifact completeness check (`ci_lint release verify`).
+      - "publish" when publish is "mock" -- the top-level OIDC mock
+        publisher (PyPI cannot trust a reusable workflow, warehouse#11096).
+
     "ci-ok" (the gate job itself) is never in this list -- a job cannot
     require its own result.
     """
@@ -150,6 +166,14 @@ def _required_job_ids(needs_platform_lanes: bool, dylint_targets: tuple[str, ...
     if needs_platform_lanes:
         jobs.append("platform-build")
         jobs.append("platform-run")
+    if "init" in suites:
+        jobs.append("init")
+    if "perf" in suites:
+        jobs.append("perf")
+    if publish in ("rehearsal", "mock"):
+        jobs.append("release-verify")
+    if publish == "mock":
+        jobs.append("publish")
     return tuple(jobs)
 
 
@@ -456,7 +480,7 @@ def compute_plan(
         mergeable=mergeable,
         digest=digest,
         reasons=tuple(reasons),
-        required_jobs=_required_job_ids(needs_platform_lanes, dylint_targets),
+        required_jobs=_required_job_ids(needs_platform_lanes, dylint_targets, final_suites, publish),
         needs_platform_lanes=needs_platform_lanes,
         dispatch_sha=dispatch_sha,
         platform_lanes=platform_lanes,
