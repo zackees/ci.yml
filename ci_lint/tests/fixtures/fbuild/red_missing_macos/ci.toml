@@ -1,0 +1,28 @@
+schema = 3
+
+# Coverage-preservation mapping for a repository shaped like FastLED/fbuild
+# (zackees/ci.yml#39, proposal.md's "Explicit acceptance fixture:
+# fbuild-coverage-preserved"). This file does NOT go through
+# ci_lint.schema's full schema-3 loader -- like ci_lint.example_drift, only
+# ci_lint.fbuild_coverage reads it, over raw tomllib, because its job is to
+# compare a [coverage] declaration against a pinned real snapshot, not to
+# validate a repository's whole CI configuration.
+#
+# `board_registry` is a path relative to this file. Loading it and
+# deduplicating by `env_name` is what turns 80 registry entries (4 of them
+# duplicate `workflow` aliases for the same board) into 76 distinct
+# required board build cases -- see SOURCE.md.
+
+[coverage]
+board_registry = "board_families.json"
+macos_archs = ["macos-15"]
+python_facades_ignored = ["fbuild-python::python_facades::--ignored"]
+full_graph_gates = [
+  "soldr cargo check --workspace --all-targets",
+  "soldr cargo clippy --workspace --all-targets -- -D warnings",
+  "soldr cargo test --workspace",
+]
+standalone_required_checks = [
+  "ci/find_direct_subprocess.py --fail",
+  "ci/check_usb_vidpid_literals.py",
+]

@@ -7,7 +7,14 @@ This one covers `FastLED/fbuild` (not `FastLED/fbuild-ide`, a different
 repository) — the fleet's primary CI-normalization fixture per
 [proposal.md](../../proposal.md), with 76-80 board build targets across 13
 board families. Evidence gathered via `gh api`/`gh run`/`gh pr`, not inferred
-from workflow names.
+from workflow names. `ci_lint/tests/fixtures/fbuild/` (zackees/ci.yml#39,
+proposal.md's `fbuild-coverage-preserved` acceptance fixture) machine-checks
+the "76-80" claim: a pinned, read-only snapshot of `ci/board_families.json`
+from `FastLED/fbuild @ ef10ced8c86c124af72266e2a7041497c8709a66` (80
+registry entries, 4 duplicate `workflow` aliases -> 76 distinct board build
+cases), plus both macOS architectures and the ignored Python facade suite,
+and `ci-lint fbuild coverage-check` fails RED the moment any of those is
+dropped from a proposed/faster `ci.toml`.
 
 fbuild's cost driver is a different mechanism from
 [clud's](clud-ci-cost.md) — not Cargo static linking, but a large per-board

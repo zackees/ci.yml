@@ -47,6 +47,9 @@ from ci_lint.cargo_scan import discover_workspace
 from ci_lint.example_drift import ExampleDriftError, compute_example_drift
 from ci_lint.example_drift import render_text as render_example_drift_text
 from ci_lint.example_drift import to_json_dict as example_drift_to_json_dict
+from ci_lint.fbuild_coverage import FbuildCoverageError, check_coverage_preserved, load_coverage_set
+from ci_lint.fbuild_coverage import render_text as render_fbuild_coverage_text
+from ci_lint.fbuild_coverage import to_json_dict as fbuild_coverage_to_json_dict
 from ci_lint.finding import Finding, Status
 from ci_lint.github_api import default_delete, default_fetch, default_fetch_status, default_graphql
 from ci_lint.perf import (
@@ -516,6 +519,23 @@ def _cmd_example_drift(args: argparse.Namespace) -> int:
     else:
         print(render_example_drift_text(entries, example_path=example_path, repo_ci_toml=repo_ci_toml))
     return 1 if any(not e.repo_specific for e in entries) else 0
+
+
+def _cmd_fbuild_coverage_check(args: argparse.Namespace) -> int:
+    existing_path = Path(args.existing)
+    declared_path = Path(args.declared)
+    try:
+        existing = load_coverage_set(existing_path, label="--existing")
+        declared = load_coverage_set(declared_path, label="--declared")
+    except FbuildCoverageError as exc:
+        print(f"ci-lint fbuild coverage-check: {exc}", file=sys.stderr)
+        return 2
+    findings = check_coverage_preserved(existing, declared)
+    if args.json:
+        print(json.dumps(fbuild_coverage_to_json_dict(findings), indent=2))
+    else:
+        print(render_fbuild_coverage_text(findings, existing_path=existing_path, declared_path=declared_path))
+    return 1 if findings else 0
 
 
 def _cmd_wheel_check(args: argparse.Namespace) -> int:
@@ -1187,6 +1207,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_example_drift.add_argument("--repo", required=True)
     p_example_drift.add_argument("--json", action="store_true")
     p_example_drift.set_defaults(func=_cmd_example_drift)
+
+    p_fbuild = sub.add_parser("fbuild", help="fbuild-shaped coverage-preservation checks (ci.yml#39)")
+    fbuild_sub = p_fbuild.add_subparsers(dest="fbuild_command", required=True)
+    p_fbuild_coverage = fbuild_sub.add_parser(
+        "coverage-check",
+        help="existing required coverage ⊆ declared coverage: board build cases, macOS "
+        "architectures, ignored Python facade tests, full-graph gates, and standalone required "
+        "checks, each from a ci.toml [coverage] table (proposal.md's fbuild-coverage-preserved "
+        "acceptance fixture)",
+    )
+    p_fbuild_coverage.add_argument("--existing", required=True, help="the pinned/real ci.toml")
+    p_fbuild_coverage.add_argument("--declared", required=True, help="the proposed/faster ci.toml")
+    p_fbuild_coverage.add_argument("--json", action="store_true")
+    p_fbuild_coverage.set_defaults(func=_cmd_fbuild_coverage_check)
 
     p_wheel = sub.add_parser("wheel", help="wheel packaging checks (PKG-003/004/005)")
     wheel_sub = p_wheel.add_subparsers(dest="wheel_command", required=True)

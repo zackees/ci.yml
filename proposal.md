@@ -694,11 +694,11 @@ Implementation must show **RED → GREEN**: a focused failing fixture/reproducti
 
 ### E. Fbuild fixture
 
-- [ ] `fbuild-coverage-preserved` retains all pinned full-graph and independent required policy coverage.
-- [ ] The fixture expands 80 board entries to exactly 76 distinct build cases, preserving aliases.
-- [ ] Remove one board case: RED; restore its implementation/result: GREEN.
-- [ ] Remove macOS Intel or ARM: RED; both real runtime cases: GREEN.
-- [ ] Omit ignored Python facade execution: RED; restore it: GREEN.
+- [x] `fbuild-coverage-preserved` retains all pinned full-graph and independent required policy coverage. Implemented in `ci_lint/fbuild_coverage.py` / `ci-lint fbuild coverage-check` (ci.yml#39, M2-28); board-registry snapshot and non-board evidence in `ci_lint/tests/fixtures/fbuild/` (see `SOURCE.md`). Not yet covered: full macOS/musl/MSVC release-architecture and glibc-2.17 coverage below.
+- [x] The fixture expands 80 board entries to exactly 76 distinct build cases, preserving aliases. `ci_lint.fbuild_coverage.distinct_board_env_names`; `ci_lint/tests/test_fbuild_coverage.py::test_pinned_registry_has_80_entries_76_distinct`.
+- [x] Remove one board case: RED; restore its implementation/result: GREEN. `red_missing_board/` fixture; `test_red_missing_board_case_fails` / `test_restoring_dropped_board_case_returns_green`.
+- [x] Remove macOS Intel or ARM: RED; both real runtime cases: GREEN. `red_missing_macos/` fixture (`macos-15-intel` dropped); `test_red_missing_macos_arch_fails`.
+- [x] Omit ignored Python facade execution: RED; restore it: GREEN. `red_missing_facade/` fixture; `test_red_missing_python_facade_suite_fails`.
 - [ ] Preserve acceptance, QEMU provisioning behavior, benchmark gates and template drift checks.
 - [ ] Ordinary PR/main selections contain no board/release matrix.
 - [ ] Full PR has complete validation and no publisher capability.
