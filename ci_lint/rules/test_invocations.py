@@ -82,12 +82,21 @@ def logical_lines(text: str) -> list[str]:
     return out
 
 
-def split_commands(line: str) -> list[list[str]]:
-    """Tokenize one logical shell line into commands, splitting on unquoted
-    `;`/`&&`/`||`/`|`/`&` only (a quoted nextest filter like
-    `'test(a) | test(b)'` stays one token)."""
+_EXPR_RE = re.compile(r"\$\{\{\s*(.*?)\s*\}\}")
 
-    lexer = shlex.shlex(_strip_comment(line), posix=True, punctuation_chars=";&|")
+
+def normalize_expr(text: str) -> str:
+    """Collapse each `${{ ... }}` Actions expression to one space-free token."""
+
+    return _EXPR_RE.sub(lambda m: "${{" + m.group(1).replace(" ", "") + "}}", text)
+
+
+def split_commands_with_env(line: str) -> list[tuple[dict[str, str], list[str]]]:
+    """Tokenize one logical shell line into (leading env assignments,
+    command tokens) pairs, splitting on unquoted `;`/`&&`/`||`/`|`/`&` only
+    (a quoted nextest filter like `'test(a) | test(b)'` stays one token)."""
+
+    lexer = shlex.shlex(normalize_expr(_strip_comment(line)), posix=True, punctuation_chars=";&|")
     lexer.whitespace_split = True
     commands: list[list[str]] = [[]]
     try:
@@ -98,17 +107,24 @@ def split_commands(line: str) -> list[list[str]]:
                 commands[-1].append(tok)
     except ValueError:
         return []
-    out: list[list[str]] = []
+    out: list[tuple[dict[str, str], list[str]]] = []
     for tokens in commands:
+        env: dict[str, str] = {}
         i = 0
         while i < len(tokens) and ENV_ASSIGN_RE.match(tokens[i]):
+            key, value = tokens[i].split("=", 1)
+            env[key] = value
             i += 1
         if i < len(tokens):
-            out.append(tokens[i:])
+            out.append((env, tokens[i:]))
     return out
 
 
-def _is_cargo_token(token: str) -> bool:
+def split_commands(line: str) -> list[list[str]]:
+    return [tokens for _env, tokens in split_commands_with_env(line)]
+
+
+def is_cargo_token(token: str) -> bool:
     base = token.rsplit("/", 1)[-1]
     return base in ("cargo", "cargo.exe") or _CARGO_VAR_RE.match(token) is not None
 
@@ -126,7 +142,7 @@ def find_test_invocation(tokens: tuple[str, ...]) -> tuple[str, tuple[str, ...]]
             if j < len(tokens) and tokens[j] == "run":
                 return ("nextest", tokens[j + 1 :])
             continue
-        if not _is_cargo_token(tok):
+        if not is_cargo_token(tok):
             continue
         j = i + 1
         while j < len(tokens) and tokens[j].startswith("+"):
@@ -214,14 +230,14 @@ def source_line(path: Path, line: int) -> str:
     return lines[line - 1] if 0 < line <= len(lines) else ""
 
 
-def _raw_lines(path: Path) -> list[str]:
+def raw_lines_of(path: Path) -> list[str]:
     try:
         return path.read_text(encoding="utf-8").splitlines()
     except (UnicodeDecodeError, OSError):
         return []
 
 
-def _with_yaml_comment(line: str, raw_lines: list[str]) -> str:
+def with_yaml_comment(line: str, raw_lines: list[str]) -> str:
     """YAML drops a plain scalar's trailing `# comment`; recover it from the
     raw file line holding this command so a same-line allow marker counts."""
 
@@ -241,23 +257,23 @@ def iter_run_lines(repo_root: Path) -> list[tuple[str, str, str]]:
     for wf in load_workflows(repo_root):
         if wf.status != LoadStatus.OK:
             continue
-        raw_lines = _raw_lines(repo_root / wf.path)
+        raw_lines = raw_lines_of(repo_root / wf.path)
         for job_id, job in jobs_of(as_dict(wf.document)).items():
             for i, step in enumerate(steps_of(job)):
                 run_text = step.get("run")
                 if isinstance(run_text, str):
                     for ln in logical_lines(run_text):
-                        out.append((_with_yaml_comment(ln, raw_lines), wf.path, f"jobs.{job_id}.steps[{i}]"))
+                        out.append((with_yaml_comment(ln, raw_lines), wf.path, f"jobs.{job_id}.steps[{i}]"))
     for act in load_composite_actions(repo_root):
         if act.status != LoadStatus.OK:
             continue
         runs = as_dict(act.document).get("runs")
-        raw_lines = _raw_lines(repo_root / act.path)
+        raw_lines = raw_lines_of(repo_root / act.path)
         if isinstance(runs, dict):
             for i, step in enumerate(as_list(runs.get("steps"))):
                 if isinstance(step, dict) and isinstance(step.get("run"), str):
                     for ln in logical_lines(step["run"]):
-                        out.append((_with_yaml_comment(ln, raw_lines), act.path, f"runs.steps[{i}]"))
+                        out.append((with_yaml_comment(ln, raw_lines), act.path, f"runs.steps[{i}]"))
     return out
 
 
