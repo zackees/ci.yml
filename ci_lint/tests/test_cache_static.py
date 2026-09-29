@@ -9,6 +9,7 @@ from ci_lint.rules.cache_static import (
     check_cache_002,
     check_cache_003_setup_uv,
     check_cache_004,
+    check_cache_010,
     parse_size,
 )
 from ci_lint.schema import load_ci_toml
@@ -78,6 +79,20 @@ class CacheStaticFixtureTest(unittest.TestCase):
         repo = fixture("CACHE-003", "green")
         ci, _ = load_ci_toml(repo)
         self.assertNotIn("CACHE-003", [f.rule for f in check_cache_003_setup_uv(ci, repo)])
+
+    @requires_yaml_tooling
+    def test_cache_010_kill_switch_env_while_family_declared_active(self) -> None:
+        """Issue #7: ZCCACHE_DISABLE=1 in a job env, while ci.toml declares
+        a [cache.family] via setup-soldr, is CACHE-010 (zackees/clud's
+        `_dylint.yml` -- clud#487)."""
+
+        repo = fixture("CACHE-010", "red")
+        ci, _ = load_ci_toml(repo)
+        self.assertIn("CACHE-010", [f.rule for f in check_cache_010(ci, repo)])
+
+        repo = fixture("CACHE-010", "green")
+        ci, _ = load_ci_toml(repo)
+        self.assertNotIn("CACHE-010", [f.rule for f in check_cache_010(ci, repo)])
 
     def test_cache_004_budget_exceeded_without_pre_prune(self) -> None:
         ci, _ = load_ci_toml(fixture("CACHE-004", "red"))

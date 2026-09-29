@@ -38,6 +38,21 @@ VOLATILE_TOKENS: tuple[str, ...] = ("github.sha", "github.run_id", "github.run_n
 KEY_FIELD_NAMES: frozenset[str] = frozenset({"key", "cache-key-suffix"})
 CACHE_ACTION_SLUGS_PREFIX = "actions/cache"
 
+# CACHE-010 (issue #7): env vars known to silently disable a cache layer
+# while setup-soldr/zccache still reports the layer as configured --
+# zackees/clud's `_dylint.yml` set ZCCACHE_DISABLE=1 (arrived incidentally
+# in clud#487, a PR about Codex fallback instructions) alongside a declared
+# zccache-unit/dylint-output family; the setup step's own
+# `cache-policy layers=...` log line never changed, so nothing in a green
+# run revealed the contradiction. Kept as an explicit allowlist per the
+# issue's own open question ("should the kill-switch list be owned by
+# setup-soldr as a machine-readable manifest") -- not yet true, so this
+# starts as ci-lint's own reserved list, extend it as more are found.
+KILL_SWITCH_ENV_VARS: frozenset[str] = frozenset(
+    {"ZCCACHE_DISABLE", "SOLDR_NO_CACHE", "SOLDR_CACHE_DISABLE", "SOLDR_DYLINT_NO_CACHE"}
+)
+_TRUTHY_STRINGS: frozenset[str] = frozenset({"1", "true", "yes", "on"})
+
 
 def parse_size(text: str) -> int | None:
     m = SIZE_RE.match(text.strip())
@@ -348,11 +363,77 @@ def check_cache_004(ci: CiToml) -> tuple[list[Finding], str]:
     return findings, arithmetic
 
 
+def _is_truthy(value: YamlValue) -> bool:
+    if not isinstance(value, (str, int, bool)):
+        return False
+    return str(value).strip().lower() in _TRUTHY_STRINGS
+
+
+def _iter_env_entries(doc: dict[str, YamlValue]) -> list[tuple[str, YamlValue, str]]:
+    """`(name, value, loc)` for every env var set at workflow, job, or step
+    level -- a kill-switch is just as effective set at any of the three."""
+
+    out: list[tuple[str, YamlValue, str]] = []
+    top_env = doc.get("env")
+    if isinstance(top_env, dict):
+        out.extend((k, v, "env") for k, v in top_env.items())
+    jobs = doc.get("jobs")
+    if isinstance(jobs, dict):
+        for job_id, job in jobs.items():
+            if not isinstance(job, dict):
+                continue
+            job_env = job.get("env")
+            if isinstance(job_env, dict):
+                out.extend((k, v, f"jobs.{job_id}.env") for k, v in job_env.items())
+            steps = job.get("steps")
+            if isinstance(steps, list):
+                for i, step in enumerate(steps):
+                    if not isinstance(step, dict):
+                        continue
+                    step_env = step.get("env")
+                    if isinstance(step_env, dict):
+                        out.extend((k, v, f"jobs.{job_id}.steps[{i}].env") for k, v in step_env.items())
+    return out
+
+
+def check_cache_010(ci: CiToml, repo_root: Path) -> list[Finding]:
+    """Issue #7: a workflow or job sets a cache-layer kill-switch env var
+    while ci.toml still declares a [cache.family] backed by a matching
+    setup-soldr/zccache layer -- the setup step's own summary keeps
+    claiming the layer is active, so a green run never surfaces the
+    contradiction on its own (see KILL_SWITCH_ENV_VARS above for the
+    zackees/clud evidence this codifies)."""
+
+    declared_active = any(
+        fam.via.startswith("setup-soldr:") or fam.via.startswith("zccache") for fam in ci.cache.family.values()
+    )
+    if not declared_active:
+        return []
+
+    findings: list[Finding] = []
+    for path, _is_composite, doc in _loaded_files(repo_root):
+        for name, value, loc in _iter_env_entries(doc):
+            if name in KILL_SWITCH_ENV_VARS and _is_truthy(value):
+                findings.append(
+                    Finding(
+                        rule="CACHE-010",
+                        path=path,
+                        message=f"{loc}.{name} = {value!r} disables a cache layer while ci.toml declares "
+                        "a [cache.family] via a matching setup-soldr/zccache backend",
+                        fix=f"remove '{name}' (or set it falsy) at {loc} in {path} so the declared layer "
+                        "is actually written; if it is intentionally disabled here, retire the matching "
+                        "[cache.family] entry instead of leaving ci.toml claim it active",
+                    )
+                )
+    return findings
+
+
 def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     findings: list[Finding] = []
     findings.extend(check_cache_001(ci, repo_root))
     findings.extend(check_cache_002(ci, repo_root))
     findings.extend(check_cache_003_setup_uv(ci, repo_root))
+    findings.extend(check_cache_010(ci, repo_root))
     cache_004_findings, arithmetic = check_cache_004(ci)
     findings.extend(cache_004_findings)
     return findings, arithmetic

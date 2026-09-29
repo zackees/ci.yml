@@ -28,6 +28,9 @@ from ci_lint.cache.ops import heal as cache_heal
 from ci_lint.cache.ops import janitor as cache_janitor
 from ci_lint.cache.ops import preprune as cache_preprune
 from ci_lint.cache.ops import trim as cache_trim
+from ci_lint.cache.save_evidence import SaveEvidenceError, run_save_check
+from ci_lint.cache.save_evidence import render_text as render_save_check_text
+from ci_lint.cache.save_evidence import to_json_dict as save_check_to_json_dict
 from ci_lint.cache.save_ok import SaveOkInputError, SaveOkRequest, evaluate_save_ok
 from ci_lint.cargo_messages import JsonValue, load_artifacts_file
 from ci_lint.cargo_scan import discover_workspace
@@ -785,6 +788,26 @@ def _cmd_cache_audit(args: argparse.Namespace) -> int:
     return 1 if any(f.status == Status.VIOLATION for f in report.findings) else 0
 
 
+def _cmd_cache_save_check(args: argparse.Namespace) -> int:
+    """CACHE-011/CACHE-012 (issue #7) from `--log` evidence -- pure
+    filesystem, no GITHUB_TOKEN/GITHUB_REPOSITORY required (unlike `cache
+    audit`'s live listing): the caller already has the job log(s) in hand
+    (`gh run view --job <id> --log`) plus the run's own conclusion."""
+
+    try:
+        report = run_save_check(
+            [Path(p) for p in (args.log or [])],
+            conclusion=args.conclusion,
+            run_url=args.run_url,
+            threshold=args.unusable_threshold,
+        )
+    except SaveEvidenceError as exc:
+        print(f"ci-lint cache save-check: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(save_check_to_json_dict(report), indent=2) if args.json else render_save_check_text(report))
+    return 1 if report.findings else 0
+
+
 def _cmd_cache_trim(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo).resolve()
     ci = _load_ci_or_die(repo_root, "cache trim")
@@ -1096,6 +1119,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_cache_audit.add_argument("--default-branch", default="main")
     p_cache_audit.add_argument("--json", action="store_true")
     p_cache_audit.set_defaults(func=_cmd_cache_audit)
+
+    p_cache_save_check = cache_sub.add_parser(
+        "save-check",
+        help="CACHE-011/012 (issue #7) from real job-log evidence: a green default-branch run that "
+        "saved nothing, and a restore stuck on a poisoned/empty archive",
+    )
+    p_cache_save_check.add_argument(
+        "--log",
+        action="append",
+        default=[],
+        help="a job log (gh run view --job <id> --log) or captured stdout of the same; repeatable, "
+        "oldest-first for CACHE-012's consecutive-run check",
+    )
+    p_cache_save_check.add_argument(
+        "--conclusion",
+        required=True,
+        help="the run/job's actual GitHub conclusion (e.g. 'success'); CACHE-011 only fires when this "
+        "is exactly 'success'",
+    )
+    p_cache_save_check.add_argument("--run-url", default=None, help="the run's html_url, for finding messages")
+    p_cache_save_check.add_argument(
+        "--unusable-threshold", type=int, default=2,
+        help="CACHE-012: consecutive unusable-restore logs required to fire (default: 2)",
+    )
+    p_cache_save_check.add_argument("--json", action="store_true")
+    p_cache_save_check.set_defaults(func=_cmd_cache_save_check)
 
     p_cache_trim = cache_sub.add_parser("trim", help="delete CACHE-008 entries (closed/merged + stale-base PR deltas)")
     p_cache_trim.add_argument("--repo", default=".")
