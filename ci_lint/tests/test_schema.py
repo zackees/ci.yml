@@ -52,6 +52,26 @@ class SchemaFixtureTest(unittest.TestCase):
         _, green_findings = load_ci_toml(fixture("CT-002", "green-cache-per"))
         self.assertNotIn("CT-002", rule_ids(green_findings))
 
+    def test_ct_002_cache_family_via_is_a_strict_allowlist(self) -> None:
+        """Round-4A brief, deliverable 1: [cache.family.<id>].via must
+        resolve to a real cache-key-prefix shape (ci_lint.cache.families).
+        An unrecognized value is CT-002, never silently accepted -- and
+        the two newly-declared via values (setup-soldr:soldr-mini,
+        setup-soldr:dylint) are accepted."""
+
+        ci, red_findings = load_ci_toml(fixture("CT-002", "red-cache-via"))
+        self.assertIn("CT-002", rule_ids(red_findings))
+        via_finding = next(f for f in red_findings if f.rule == "CT-002" and "compile.via" in f.message)
+        self.assertIn("setup-soldr:bogus-family", via_finding.message)
+        assert ci is not None
+        self.assertEqual("setup-soldr:bogus-family", ci.cache.family["compile"].via)
+
+        ci, green_findings = load_ci_toml(fixture("CT-002", "green-cache-via"))
+        self.assertNotIn("CT-002", rule_ids(green_findings))
+        assert ci is not None
+        self.assertEqual("setup-soldr:soldr-mini", ci.cache.family["soldr-mini"].via)
+        self.assertEqual("setup-soldr:dylint", ci.cache.family["dylint"].via)
+
     def test_ct_003_wrong_schema(self) -> None:
         _, red_findings = load_ci_toml(fixture("CT-003", "red"))
         self.assertIn("CT-003", rule_ids(red_findings))

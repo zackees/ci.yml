@@ -1,0 +1,9 @@
+{
+  "_note": "SYNTHETIC (round-4A): a GraphQL PR-state response shape for ci_lint.cache.github_cache.fetch_pr_states, matched against caches-synthetic-rules.json's PR #7 (closed) and PR #8 (still open, but its delta's base hash is stale).",
+  "data": {
+    "repository": {
+      "pr7": { "number": 7, "state": "CLOSED" },
+      "pr8": { "number": 8, "state": "OPEN" }
+    }
+  }
+}

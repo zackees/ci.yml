@@ -1,0 +1,438 @@
+"""`ci-lint cache audit`: live, read-only classification of every cache
+entry the GitHub Actions cache API reports, against ci.toml's declared
+families (round-4A brief, deliverable 4).
+
+Requires `GITHUB_TOKEN` + `GITHUB_REPOSITORY` and `actions: read` (listing
+caches); the PR-state half of CACHE-008 additionally needs a `GraphQLFn`
+(also just a read). Never deletes anything -- see `ci_lint.cache.ops` for
+trim/janitor/heal/preprune, which reuse this module's classification and
+then act on it.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from dataclasses import dataclass
+
+from ci_lint.cache.families import resolve_prefix, resolve_retired_prefix
+from ci_lint.cache.github_cache import (
+    CacheApiError,
+    CacheEntry,
+    PrState,
+    fetch_pr_states,
+    list_caches,
+)
+from ci_lint.finding import Finding
+from ci_lint.github_api import FetchFn, GraphQLFn
+from ci_lint.rules.cache_static import parse_size
+from ci_lint.schema import CiToml
+
+# CACHE-005: "poisoned/tiny (< family min, or <= 1KB for any family)" --
+# the 1KB floor applies regardless of whether a family declares its own
+# `min` (issue #6 §6: this is exactly clud's 253-byte entry).
+TINY_BYTES = 1024
+BUDGET_WARN_RATIO = 0.90
+
+# `delta-v1-pr<N>-<family>-<platform>-b<base8>` -- family AND platform ids
+# both legitimately contain hyphens (e.g. "linux-x64"), so a single blind
+# regex with a `[^-]+` platform group mis-splits them (round-4A: caught by
+# ci_lint/tests/test_cache_audit.py against a synthetic "compile"/
+# "linux-x64" delta key, which a naive regex parsed as family="compile-
+# linux", platform="x64"). Only the PR number and the base8 suffix are
+# unambiguous from the string alone; `_split_family_platform` below
+# resolves the rest against ci.toml's own declared platform ids.
+DELTA_OUTER_RE = re.compile(r"^delta-v1-pr(?P<pr>\d+)-(?P<rest>.+)-b(?P<base8>[0-9a-f]{8})$")
+
+# CACHE-006 "superseded": two entries of the same declared family whose
+# keys differ only in a trailing lockfile/version hash. Best-effort: strip
+# one or more trailing hyphen-hex segments (6-40 hex chars each -- covers
+# both the 16-hex short hashes and 8-hex base tokens observed live) and
+# group by what's left. A platform/os component earlier in the key (never
+# hex-only, e.g. "linux-x64") is never stripped, so per-platform families
+# are never treated as superseding each other.
+_TRAILING_HASH_RE = re.compile(r"(?:-[0-9a-f]{6,40})+$")
+
+
+def _shape(key: str) -> str:
+    stripped = _TRAILING_HASH_RE.sub("", key)
+    return stripped if stripped else key
+
+
+@dataclass(frozen=True)
+class DeltaIdentity:
+    pr: int
+    family: str
+    platform: str
+    base8: str
+
+
+@dataclass(frozen=True)
+class ClassifiedEntry:
+    entry: CacheEntry
+    family_id: str | None  # a declared [cache.family.<id>] id, or None
+    is_delta: bool
+    delta: DeltaIdentity | None
+    is_retired: bool  # matches a [cache].retired prefix
+
+
+@dataclass(frozen=True)
+class AuditReport:
+    classified: tuple[ClassifiedEntry, ...]
+    findings: tuple[Finding, ...]
+    total_bytes: int
+    budget_bytes: int | None
+    budget_ratio: float | None
+    warning: str | None = None
+
+
+def _split_family_platform(rest: str, ci: CiToml) -> tuple[str, str] | None:
+    """`rest` is `"<family>-<platform>"`. Resolve it against ci.toml's own
+    declared platform ids (longest first, though ids are expected unique)
+    rather than guessing with a hyphen-free regex group."""
+
+    for platform_id in sorted(ci.platforms, key=len, reverse=True):
+        suffix = f"-{platform_id}"
+        if rest.endswith(suffix) and len(rest) > len(suffix):
+            return rest[: -len(suffix)], platform_id
+    return None
+
+
+def classify(ci: CiToml, entries: list[CacheEntry]) -> tuple[ClassifiedEntry, ...]:
+    return tuple(_classify_one(ci, e) for e in entries)
+
+
+def _classify_one(ci: CiToml, entry: CacheEntry) -> ClassifiedEntry:
+    m = DELTA_OUTER_RE.match(entry.key)
+    if m is not None:
+        split = _split_family_platform(m.group("rest"), ci)
+        if split is not None:
+            family, platform = split
+            delta = DeltaIdentity(pr=int(m.group("pr")), family=family, platform=platform, base8=m.group("base8"))
+            return ClassifiedEntry(
+                entry=entry,
+                family_id=family if family in ci.cache.family else None,
+                is_delta=True,
+                delta=delta,
+                is_retired=False,
+            )
+        # A delta-shaped key whose platform segment matches no declared
+        # platform id: fall through to the undeclared-family path below
+        # (never silently misclassified as a base layer either).
+
+    for retired_name in ci.cache.retired:
+        if entry.key.startswith(resolve_retired_prefix(retired_name)):
+            return ClassifiedEntry(entry=entry, family_id=None, is_delta=False, delta=None, is_retired=True)
+
+    for fam_id, fam in ci.cache.family.items():
+        prefix = resolve_prefix(fam.via, fam_id)
+        if prefix is not None and entry.key.startswith(prefix):
+            return ClassifiedEntry(entry=entry, family_id=fam_id, is_delta=False, delta=None, is_retired=False)
+
+    return ClassifiedEntry(entry=entry, family_id=None, is_delta=False, delta=None, is_retired=False)
+
+
+def _check_cache_001(classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
+    findings: list[Finding] = []
+    for c in classified:
+        if c.is_retired or c.family_id is not None:
+            continue
+        kind = "PR delta for an" if c.is_delta else "cache"
+        findings.append(
+            Finding(
+                rule="CACHE-001",
+                path=f"cache:{c.entry.key}",
+                message=f"{kind} undeclared family: id={c.entry.id} key {c.entry.key!r} matches no "
+                f"declared [cache.family] prefix",
+                fix="declare a [cache.family.<id>] entry whose 'via' resolves to this key's prefix "
+                "(see docs/ci-toml.md's family table), or stop writing it -- ci-lint cache janitor "
+                "deletes an undeclared entry once nothing produces it any more",
+            )
+        )
+    return findings
+
+
+def _check_cache_003(
+    classified: tuple[ClassifiedEntry, ...], default_branch: str
+) -> list[Finding]:
+    default_ref = f"refs/heads/{default_branch}"
+    findings: list[Finding] = []
+    for c in classified:
+        if c.family_id is None or c.is_delta or c.is_retired:
+            continue
+        if c.entry.ref and c.entry.ref != default_ref:
+            findings.append(
+                Finding(
+                    rule="CACHE-003",
+                    path=f"cache:{c.entry.key}",
+                    message=f"base-layer family '{c.family_id}' cache id={c.entry.id} was saved on "
+                    f"ref {c.entry.ref!r}, not the default branch ({default_ref!r})",
+                    fix="base cache layers may only be written by a declared writer flow on the "
+                    "default branch (issue #6 §6, [cache].write-on) -- delete this entry (ci-lint "
+                    "cache janitor) and check the writer job's ref condition / save-ok call site",
+                )
+            )
+    return findings
+
+
+def _check_cache_005(ci: CiToml, classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
+    findings: list[Finding] = []
+    for c in classified:
+        entry = c.entry
+        reason: str | None = None
+        if entry.size_in_bytes <= TINY_BYTES:
+            reason = f"{entry.size_in_bytes}B is at or below the {TINY_BYTES}B poison-guard floor"
+        elif c.family_id is not None:
+            fam = ci.cache.family[c.family_id]
+            if fam.min:
+                min_bytes = parse_size(fam.min)
+                if min_bytes is not None and entry.size_in_bytes < min_bytes:
+                    reason = f"{entry.size_in_bytes}B is below [cache.family.{c.family_id}].min ({fam.min})"
+        if reason is not None:
+            findings.append(
+                Finding(
+                    rule="CACHE-005",
+                    path=f"cache:{entry.key}",
+                    message=f"cache id={entry.id} key {entry.key!r} looks poisoned: {reason}",
+                    fix="delete the exact key (ci-lint cache heal --key <key>) so the next writer run "
+                    "repopulates it with a real payload",
+                )
+            )
+    return findings
+
+
+def _check_cache_006(classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
+    groups: dict[tuple[str, str], list[ClassifiedEntry]] = {}
+    for c in classified:
+        if c.family_id is None or c.is_delta or c.is_retired:
+            continue
+        groups.setdefault((c.family_id, _shape(c.entry.key)), []).append(c)
+
+    findings: list[Finding] = []
+    for (fam_id, _shape_key), members in groups.items():
+        if len(members) < 2:
+            continue
+        newest = max(members, key=lambda c: c.entry.last_accessed_at)
+        for c in members:
+            if c.entry.id == newest.entry.id:
+                continue
+            findings.append(
+                Finding(
+                    rule="CACHE-006",
+                    path=f"cache:{c.entry.key}",
+                    message=f"cache id={c.entry.id} is a superseded '{fam_id}' entry "
+                    f"(last_accessed_at={c.entry.last_accessed_at!r}; kept newest "
+                    f"id={newest.entry.id} last_accessed_at={newest.entry.last_accessed_at!r})",
+                    fix="delete the superseded entry (ci-lint cache janitor); if this family "
+                    "legitimately needs more than one live entry at once, disambiguate it with "
+                    "[cache.family.<id>].per instead of relying on two same-shape keys",
+                )
+            )
+    return findings
+
+
+def _check_cache_009(classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
+    findings: list[Finding] = []
+    for c in classified:
+        if c.is_retired:
+            findings.append(
+                Finding(
+                    rule="CACHE-009",
+                    path=f"cache:{c.entry.key}",
+                    message=f"cache id={c.entry.id} key {c.entry.key!r} matches a retired family "
+                    "([cache].retired)",
+                    fix="delete it (ci-lint cache janitor); a retired family must never be written -- "
+                    "check the writer flow's setup-soldr wrapper inputs for what is still producing it",
+                )
+            )
+    return findings
+
+
+def _current_base_entries(classified: tuple[ClassifiedEntry, ...]) -> dict[str, list[ClassifiedEntry]]:
+    out: dict[str, list[ClassifiedEntry]] = {}
+    for c in classified:
+        if c.family_id is not None and not c.is_delta and not c.is_retired:
+            out.setdefault(c.family_id, []).append(c)
+    return out
+
+
+def _check_cache_008(
+    classified: tuple[ClassifiedEntry, ...],
+    *,
+    graphql: GraphQLFn | None,
+    token: str,
+    repo: str,
+) -> tuple[list[Finding], str | None]:
+    deltas = [c for c in classified if c.is_delta and c.delta is not None]
+    if not deltas:
+        return [], None
+
+    warning: str | None = None
+    pr_states: dict[int, PrState] = {}
+    if graphql is not None:
+        pr_numbers = sorted({c.delta.pr for c in deltas if c.delta is not None})
+        try:
+            owner, name = repo.split("/", 1)
+            pr_states = fetch_pr_states(graphql, token, owner, name, pr_numbers)
+        except CacheApiError as exc:
+            warning = f"CACHE-008 PR-state lookup: {exc}"
+
+    base_entries = _current_base_entries(classified)
+    findings: list[Finding] = []
+    for c in deltas:
+        d = c.delta
+        assert d is not None
+        state = pr_states.get(d.pr)
+        if state is not None and state.closed_or_merged:
+            findings.append(
+                Finding(
+                    rule="CACHE-008",
+                    path=f"cache:{c.entry.key}",
+                    message=f"cache id={c.entry.id} is a PR delta for #{d.pr}, which is "
+                    f"{state.state.lower()}",
+                    fix="delete it (ci-lint cache trim); the next precheck on this repo trims a "
+                    "closed/merged PR's delta automatically",
+                )
+            )
+            continue
+
+        candidates = base_entries.get(d.family, [])
+        matching = [b for b in candidates if d.platform in b.entry.key] or candidates
+        if not matching:
+            continue  # no live base entry to compare against: unknown, not reported
+        current_base8 = {hashlib.sha256(b.entry.key.encode("utf-8")).hexdigest()[:8] for b in matching}
+        if d.base8 not in current_base8:
+            findings.append(
+                Finding(
+                    rule="CACHE-008",
+                    path=f"cache:{c.entry.key}",
+                    message=f"cache id={c.entry.id} is a PR #{d.pr} delta for family '{d.family}' "
+                    f"whose base hash b{d.base8} matches none of the live base entries' current keys",
+                    fix="delete it (ci-lint cache trim); the next PR push rebuilds the delta against "
+                    "the current base and saves fresh",
+                )
+            )
+    return findings, warning
+
+
+def audit_classified(
+    ci: CiToml,
+    classified: tuple[ClassifiedEntry, ...],
+    *,
+    graphql: GraphQLFn | None,
+    token: str,
+    repo: str,
+    default_branch: str = "main",
+) -> AuditReport:
+    """The pure half: findings from an already-fetched cache listing.
+    Split from `run_audit` so `ci_lint.cache.ops` can classify once and
+    reuse it for both the findings and the deletions."""
+
+    findings: list[Finding] = []
+    findings.extend(_check_cache_001(classified))
+    findings.extend(_check_cache_003(classified, default_branch))
+    findings.extend(_check_cache_005(ci, classified))
+    findings.extend(_check_cache_006(classified))
+    findings.extend(_check_cache_009(classified))
+    cache008_findings, warning = _check_cache_008(classified, graphql=graphql, token=token, repo=repo)
+    findings.extend(cache008_findings)
+
+    total_bytes = sum(c.entry.size_in_bytes for c in classified)
+    budget_bytes = parse_size(ci.cache.budget) if ci.cache.budget else None
+    ratio = (total_bytes / budget_bytes) if budget_bytes else None
+    if ratio is not None and ratio >= BUDGET_WARN_RATIO:
+        findings.append(
+            Finding(
+                rule="CACHE-004",
+                path="cache:budget",
+                message=f"live cache usage {total_bytes}B is {ratio:.0%} of [cache].budget "
+                f"({ci.cache.budget})",
+                fix="run ci-lint cache janitor to reclaim undeclared/superseded/stale entries, or "
+                "raise [cache].budget (re-proving CACHE-004's static arithmetic still fits)",
+            )
+        )
+
+    return AuditReport(
+        classified=classified,
+        findings=tuple(findings),
+        total_bytes=total_bytes,
+        budget_bytes=budget_bytes,
+        budget_ratio=ratio,
+        warning=warning,
+    )
+
+
+class AuditError(Exception):
+    """Listing caches itself failed (network/auth) -- distinct from a
+    finding, since there is nothing to classify at all. Callers turn this
+    into a needs_review, never a crash."""
+
+
+def run_audit(
+    ci: CiToml,
+    *,
+    fetch: FetchFn,
+    graphql: GraphQLFn | None,
+    token: str,
+    repo: str,
+    default_branch: str = "main",
+) -> AuditReport:
+    try:
+        entries = list_caches(fetch, token, repo)
+    except CacheApiError as exc:
+        raise AuditError(str(exc)) from exc
+    classified = classify(ci, entries)
+    return audit_classified(
+        ci, classified, graphql=graphql, token=token, repo=repo, default_branch=default_branch
+    )
+
+
+def to_json_dict(report: AuditReport) -> dict[str, object]:
+    return {
+        "entries": [
+            {
+                "id": c.entry.id,
+                "key": c.entry.key,
+                "ref": c.entry.ref,
+                "size_in_bytes": c.entry.size_in_bytes,
+                "last_accessed_at": c.entry.last_accessed_at,
+                "family": c.family_id,
+                "is_delta": c.is_delta,
+                "is_retired": c.is_retired,
+            }
+            for c in report.classified
+        ],
+        "findings": [
+            {"rule": f.rule, "status": f.status.value, "path": f.path, "message": f.message, "fix": f.fix}
+            for f in report.findings
+        ],
+        "total_bytes": report.total_bytes,
+        "budget_bytes": report.budget_bytes,
+        "budget_ratio": report.budget_ratio,
+        "warning": report.warning,
+    }
+
+
+def render_text(report: AuditReport) -> str:
+    lines: list[str] = []
+    by_family: dict[str, tuple[int, int]] = {}
+    for c in report.classified:
+        label = c.family_id or ("delta" if c.is_delta else ("retired" if c.is_retired else "undeclared"))
+        count, size = by_family.get(label, (0, 0))
+        by_family[label] = (count + 1, size + c.entry.size_in_bytes)
+    lines.append(f"ci-lint cache audit: {len(report.classified)} live cache entrie(s), {report.total_bytes}B total")
+    lines.append(f"{'family':<24} {'count':>6} {'bytes':>12}")
+    for label in sorted(by_family):
+        count, size = by_family[label]
+        lines.append(f"{label:<24} {count:>6} {size:>12}")
+    if report.budget_bytes is not None:
+        pct = f"{report.budget_ratio:.1%}" if report.budget_ratio is not None else "?"
+        lines.append(f"budget: {report.total_bytes}B / {report.budget_bytes}B ({pct})")
+    lines.append("")
+    if not report.findings:
+        lines.append("ci-lint cache audit: no findings.")
+    for f in report.findings:
+        lines.append(f.render())
+    if report.warning:
+        lines.append(f"warning: {report.warning}")
+    return "\n".join(lines)

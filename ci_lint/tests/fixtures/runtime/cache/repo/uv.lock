@@ -1,0 +1,3 @@
+version = 1
+# minimal placeholder lockfile -- only its bytes matter to ci_lint.cache.keys (it hashes the file),
+# never its content as a real uv.lock.

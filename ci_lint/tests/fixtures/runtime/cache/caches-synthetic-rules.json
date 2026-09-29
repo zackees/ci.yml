@@ -1,0 +1,60 @@
+{
+  "_note": "SYNTHETIC (round-4A): built by hand to exercise CACHE-003/005/008/009 rules the live template repo does not currently exhibit (see caches-live-template.json for the verbatim copy of what it DOES exhibit -- CACHE-001, CACHE-006). id 8237210113's key is copied verbatim from caches-live-template.json so the two delta entries below can be checked against a real 'compile' base key's actual sha256; its base8 is 43cef837 (sha256('setup-soldr-buildcache-v2-linux-x64-5820c6969e26aa8b-a87d2454829c34f1')[:8]).",
+  "total_count": 6,
+  "actions_caches": [
+    {
+      "id": 8237210113,
+      "ref": "refs/heads/main",
+      "key": "setup-soldr-buildcache-v2-linux-x64-5820c6969e26aa8b-a87d2454829c34f1",
+      "version": "v1",
+      "created_at": "2026-09-28T22:51:36.980392Z",
+      "last_accessed_at": "2026-09-28T23:41:24.193074Z",
+      "size_in_bytes": 19110416
+    },
+    {
+      "id": 9001,
+      "ref": "refs/pull/7/merge",
+      "key": "delta-v1-pr7-compile-linux-x64-b43cef837",
+      "version": "v1",
+      "created_at": "2026-09-20T00:00:00Z",
+      "last_accessed_at": "2026-09-20T00:00:00Z",
+      "size_in_bytes": 5000000
+    },
+    {
+      "id": 9002,
+      "ref": "refs/pull/8/merge",
+      "key": "delta-v1-pr8-compile-linux-x64-bdeadbeef",
+      "version": "v1",
+      "created_at": "2026-09-21T00:00:00Z",
+      "last_accessed_at": "2026-09-21T00:00:00Z",
+      "size_in_bytes": 4000000
+    },
+    {
+      "id": 9003,
+      "ref": "refs/heads/main",
+      "key": "cook-delta-v2-linux-x64-glibc-rustc1.95.0-fnone-la87d2454829c34f1-soldrv0.9.25",
+      "version": "v1",
+      "created_at": "2026-09-22T00:00:00Z",
+      "last_accessed_at": "2026-09-22T00:00:00Z",
+      "size_in_bytes": 2000000
+    },
+    {
+      "id": 9004,
+      "ref": "refs/pull/99/merge",
+      "key": "setup-soldr-buildcache-v2-linux-x64-deadbeefdeadbeef-cafebabecafebabe",
+      "version": "v1",
+      "created_at": "2026-09-23T00:00:00Z",
+      "last_accessed_at": "2026-09-23T00:00:00Z",
+      "size_in_bytes": 50000000
+    },
+    {
+      "id": 9005,
+      "ref": "refs/heads/main",
+      "key": "setup-soldr-cargoregistry-v1-linux-x64-deadbeefdeadbeef-cafebabecafebabe",
+      "version": "v1",
+      "created_at": "2026-09-24T00:00:00Z",
+      "last_accessed_at": "2026-09-24T00:00:00Z",
+      "size_in_bytes": 500
+    }
+  ]
+}
