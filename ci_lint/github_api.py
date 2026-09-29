@@ -39,6 +39,17 @@ DeleteFn = Callable[[str, str], None]
 # well-formed-but-unhappy body" split for FetchFn/DeleteFn).
 GraphQLFn = Callable[[str, str], JsonValue]
 
+# (url, token) -> (status_code, parsed JSON body or None). Round-5: some
+# live checks (ci_lint.settings_audit's SEC-005/006/007, GEN-006/011) MUST
+# tell a 403 ("needs an admin token" -- report needs_review, never pass)
+# apart from a 404 ("treat as none" -- e.g. no branch protection configured
+# at all) apart from a real transport failure. FetchFn/default_fetch can't
+# express that distinction (a non-2xx status raises GitHubApiError with no
+# structured code), so this is a second, explicitly status-aware fetch
+# shape rather than a behavior change to the existing one -- every existing
+# caller of FetchFn/default_fetch is untouched.
+FetchStatusFn = Callable[[str, str], "tuple[int, JsonValue]"]
+
 _API_ROOT = "https://api.github.com"
 
 
@@ -78,6 +89,35 @@ def default_fetch(url: str, token: str) -> JsonValue:
         return json.loads(body)
     except json.JSONDecodeError as exc:
         raise GitHubApiError(f"GET {url}: invalid JSON response: {exc}") from exc
+
+
+def default_fetch_status(url: str, token: str) -> tuple[int, JsonValue]:
+    """Like `default_fetch`, but returns `(status_code, body)` instead of
+    raising on a non-2xx HTTP status -- a 403 (often "this token lacks
+    admin scope") and a 404 (often "this thing legitimately doesn't
+    exist") must be told apart by the caller, not collapsed into one
+    generic error. `body` is `None` when the response has no content or
+    is not valid JSON (some 403/404 error bodies still parse as JSON with
+    a `message` field, which is returned as-is when it does). Still raises
+    GitHubApiError on an actual transport failure (DNS, timeout, ...),
+    exactly like `default_fetch`."""
+
+    request = urllib.request.Request(url, headers=_headers(token))
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310 -- fixed https GitHub API host
+            body = response.read()
+            status = response.status
+    except urllib.error.HTTPError as exc:
+        body = exc.read()
+        status = exc.code
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise GitHubApiError(f"GET {url} failed: {exc}") from exc
+    if not body:
+        return status, None
+    try:
+        return status, json.loads(body)
+    except json.JSONDecodeError:
+        return status, None
 
 
 def default_delete(url: str, token: str) -> None:

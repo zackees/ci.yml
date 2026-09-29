@@ -1,0 +1,528 @@
+"""`ci-lint audit`: live, read-only fleet settings audit -- issue #6 §7
+(secrets & publishing) plus GEN-006/GEN-011 (branch-protection/merge-queue
+and required-check-name gaps identified in docs/case-studies/fbuild-ci-
+cost.md and the round-5 brief). Distinct from `ci_lint cache audit` (which
+classifies GitHub Actions cache entries); this module never touches the
+cache API.
+
+Every check here is read-only (GET only, never PATCH/POST/DELETE) and every
+call goes through the injectable `FetchStatusFn` (`ci_lint.github_api
+.default_fetch_status`), so no test in this package ever touches the
+network -- the round-5 brief's "no network in tests (recorded fixtures)".
+
+Rules implemented:
+  - SEC-005: any repository Actions secret or environment secret exists.
+    GET .../actions/secrets and .../environments/{name}/secrets both need
+    an admin token; a 403 is reported `needs_review` ("requires an admin
+    token"), never treated as a pass.
+  - SEC-006: the environment named in ci.toml's [publish].pypi.environment
+    is missing, or its deployment branch policy doesn't restrict deploys to
+    the default branch.
+  - SEC-007: the repository's default Actions workflow permissions are not
+    read-only.
+  - GEN-006: `required_status_checks.strict` is true on the default branch
+    with no merge queue configured (rulesets + classic branch protection;
+    a 404 on either is treated as "none").
+  - GEN-011: the default branch's required status checks don't include the
+    gate check name (default "CI OK"); reported `needs_review` (a policy
+    decision, not a code defect) when branch protection itself is absent.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from ci_lint.finding import Finding, Status
+from ci_lint.github_api import FetchStatusFn, GitHubApiError
+from ci_lint.schema import CiToml
+
+API_ROOT = "https://api.github.com"
+DEFAULT_GATE_CHECK_NAME = "CI OK"
+
+NEEDS_ADMIN_FIX = (
+    "re-run with a token that has repository admin scope (Settings -> Secrets/Environments read "
+    "access) to actually complete this check -- a 403 here is never treated as a pass"
+)
+
+
+@dataclass(frozen=True)
+class AuditReport:
+    findings: tuple[Finding, ...]
+    repo: str
+    default_branch: str
+
+
+def _get(fetch_status: FetchStatusFn, token: str, url: str) -> tuple[int, object] | None:
+    """Wraps a live call: `None` means a transport failure (DNS, timeout,
+    ...), distinct from any HTTP status the server actually returned."""
+
+    try:
+        return fetch_status(url, token)
+    except GitHubApiError:
+        return None
+
+
+def _network_finding(rule: str, path: str, url: str) -> Finding:
+    return Finding(
+        rule=rule,
+        status=Status.NEEDS_REVIEW,
+        path=path,
+        message=f"could not reach the GitHub API for {url} (network/transport failure)",
+        fix="re-run once the GitHub API is reachable; this is never treated as a pass on failure",
+    )
+
+
+def _forbidden_finding(rule: str, path: str, what: str) -> Finding:
+    return Finding(
+        rule=rule,
+        status=Status.NEEDS_REVIEW,
+        path=path,
+        message=f"cannot check {what}: 403 Forbidden -- requires an admin token",
+        fix=NEEDS_ADMIN_FIX,
+    )
+
+
+def _unexpected_status_finding(rule: str, path: str, what: str, status: int) -> Finding:
+    return Finding(
+        rule=rule,
+        status=Status.NEEDS_REVIEW,
+        path=path,
+        message=f"unexpected HTTP {status} checking {what}",
+        fix="re-run and inspect the response; this is never treated as a pass on an unexpected status",
+    )
+
+
+# ── SEC-005: any repository or environment Actions secret exists ──────────
+
+
+def _check_secrets_endpoint(
+    fetch_status: FetchStatusFn, token: str, repo: str, *, url: str, path: str, what: str
+) -> list[Finding]:
+    result = _get(fetch_status, token, url)
+    if result is None:
+        return [_network_finding("SEC-005", path, url)]
+    status, body = result
+    if status == 403:
+        return [_forbidden_finding("SEC-005", path, what)]
+    if status == 404:
+        # No such environment (checked separately by SEC-006); not a secrets finding.
+        return []
+    if status != 200 or not isinstance(body, dict):
+        return [_unexpected_status_finding("SEC-005", path, what, status)]
+    total = body.get("total_count")
+    if isinstance(total, int) and total > 0:
+        names = [s.get("name") for s in body.get("secrets", []) if isinstance(s, dict)] if isinstance(
+            body.get("secrets"), list
+        ) else []
+        return [
+            Finding(
+                rule="SEC-005",
+                path=path,
+                message=f"{total} {what} exist(s)"
+                + (f" ({', '.join(str(n) for n in names)})" if names else ""),
+                fix="this profile is OIDC-only (issue #6 §7): delete the stored secret(s) (repo "
+                "Settings -> Secrets and variables -> Actions, or the environment's own Secrets "
+                "page) -- the publish job must mint its token via id-token, never read a stored one",
+            )
+        ]
+    return []
+
+
+def check_sec_005(fetch_status: FetchStatusFn, token: str, repo: str, ci: CiToml) -> list[Finding]:
+    findings: list[Finding] = []
+    findings.extend(
+        _check_secrets_endpoint(
+            fetch_status,
+            token,
+            repo,
+            url=f"{API_ROOT}/repos/{repo}/actions/secrets",
+            path=f"repo:{repo}",
+            what="repository Actions secret(s)",
+        )
+    )
+    env_names: set[str] = set()
+    if ci.publish.pypi is not None and ci.publish.pypi.environment:
+        env_names.add(ci.publish.pypi.environment)
+    for env in sorted(env_names):
+        findings.extend(
+            _check_secrets_endpoint(
+                fetch_status,
+                token,
+                repo,
+                url=f"{API_ROOT}/repos/{repo}/environments/{env}/secrets",
+                path=f"environment:{env}",
+                what=f"environment '{env}' secret(s)",
+            )
+        )
+    return findings
+
+
+# ── SEC-006: publish environment missing / not branch-restricted ──────────
+
+
+def check_sec_006(fetch_status: FetchStatusFn, token: str, repo: str, ci: CiToml, default_branch: str) -> list[Finding]:
+    if ci.publish.pypi is None or not ci.publish.pypi.environment:
+        return [
+            Finding(
+                rule="SEC-006",
+                status=Status.NEEDS_REVIEW,
+                path="ci.toml",
+                message="[publish].pypi.environment is not declared; cannot check its deployment "
+                "branch policy",
+                fix="declare [publish.pypi].environment in ci.toml (e.g. \"pypi\")",
+            )
+        ]
+    env = ci.publish.pypi.environment
+    url = f"{API_ROOT}/repos/{repo}/environments/{env}"
+    result = _get(fetch_status, token, url)
+    if result is None:
+        return [_network_finding("SEC-006", f"environment:{env}", url)]
+    status, body = result
+    if status == 403:
+        return [_forbidden_finding("SEC-006", f"environment:{env}", f"environment '{env}'")]
+    if status == 404:
+        return [
+            Finding(
+                rule="SEC-006",
+                path=f"environment:{env}",
+                message=f"environment '{env}' (ci.toml [publish.pypi].environment) does not exist "
+                "on this repository",
+                fix=f"create the '{env}' environment (repo Settings -> Environments) and restrict its "
+                f"deployment branch policy to the default branch ({default_branch!r}) before this "
+                "profile's publish job can mint an OIDC token bound to it",
+            )
+        ]
+    if status != 200 or not isinstance(body, dict):
+        return [_unexpected_status_finding("SEC-006", f"environment:{env}", f"environment '{env}'", status)]
+
+    policy = body.get("deployment_branch_policy")
+    if policy is None:
+        return [
+            Finding(
+                rule="SEC-006",
+                path=f"environment:{env}",
+                message=f"environment '{env}' has no deployment branch policy -- any branch (including "
+                "any PR head) can deploy to it",
+                fix=f"restrict '{env}' to the default branch: enable 'Selected branches' with exactly "
+                f"'{default_branch}', or 'Protected branches only' if {default_branch!r} is the "
+                "repository's only protected branch",
+            )
+        ]
+    if not isinstance(policy, dict):
+        return [_unexpected_status_finding("SEC-006", f"environment:{env}", f"environment '{env}'", status)]
+
+    protected_only = policy.get("protected_branches") is True
+    custom = policy.get("custom_branch_policies") is True
+    if protected_only:
+        return []  # only branches with a branch-protection rule may deploy -- accepted as restricted
+    if not custom:
+        return [
+            Finding(
+                rule="SEC-006",
+                path=f"environment:{env}",
+                message=f"environment '{env}' has deployment_branch_policy set but neither "
+                "'protected_branches' nor 'custom_branch_policies' is enabled",
+                fix=f"restrict '{env}' to the default branch (custom branch policy naming exactly "
+                f"'{default_branch}', or 'Protected branches only')",
+            )
+        ]
+
+    policies_url = f"{API_ROOT}/repos/{repo}/environments/{env}/deployment-branch-policies"
+    policies_result = _get(fetch_status, token, policies_url)
+    if policies_result is None:
+        return [_network_finding("SEC-006", f"environment:{env}", policies_url)]
+    p_status, p_body = policies_result
+    if p_status == 403:
+        return [_forbidden_finding("SEC-006", f"environment:{env}", f"'{env}' deployment branch policies")]
+    if p_status != 200 or not isinstance(p_body, dict):
+        return [_unexpected_status_finding("SEC-006", f"environment:{env}", f"'{env}' deployment branch policies", p_status)]
+    raw_policies = p_body.get("branch_policies")
+    names = (
+        sorted({p.get("name") for p in raw_policies if isinstance(p, dict) and isinstance(p.get("name"), str)})
+        if isinstance(raw_policies, list)
+        else []
+    )
+    if names == [default_branch]:
+        return []
+    return [
+        Finding(
+            rule="SEC-006",
+            path=f"environment:{env}",
+            message=f"environment '{env}' custom deployment branch policy allows {names or '(none)'}, "
+            f"not restricted to exactly the default branch ({default_branch!r})",
+            fix=f"set '{env}''s custom branch policy to exactly '{default_branch}' (remove every other "
+            "pattern, including wildcards)",
+        )
+    ]
+
+
+# ── SEC-007: default workflow permissions not read-only ───────────────────
+
+
+def check_sec_007(fetch_status: FetchStatusFn, token: str, repo: str) -> list[Finding]:
+    url = f"{API_ROOT}/repos/{repo}/actions/permissions/workflow"
+    result = _get(fetch_status, token, url)
+    if result is None:
+        return [_network_finding("SEC-007", f"repo:{repo}", url)]
+    status, body = result
+    if status == 403:
+        return [_forbidden_finding("SEC-007", f"repo:{repo}", "default Actions workflow permissions")]
+    if status != 200 or not isinstance(body, dict):
+        return [_unexpected_status_finding("SEC-007", f"repo:{repo}", "default Actions workflow permissions", status)]
+    default_perms = body.get("default_workflow_permissions")
+    if default_perms != "read":
+        return [
+            Finding(
+                rule="SEC-007",
+                path=f"repo:{repo}",
+                message=f"repository default workflow permissions = {default_perms!r}, expected 'read'",
+                fix="repo Settings -> Actions -> General -> Workflow permissions -> 'Read repository "
+                "contents permission' (never the default 'Read and write'); every job that needs more "
+                "must request it explicitly via [allow].permissions",
+            )
+        ]
+    return []
+
+
+# ── GEN-006 / GEN-011: branch protection + rulesets ────────────────────────
+
+
+def _fetch_branch_protection(
+    fetch_status: FetchStatusFn, token: str, repo: str, branch: str
+) -> tuple[int, dict[str, object] | None] | None:
+    url = f"{API_ROOT}/repos/{repo}/branches/{branch}/protection"
+    result = _get(fetch_status, token, url)
+    if result is None:
+        return None
+    status, body = result
+    return status, (body if isinstance(body, dict) else None)
+
+
+def _fetch_rulesets(fetch_status: FetchStatusFn, token: str, repo: str) -> tuple[int, list[dict[str, object]]] | None:
+    """Lists rulesets, then fetches each one's full detail (the list
+    endpoint's summary objects don't carry `rules`/`conditions`). A 404 on
+    the list itself is treated as "no rulesets" (status 404, empty list) --
+    the round-5 brief's "treat 404 as none" -- a 403 propagates as status
+    403 with an empty list so the caller can report needs_review."""
+
+    url = f"{API_ROOT}/repos/{repo}/rulesets"
+    result = _get(fetch_status, token, url)
+    if result is None:
+        return None
+    status, body = result
+    if status == 404:
+        return 404, []
+    if status != 200 or not isinstance(body, list):
+        return status, []
+    detailed: list[dict[str, object]] = []
+    for summary in body:
+        if not isinstance(summary, dict):
+            continue
+        rid = summary.get("id")
+        if rid is None:
+            continue
+        detail_result = _get(fetch_status, token, f"{API_ROOT}/repos/{repo}/rulesets/{rid}")
+        if detail_result is None:
+            continue
+        d_status, d_body = detail_result
+        if d_status == 200 and isinstance(d_body, dict):
+            detailed.append(d_body)
+    return status, detailed
+
+
+def _ruleset_covers_branch(ruleset: dict[str, object], default_branch: str) -> bool:
+    """Best-effort: a ruleset's `conditions.ref_name.include` patterns are a
+    small DSL (`~DEFAULT_BRANCH`, `~ALL`, `refs/heads/<name>`, fnmatch-style
+    globs). This resolves exactly the patterns the fleet's own rulesets are
+    expected to use; an unmatched pattern is conservatively NOT counted as
+    covering the branch (so GEN-006 can still fire and get human review,
+    rather than silently trusting a pattern this function doesn't parse)."""
+
+    conditions = ruleset.get("conditions")
+    if not isinstance(conditions, dict):
+        return False
+    ref_name = conditions.get("ref_name")
+    if not isinstance(ref_name, dict):
+        return False
+    include = ref_name.get("include")
+    if not isinstance(include, list):
+        return False
+    target_ref = f"refs/heads/{default_branch}"
+    for pattern in include:
+        if not isinstance(pattern, str):
+            continue
+        if pattern in ("~ALL", "~DEFAULT_BRANCH", target_ref):
+            return True
+    return False
+
+
+def _has_active_merge_queue(rulesets: list[dict[str, object]], default_branch: str) -> bool:
+    for rs in rulesets:
+        if rs.get("enforcement") != "active":
+            continue
+        if rs.get("target") not in ("branch", None):
+            continue
+        rules = rs.get("rules")
+        if not isinstance(rules, list):
+            continue
+        has_merge_queue = any(isinstance(r, dict) and r.get("type") == "merge_queue" for r in rules)
+        if has_merge_queue and _ruleset_covers_branch(rs, default_branch):
+            return True
+    return False
+
+
+def check_gen_006(
+    branch_protection: tuple[int, dict[str, object] | None] | None,
+    rulesets: tuple[int, list[dict[str, object]]] | None,
+    default_branch: str,
+) -> list[Finding]:
+    if branch_protection is None:
+        return [_network_finding("GEN-006", f"branch:{default_branch}", "branch protection")]
+    bp_status, bp_body = branch_protection
+    if bp_status == 403:
+        return [_forbidden_finding("GEN-006", f"branch:{default_branch}", "branch protection")]
+    if bp_status == 404:
+        return []  # no branch protection at all -> nothing for GEN-006 to flag (GEN-011 covers this)
+    if bp_status != 200 or bp_body is None:
+        return [_unexpected_status_finding("GEN-006", f"branch:{default_branch}", "branch protection", bp_status)]
+
+    required_status_checks = bp_body.get("required_status_checks")
+    strict = isinstance(required_status_checks, dict) and required_status_checks.get("strict") is True
+    if not strict:
+        return []
+
+    if rulesets is None:
+        return [_network_finding("GEN-006", f"branch:{default_branch}", "rulesets")]
+    rs_status, rs_list = rulesets
+    if rs_status == 403:
+        return [_forbidden_finding("GEN-006", f"branch:{default_branch}", "rulesets")]
+    if rs_status not in (200, 404):
+        return [_unexpected_status_finding("GEN-006", f"branch:{default_branch}", "rulesets", rs_status)]
+
+    if _has_active_merge_queue(rs_list, default_branch):
+        return []
+
+    return [
+        Finding(
+            rule="GEN-006",
+            path=f"branch:{default_branch}",
+            message=f"branch protection on '{default_branch}' sets required_status_checks.strict = "
+            "true with no active merge-queue ruleset covering it -- every merge forces every other "
+            "open PR's required checks to re-run",
+            fix="either configure a merge queue (a ruleset with an active 'merge_queue' rule covering "
+            f"'{default_branch}') or set required_status_checks.strict = false (docs/case-studies/"
+            "fbuild-ci-cost.md's GEN-006 finding)",
+        )
+    ]
+
+
+def check_gen_011(
+    branch_protection: tuple[int, dict[str, object] | None] | None,
+    default_branch: str,
+    gate_check_name: str,
+) -> list[Finding]:
+    if branch_protection is None:
+        return [_network_finding("GEN-011", f"branch:{default_branch}", "branch protection")]
+    bp_status, bp_body = branch_protection
+    if bp_status == 403:
+        return [_forbidden_finding("GEN-011", f"branch:{default_branch}", "branch protection")]
+    if bp_status == 404:
+        return [
+            Finding(
+                rule="GEN-011",
+                status=Status.NEEDS_REVIEW,
+                path=f"branch:{default_branch}",
+                message=f"branch '{default_branch}' has no branch protection at all, so its required "
+                f"status checks cannot include {gate_check_name!r}",
+                fix="this is a policy decision, not a code defect -- configure branch protection with "
+                f"{gate_check_name!r} required if the fleet intends this repository to be unmergeable "
+                "without a green gate",
+            )
+        ]
+    if bp_status != 200 or bp_body is None:
+        return [_unexpected_status_finding("GEN-011", f"branch:{default_branch}", "branch protection", bp_status)]
+
+    required_status_checks = bp_body.get("required_status_checks")
+    contexts: set[str] = set()
+    if isinstance(required_status_checks, dict):
+        raw_contexts = required_status_checks.get("contexts")
+        if isinstance(raw_contexts, list):
+            contexts.update(c for c in raw_contexts if isinstance(c, str))
+        raw_checks = required_status_checks.get("checks")
+        if isinstance(raw_checks, list):
+            contexts.update(
+                c.get("context") for c in raw_checks if isinstance(c, dict) and isinstance(c.get("context"), str)
+            )
+    if gate_check_name in contexts:
+        return []
+    return [
+        Finding(
+            rule="GEN-011",
+            path=f"branch:{default_branch}",
+            message=f"required status checks on '{default_branch}' are {sorted(contexts) or '(none)'}, "
+            f"missing the gate check {gate_check_name!r}",
+            fix=f"add {gate_check_name!r} to the branch's required status checks (repo Settings -> "
+            "Branches -> branch protection rule), or pass --gate-check-name if this repository's gate "
+            "job is intentionally named differently",
+        )
+    ]
+
+
+# ── Orchestration ──────────────────────────────────────────────────────────
+
+
+def run_audit(
+    ci: CiToml,
+    *,
+    fetch_status: FetchStatusFn,
+    token: str,
+    repo: str,
+    default_branch: str = "main",
+    gate_check_name: str = DEFAULT_GATE_CHECK_NAME,
+) -> AuditReport:
+    findings: list[Finding] = []
+    findings.extend(check_sec_005(fetch_status, token, repo, ci))
+    findings.extend(check_sec_006(fetch_status, token, repo, ci, default_branch))
+    findings.extend(check_sec_007(fetch_status, token, repo))
+
+    branch_protection = _fetch_branch_protection(fetch_status, token, repo, default_branch)
+    rulesets = _fetch_rulesets(fetch_status, token, repo)
+    findings.extend(check_gen_006(branch_protection, rulesets, default_branch))
+    findings.extend(check_gen_011(branch_protection, default_branch, gate_check_name))
+
+    return AuditReport(findings=tuple(findings), repo=repo, default_branch=default_branch)
+
+
+def to_json_dict(report: AuditReport) -> dict[str, object]:
+    return {
+        "repo": report.repo,
+        "default_branch": report.default_branch,
+        "findings": [
+            {"rule": f.rule, "status": f.status.value, "path": f.path, "message": f.message, "fix": f.fix}
+            for f in report.findings
+        ],
+    }
+
+
+def render_text(report: AuditReport) -> str:
+    lines = [f"ci-lint audit: {report.repo} (default branch: {report.default_branch})"]
+    rules = ("SEC-005", "SEC-006", "SEC-007", "GEN-006", "GEN-011")
+    by_rule: dict[str, list[Finding]] = {r: [] for r in rules}
+    for f in report.findings:
+        by_rule.setdefault(f.rule, []).append(f)
+    lines.append(f"{'rule':<10} {'status':<14} count")
+    for rule in rules:
+        items = by_rule.get(rule, [])
+        if not items:
+            lines.append(f"{rule:<10} {'clean':<14} 0")
+            continue
+        violations = sum(1 for f in items if f.status == Status.VIOLATION)
+        needs_review = sum(1 for f in items if f.status == Status.NEEDS_REVIEW)
+        label = "violation" if violations else "needs_review" if needs_review else "clean"
+        lines.append(f"{rule:<10} {label:<14} {len(items)}")
+    lines.append("")
+    if not report.findings:
+        lines.append("ci-lint audit: no findings.")
+    for f in report.findings:
+        lines.append(f.render())
+    return "\n".join(lines)
