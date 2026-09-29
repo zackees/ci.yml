@@ -115,8 +115,23 @@ def discover_staged_artifacts(dist_dir: Path) -> StagedArtifacts:
 
 
 def _match_platform(wheel: StagedWheel, patterns: dict[str, re.Pattern[str]]) -> str | None:
+    # PEP 425 (the wheel filename spec): `platform_tag` may itself be a
+    # "."-joined list of tags the wheel is compatible with -- the SAME
+    # convention `python_tag`/`abi_tag` use (e.g. `py2.py3`). maturin
+    # emits exactly this for a Linux wheel whose measured glibc floor
+    # equals one of the legacy manylinux1/2010/2014 aliases: a real,
+    # correctly-built `manylinux_2_17_aarch64` wheel is filed as
+    # `manylinux_2_17_aarch64.manylinux2014_aarch64` (both tags describe
+    # the identical floor -- manylinux2014 IS glibc 2.17 -- found via a
+    # live run, zackees/template-python-rust-cmd#30 round 5: linux-arm64
+    # was flagged PKG-006 "matches no declared [platforms] entry" despite
+    # being built through the correct manylinux_2_17 cross sysroot).
+    # Matching the whole compound string against a single `^...$` pattern
+    # can never succeed for one of these; each dot-separated component is
+    # its own complete, independently valid tag, so a match on ANY one of
+    # them is what "this wheel is compatible with platform X" means.
     for platform_id, pattern in patterns.items():
-        if pattern.match(wheel.parts.platform_tag):
+        if any(pattern.match(tag) for tag in wheel.parts.platform_tag.split(".")):
             return platform_id
     return None
 

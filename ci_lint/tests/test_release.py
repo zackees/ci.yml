@@ -90,6 +90,26 @@ class ReleaseVerifyTest(unittest.TestCase):
         self.assertEqual("0.1.0", report.version)
         self.assertEqual(3, len(report.artifacts))  # 2 wheels + 1 sdist
 
+    def test_compound_platform_tag_matches_any_component(self) -> None:
+        # PEP 425: `platform_tag` may be a "."-joined list of tags the
+        # wheel is compatible with. maturin emits exactly this for a
+        # Linux wheel whose measured glibc floor equals a legacy
+        # manylinux1/2010/2014 alias -- e.g. a real, correctly-built
+        # manylinux_2_17 wheel is filed as
+        # `manylinux_2_17_x86_64.manylinux2014_x86_64` (both describe the
+        # identical floor). Before this fix, `_match_platform`'s
+        # `pattern.match(...)` against the WHOLE compound string could
+        # never match a single `^...$` pattern -- found via a live run,
+        # zackees/template-python-rust-cmd#30 round 5.
+        _build_wheel(self.dist, platform_tag="manylinux_2_17_x86_64.manylinux2014_x86_64")
+        _build_wheel(self.dist, platform_tag="win_amd64", cli_bytes=PE_X64)
+        _write_sdist(self.dist)
+        report = verify_staged_artifacts(
+            self.ci, self.dist, candidate_sha=CANDIDATE_SHA, ci_toml_digest="deadbeef"
+        )
+        pkg006 = [f for f in report.findings if f.rule == "PKG-006"]
+        self.assertEqual([], pkg006, [f.render() for f in pkg006])
+
     def test_missing_platform_wheel_is_pkg_006(self) -> None:
         _build_wheel(self.dist, platform_tag="manylinux_2_17_x86_64")
         _write_sdist(self.dist)  # windows-x64's wheel never staged
