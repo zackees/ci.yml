@@ -18,6 +18,7 @@ from pathlib import Path
 
 from ci_lint.exceptions import apply_exceptions
 from ci_lint.finding import Finding, Status
+from ci_lint.rules.build_parallelism import check_gen_012
 from ci_lint.rules.cache_static import check_group9
 from ci_lint.rules.contract import check_ct_006, check_tag_001, check_tag_002
 from ci_lint.rules.layout import check_group6
@@ -77,7 +78,7 @@ def _local_skip_findings(*, live: bool = False) -> list[Finding]:
 
 GROUP_LABELS: dict[int, str] = {
     1: "contract (CT-001..006, TAG-001, TAG-002)",
-    2: "workflows (GEN-001/002/008, TAG-003, SEC-003/004, RUN-001/002, WF-001..003, CT-004)",
+    2: "workflows (GEN-001/002/008/012, TAG-003, SEC-003/004, RUN-001/002, WF-001..003, CT-004)",
     3: "shell budget (GEN-005)",
     4: "tools (TOOL-001/002/003, CACHE-009, RUST-002, GEN-004)",
     5: "secrets (SEC-001/002)",
@@ -118,6 +119,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(check_ct_006(ci, repo_root))
 
         all_findings.extend(check_group2(ci, repo_root))
+        all_findings.extend(check_gen_012(repo_root))
         all_findings.extend(check_group3(ci, repo_root))
         all_findings.extend(check_group4(ci, repo_root))
         all_findings.extend(check_group5(ci, repo_root))

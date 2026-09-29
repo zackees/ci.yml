@@ -21,7 +21,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 | `CT` | 001–006 | `CT-007` | all |
 | `TAG` | 001–003 | `TAG-004` | all |
 | `WF` | 001–003 | `WF-004` | all |
-| `GEN` | 001–011 | `GEN-012` | 001, 002, 004, 005, 006, 008, 011 (003, 007, 009, 010 candidates) |
+| `GEN` | 001–012 | `GEN-013` | 001, 002, 004, 005, 006, 008, 011, 012 (003, 007, 009, 010 candidates) |
 | `SEC` | 001–007 | `SEC-008` | all |
 | `RUN` | 001–002 | `RUN-003` | 001, 002 |
 | `TOOL` | 001–003 | `TOOL-004` | all |
