@@ -58,6 +58,17 @@ class ToolFixtureTest(unittest.TestCase):
         rules = [f.rule for f in check_tool_rules_workflows(fixture("TOOL-002", "green"))]
         self.assertNotIn("TOOL-002", rules)
 
+    def test_tool_002_same_line_allow_comment(self) -> None:
+        # ci.yml#138: '# ci-lint: allow TOOL-002 <reason>' excuses one line.
+        rules = [f.rule for f in check_tool_rules_workflows(fixture("TOOL-002", "green-allow"))]
+        self.assertNotIn("TOOL-002", rules)
+
+    def test_tool_002_allow_needs_rule_id_reason_and_same_line(self) -> None:
+        # Wrong rule id, a marker with no reason, and an unmarked sibling line
+        # in the same block step all still fire.
+        rules = [f.rule for f in check_tool_rules_workflows(fixture("TOOL-002", "red-allow"))]
+        self.assertEqual(3, rules.count("TOOL-002"), msg=rules)
+
     def test_tool_003_bare_uv_run_in_run_line(self) -> None:
         rules = [f.rule for f in check_tool_003_workflows(fixture("TOOL-003", "red"))]
         self.assertIn("TOOL-003", rules)

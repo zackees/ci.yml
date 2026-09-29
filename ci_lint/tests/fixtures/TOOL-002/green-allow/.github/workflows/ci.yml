@@ -1,0 +1,37 @@
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  precheck:
+    uses: ./.github/workflows/ci-pre.yml
+  build:
+    needs: precheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+        with:
+          repository: zackees/ci.yml
+          ref: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          path: ci.yml
+      # ci.yml#138 (kernal-api): one step deliberately resolves a feature off the lock.
+      - run: soldr cargo test --features http-client,reqwest/gzip --test net  # ci-lint: allow TOOL-002 resolves reqwest/gzip outside the production graph
+      - run: |
+          soldr cargo build --locked
+          soldr cargo check  # ci-lint: allow TOOL-002 probes an unlocked resolution on purpose
