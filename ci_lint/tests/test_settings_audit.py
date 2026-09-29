@@ -12,7 +12,7 @@ from ci_lint.finding import Status
 from ci_lint.github_api import GitHubApiError
 from ci_lint.schema import load_ci_toml
 from ci_lint.settings_audit import DEFAULT_GATE_CHECK_NAME, run_audit
-from ci_lint.tests.helpers import FIXTURES
+from ci_lint.tests.helpers import FIXTURES, requires_yaml_tooling
 
 REPO = FIXTURES / "runtime" / "cache" / "repo"  # [publish.pypi].environment = "pypi"
 REPO_SLUG = "zackees/template-python-rust-cmd"
@@ -352,3 +352,185 @@ class SettingsAuditTest(unittest.TestCase):
             (root / "AGENTS.md").write_text("Nothing to see here.\n", encoding="utf-8")
             report = self._run(table, repo_root=root)
         self.assertEqual([], [f for f in report.findings if f.rule == "GEN-010"])
+
+    # ── RUST-014 (live, M2-29, issue #33) ──────────────────────────────────
+
+    SOLDR_SHA = "a07bab9" + "0" * 33  # 40 hex chars
+    SOLDR_REPO = "zackees/setup-soldr"
+
+    def _repo_with_pin(self, root) -> None:
+        from pathlib import Path
+
+        wf_dir = Path(root) / ".github" / "workflows"
+        wf_dir.mkdir(parents=True)
+        (wf_dir / "ci.yml").write_text(
+            "name: CI\n"
+            "on: push\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-24.04\n"
+            "    steps:\n"
+            f"      - uses: {self.SOLDR_REPO}@{self.SOLDR_SHA}\n",
+            encoding="utf-8",
+        )
+
+    @requires_yaml_tooling
+    def test_rust_014_missing_critical_release_is_violation(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()
+        table[f"{API}/repos/{self.SOLDR_REPO}/commits/{self.SOLDR_SHA}"] = (
+            200, {"commit": {"committer": {"date": "2026-01-01T00:00:00Z"}}}
+        )
+        table[f"{API}/repos/{self.SOLDR_REPO}/releases"] = (
+            200,
+            [
+                {
+                    "tag_name": "v0.9.82",
+                    "name": "v0.9.82",
+                    "body": "CRITICAL: fixes dylint-output-cache keying",
+                    "draft": False,
+                    "prerelease": False,
+                    "published_at": "2026-06-01T00:00:00Z",
+                }
+            ],
+        )
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._repo_with_pin(root)
+            report = self._run(table, repo_root=root)
+        f = next(f for f in report.findings if f.rule == "RUST-014")
+        self.assertEqual(Status.VIOLATION, f.status)
+        self.assertIn("critical", f.message.lower())
+        self.assertIn("v0.9.82", f.message)
+
+    @requires_yaml_tooling
+    def test_rust_014_up_to_date_pin_is_clean(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()
+        table[f"{API}/repos/{self.SOLDR_REPO}/commits/{self.SOLDR_SHA}"] = (
+            200, {"commit": {"committer": {"date": "2026-09-01T00:00:00Z"}}}
+        )
+        table[f"{API}/repos/{self.SOLDR_REPO}/releases"] = (
+            200,
+            [
+                {
+                    "tag_name": "v0.9.80",
+                    "name": "v0.9.80",
+                    "body": "routine fixes",
+                    "draft": False,
+                    "prerelease": False,
+                    "published_at": "2026-01-01T00:00:00Z",
+                }
+            ],
+        )
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._repo_with_pin(root)
+            report = self._run(table, repo_root=root)
+        self.assertEqual([], [f for f in report.findings if f.rule == "RUST-014"])
+
+    @requires_yaml_tooling
+    def test_rust_014_many_noncritical_releases_behind_is_violation(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()
+        table[f"{API}/repos/{self.SOLDR_REPO}/commits/{self.SOLDR_SHA}"] = (
+            200, {"commit": {"committer": {"date": "2025-12-01T00:00:00Z"}}}
+        )
+        releases = [
+            {
+                "tag_name": f"v0.9.{80 + i}",
+                "name": f"v0.9.{80 + i}",
+                "body": "routine fixes",
+                "draft": False,
+                "prerelease": False,
+                "published_at": f"2026-0{i + 1}-01T00:00:00Z",
+            }
+            for i in range(6)
+        ]
+        table[f"{API}/repos/{self.SOLDR_REPO}/releases"] = (200, releases)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._repo_with_pin(root)
+            report = self._run(table, repo_root=root)
+        f = next(f for f in report.findings if f.rule == "RUST-014")
+        self.assertEqual(Status.VIOLATION, f.status)
+        self.assertIn("release(s) behind", f.message)
+
+    @requires_yaml_tooling
+    def test_rust_014_few_noncritical_releases_behind_is_clean(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()
+        table[f"{API}/repos/{self.SOLDR_REPO}/commits/{self.SOLDR_SHA}"] = (
+            200, {"commit": {"committer": {"date": "2026-01-01T00:00:00Z"}}}
+        )
+        releases = [
+            {
+                "tag_name": f"v0.9.{80 + i}",
+                "name": f"v0.9.{80 + i}",
+                "body": "routine fixes",
+                "draft": False,
+                "prerelease": False,
+                "published_at": "2026-02-01T00:00:00Z",
+            }
+            for i in range(2)
+        ]
+        table[f"{API}/repos/{self.SOLDR_REPO}/releases"] = (200, releases)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._repo_with_pin(root)
+            report = self._run(table, repo_root=root)
+        self.assertEqual([], [f for f in report.findings if f.rule == "RUST-014"])
+
+    @requires_yaml_tooling
+    def test_rust_014_forbidden_commits_lookup_is_needs_review(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()
+        table[f"{API}/repos/{self.SOLDR_REPO}/commits/{self.SOLDR_SHA}"] = (403, {"message": "Forbidden"})
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._repo_with_pin(root)
+            report = self._run(table, repo_root=root)
+        f = next(f for f in report.findings if f.rule == "RUST-014")
+        self.assertEqual(Status.NEEDS_REVIEW, f.status)
+
+    @requires_yaml_tooling
+    def test_rust_014_unresolvable_sha_is_needs_review(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()
+        table[f"{API}/repos/{self.SOLDR_REPO}/commits/{self.SOLDR_SHA}"] = (404, {"message": "Not Found"})
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._repo_with_pin(root)
+            report = self._run(table, repo_root=root)
+        f = next(f for f in report.findings if f.rule == "RUST-014")
+        self.assertEqual(Status.NEEDS_REVIEW, f.status)
+        self.assertIn("404", f.message)
+
+    @requires_yaml_tooling
+    def test_rust_014_no_pin_no_findings(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / ".github" / "workflows").mkdir(parents=True)
+            (root / ".github" / "workflows" / "ci.yml").write_text(
+                "name: CI\non: push\njobs:\n  build:\n    runs-on: ubuntu-24.04\n"
+                "    steps:\n      - uses: zackees/setup-soldr@v0\n",
+                encoding="utf-8",
+            )
+            report = self._run(table, repo_root=root)
+        self.assertEqual([], [f for f in report.findings if f.rule == "RUST-014"])

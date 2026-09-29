@@ -71,6 +71,50 @@ class WorkflowFixtureTest(unittest.TestCase):
         ci, _ = load_ci_toml(repo)
         self.assertNotIn("SEC-004", rule_ids(check_sec_004(ci, load_workflows(repo), [])))
 
+    # ── SEC-004 x setup-soldr@v0 (M2-29, ci.yml#33) ────────────────────────
+    # zackees/setup-soldr@v0 is the ONE sanctioned first-party floating ref;
+    # everything else must still SHA-pin. Uses the SEC-004 green fixture's
+    # ci.toml, which already lists "zackees/setup-soldr" in [allow].actions.
+
+    def test_sec_004_setup_soldr_v0_float_is_sanctioned(self) -> None:
+        from ci_lint.rules.workflows import _check_one_use
+
+        allowed = frozenset(["zackees/setup-soldr"])
+        findings = _check_one_use(
+            "zackees/setup-soldr@v0", "wf.yml", "jobs.build.steps[0]", allowed
+        )
+        self.assertEqual([], findings)
+
+    def test_sec_004_setup_soldr_other_float_still_flagged(self) -> None:
+        from ci_lint.rules.workflows import _check_one_use
+
+        allowed = frozenset(["zackees/setup-soldr"])
+        # A branch or a version tag other than "v0" is not the sanctioned
+        # float -- only the gated v0 promotion is exempt.
+        for ref in ("main", "v0.9.82"):
+            findings = _check_one_use(
+                f"zackees/setup-soldr@{ref}", "wf.yml", "jobs.build.steps[0]", allowed
+            )
+            self.assertIn("SEC-004", rule_ids(findings), ref)
+
+    def test_sec_004_other_action_v0_style_float_still_flagged(self) -> None:
+        from ci_lint.rules.workflows import _check_one_use
+
+        allowed = frozenset(["actions/checkout"])
+        findings = _check_one_use(
+            "actions/checkout@v0", "wf.yml", "jobs.build.steps[0]", allowed
+        )
+        self.assertIn("SEC-004", rule_ids(findings))
+
+    def test_sec_004_setup_soldr_cook_v0_float_is_sanctioned(self) -> None:
+        from ci_lint.rules.workflows import _check_one_use
+
+        allowed = frozenset(["zackees/setup-soldr"])
+        findings = _check_one_use(
+            "zackees/setup-soldr/cook@v0", "wf.yml", "jobs.build.steps[0]", allowed
+        )
+        self.assertEqual([], findings)
+
     def test_run_001_bad_runner_label(self) -> None:
         repo = fixture("RUN-001", "red")
         ci, _ = load_ci_toml(repo)
