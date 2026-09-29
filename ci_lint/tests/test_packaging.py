@@ -28,6 +28,23 @@ class PackagingFixtureTest(unittest.TestCase):
                 rules = [f.rule for f in check_group8(ci, repo)]
                 self.assertEqual(expect, "PKG-004" in rules, rules)
 
+    def test_pkg_003_scoped_to_native_wheel_profiles(self) -> None:
+        """zackees/ci.yml#106: PKG-003 (bundle-bins/script-shadow checks for
+        the native CLI the wheel bundles) is only a `rust-pypi-app` concern,
+        exactly like #90/#103 scoped PKG-004 -- a `rust-library` repo may
+        declare [python].cli for reasons unrelated to a shipped wheel and
+        must not be flagged for it."""
+
+        repo = fixture("PKG-003", "red")  # rust-pypi-app, real defect
+        ci, findings = load_ci_toml(repo)
+        assert ci is not None, findings
+        self.assertIn("PKG-003", [f.rule for f in check_group8(ci, repo)])
+
+        repo = fixture("PKG-003", "red-rust-library")  # same defect, rust-library
+        ci, findings = load_ci_toml(repo)
+        assert ci is not None, findings
+        self.assertNotIn("PKG-003", [f.rule for f in check_group8(ci, repo)])
+
     def test_pkg_003_cli_shadowed_by_python_script(self) -> None:
         repo = fixture("PKG-003", "red")
         ci, _ = load_ci_toml(repo)
