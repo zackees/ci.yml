@@ -15,7 +15,7 @@ from ci_lint.finding import Finding
 from ci_lint.repo_files import list_repo_files
 from ci_lint.schema import CliBinary, CiToml
 
-SOLDR_PIN_RE = re.compile(r"^soldr==")
+SOLDR_PIN_RE = re.compile(r"^soldr\s*(==|>=|~=|>)")
 
 
 def _load_toml(path: Path) -> dict[str, object] | None:
@@ -58,8 +58,11 @@ def check_pkg_004(repo_root: Path) -> list[Finding]:
             Finding(
                 rule="PKG-004",
                 path="pyproject.toml",
-                message="[build-system].requires has no exact 'soldr==<version>' pin",
-                fix='add "soldr==<version>" to [build-system].requires in pyproject.toml',
+                message="[build-system].requires has no 'soldr' version requirement "
+                "('soldr>=<floor>' by default, or an exact 'soldr==<version>' pin per "
+                "zackees/ci.yml#18's RUST-013)",
+                fix='add "soldr>=<floor>" (or, only with a recorded [[exceptions]] entry, '
+                '"soldr==<version>") to [build-system].requires in pyproject.toml',
             )
         )
     if any(isinstance(r, str) and "maturin" in r.lower() for r in requires):
