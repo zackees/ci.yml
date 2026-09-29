@@ -60,7 +60,12 @@ def _discover_raw_files(repo_root: Path) -> list[Path]:
     return out
 
 
-def check_sec_001(repo_root: Path) -> list[Finding]:
+def check_sec_001(repo_root: Path, allowed: tuple[str, ...] = ()) -> list[Finding]:
+    """`allowed` is ci.toml's [allow].secrets (ci.yml#135): each named secret
+    is an accepted reference. Every other non-GITHUB_TOKEN secret, and every
+    `secrets: inherit`, stays a violation. The live SEC-005 audit still
+    reports any stored secret against the OIDC-only policy."""
+
     findings: list[Finding] = []
     for path in _discover_raw_files(repo_root):
         rel = path.relative_to(repo_root).as_posix()
@@ -71,7 +76,7 @@ def check_sec_001(repo_root: Path) -> list[Finding]:
         for lineno, line in enumerate(text.splitlines(), start=1):
             for m in SECRET_REF_RE.finditer(line):
                 name = m.group(1)
-                if name != "GITHUB_TOKEN":
+                if name != "GITHUB_TOKEN" and name not in allowed:
                     findings.append(
                         Finding(
                             rule="SEC-001",
@@ -275,4 +280,4 @@ def check_sec_002(ci: CiToml, repo_root: Path) -> list[Finding]:
 
 
 def check_group5(ci: CiToml, repo_root: Path) -> list[Finding]:
-    return check_sec_001(repo_root) + check_sec_002(ci, repo_root)
+    return check_sec_001(repo_root, ci.allow.secrets) + check_sec_002(ci, repo_root)
