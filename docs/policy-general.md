@@ -84,7 +84,7 @@ The **Status** column below reflects what `ci_lint` actually checks today, verif
 | `SEC-001` | `secrets.<X>` other than `secrets.GITHUB_TOKEN`, or `secrets: inherit`. | Enforced by ci-lint (static precheck) |
 | `SEC-002` | Permissions wider than `contents: read` + `actions: read` at the top level, or per job without a matching `[allow].permissions` grant; `id-token: write` additionally always requires `environment: pypi` on the `publish` job specifically. | Enforced by ci-lint (static precheck) |
 | `SEC-003` | `pull_request_target` or `workflow_run` declared anywhere. | Enforced by ci-lint (static precheck) |
-| `SEC-004` | A `uses:` action not in `[allow].actions`, or not pinned to a 40-hex commit SHA. | Enforced by ci-lint (static precheck) |
+| `SEC-004` | A `uses:` action not in `[allow].actions`, or not pinned to a 40-hex commit SHA -- except `zackees/setup-soldr@v0` (and its `/cook`/`/cleanup` sub-actions), the one sanctioned first-party floating ref (zackees/ci.yml#33; see docs/policy-rust.md's "Reconciling SEC-004 with float-by-default"). A repository whose GitHub `sha_pinning_required` setting is on must still SHA-pin `setup-soldr` -- `RUST-014` (policy-rust.md) then requires that pin stay fresh. | Enforced by ci-lint (static precheck) |
 | `SEC-005` | Any repository or `[publish].pypi.environment` environment Actions secret exists. | Enforced by ci-lint (live audit, `ci-lint audit`) |
 | `SEC-006` | `[publish].pypi.environment` is missing, or its deployment branch policy doesn't restrict deploys to the default branch. | Enforced by ci-lint (live audit, `ci-lint audit`) |
 | `SEC-007` | The repository's default Actions workflow permissions are not `"read"`. | Enforced by ci-lint (live audit, `ci-lint audit`) |

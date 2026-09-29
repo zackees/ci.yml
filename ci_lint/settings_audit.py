@@ -36,6 +36,7 @@ from pathlib import Path
 from ci_lint.finding import Finding, Status
 from ci_lint.github_api import FetchStatusFn, GitHubApiError
 from ci_lint.rules.doc_claims import DocClaim, scan_repo_docs
+from ci_lint.rules.setup_soldr_freshness import check_rust_014
 from ci_lint.schema import CiToml
 
 API_ROOT = "https://api.github.com"
@@ -586,6 +587,7 @@ def run_audit(
     if repo_root is not None:
         claims = scan_repo_docs(repo_root)
         findings.extend(check_gen_010(claims, branch_protection, rulesets, default_branch))
+        findings.extend(check_rust_014(fetch_status, token, repo_root))
 
     return AuditReport(findings=tuple(findings), repo=repo, default_branch=default_branch)
 
@@ -603,7 +605,7 @@ def to_json_dict(report: AuditReport) -> dict[str, object]:
 
 def render_text(report: AuditReport) -> str:
     lines = [f"ci-lint audit: {report.repo} (default branch: {report.default_branch})"]
-    rules = ("SEC-005", "SEC-006", "SEC-007", "GEN-006", "GEN-010", "GEN-011")
+    rules = ("SEC-005", "SEC-006", "SEC-007", "GEN-006", "GEN-010", "GEN-011", "RUST-014")
     by_rule: dict[str, list[Finding]] = {r: [] for r in rules}
     for f in report.findings:
         by_rule.setdefault(f.rule, []).append(f)

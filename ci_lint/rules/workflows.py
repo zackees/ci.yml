@@ -238,6 +238,25 @@ def _iter_uses(
     return out
 
 
+# zackees/ci.yml#33 (closes #18/#31's SHA-pinning-vs-float tension): the ONE
+# sanctioned first-party floating ref SEC-004 accepts in place of a 40-hex
+# SHA. `zackees/setup-soldr@v0`'s `v0` tag moves only through setup-soldr's
+# own gated promotion (`update-v0-tag.yml`'s exact-main contract plus a
+# FastLED/fbuild canary), not an arbitrary maintainer push, unlike a
+# third-party action's floating tag -- so this does not generalize to any
+# other action, first- or third-party. `/cook` and `/cleanup` are
+# setup-soldr's own sub-actions and share its release cadence. A repository
+# with GitHub's own `sha_pinning_required` setting on cannot use this float
+# (that setting rejects `@v0` before any job runs) and must SHA-pin instead
+# -- `RUST-014` (docs/policy-rust.md) then requires that pin stay fresh.
+SETUP_SOLDR_FLOAT_REPO = "zackees/setup-soldr"
+SETUP_SOLDR_FLOAT_REF = "v0"
+
+
+def _is_sanctioned_setup_soldr_float(repo_slug: str, ref: str) -> bool:
+    return repo_slug == SETUP_SOLDR_FLOAT_REPO and ref == SETUP_SOLDR_FLOAT_REF
+
+
 def _check_one_use(uses: str, path: str, loc: str, allowed: frozenset[str]) -> list[Finding]:
     if uses.startswith("./") or uses.startswith("docker://"):
         return []
@@ -263,14 +282,16 @@ def _check_one_use(uses: str, path: str, loc: str, allowed: frozenset[str]) -> l
                 "allowlisted action",
             )
         )
-    if not SHA40_RE.match(ref):
+    if not SHA40_RE.match(ref) and not _is_sanctioned_setup_soldr_float(repo_slug, ref):
         out.append(
             Finding(
                 rule="SEC-004",
                 path=path,
                 message=f"{loc}: uses '{uses}' is not pinned to a 40-character commit SHA",
                 fix=f"pin {loc} to the action's full commit SHA with a version comment: "
-                f"'uses: {slug}@<40-hex-sha>  # vX.Y.Z'",
+                f"'uses: {slug}@<40-hex-sha>  # vX.Y.Z' -- or, only for {SETUP_SOLDR_FLOAT_REPO}, "
+                f"float at '@{SETUP_SOLDR_FLOAT_REF}' (zackees/ci.yml#33's one sanctioned "
+                "first-party float; every other action stays SHA-pinned)",
             )
         )
     return out
