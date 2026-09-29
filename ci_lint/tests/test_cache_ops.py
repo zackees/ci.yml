@@ -281,13 +281,15 @@ class PrepruneTest(unittest.TestCase):
 
         ci_tiny_budget = replace(self.ci, cache=replace(self.ci.cache, budget="1B"))
         result, summary = preprune(
-            ci_tiny_budget, fetch=_fetch_from(_load("caches-live-template.json")), graphql=None, delete=None,
+            ci_tiny_budget, fetch=_fetch_from(_load("caches-registry-per-job.json")), graphql=None, delete=None,
             token=TOKEN, repo=REPO_SLUG, lockfile_changed=True, dry_run=True,
         )
         self.assertIn("OVER budget", summary)
-        # the superseded (CACHE-006) "registry" entry is lockfile-keyed and about to be rewritten.
+        # the superseded (CACHE-006) "registry" entry -- an older Cargo.lock
+        # hash under the same toolchain digest (ci.yml#88) -- is lockfile-keyed
+        # and about to be rewritten; the per-job digest siblings are kept.
         self.assertEqual(1, len(result.planned))
-        self.assertEqual(8237210495, result.planned[0].id)
+        self.assertEqual(4, result.planned[0].id)
 
 
 if __name__ == "__main__":

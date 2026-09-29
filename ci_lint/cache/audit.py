@@ -123,7 +123,23 @@ def pr_from_ref(ref: str) -> int | None:
     return int(m.group("pr")) if m is not None else None
 
 
+# zackees/ci.yml#88: setup-soldr's cargo-registry key is
+# `setup-soldr-cargoregistry-v<N>-<os>-<arch>-<Cargo.lock hash>-<digest>`
+# (setup-soldr src/lib/resolve-setup.ts:1055-1080), where `<digest>` is the
+# toolchain-signature digest (resolve-setup.ts:771-789: channel, components,
+# TARGETS, ...). Jobs with different targets/toolchains legitimately keep
+# one live entry per digest at once (kernal-api: 8 per-job entries), so the
+# digest is part of the shape; only the Cargo.lock hash is a generation.
+# (An optional `x<suffix>-` validation namespace sits between the two.)
+_CARGO_REGISTRY_RE = re.compile(
+    r"^(?P<head>setup-soldr-cargoregistry-v\d+-.+?-)[0-9a-f]{16}-(?P<tail>(?:x[^-]+-)?[0-9a-f]{16})$"
+)
+
+
 def _shape(key: str) -> str:
+    m = _CARGO_REGISTRY_RE.match(key)
+    if m is not None:
+        return f"{m.group('head')}<lock>-{m.group('tail')}"
     stripped = _TRAILING_HASH_RE.sub("", key)
     return stripped if stripped else key
 
