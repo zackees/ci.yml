@@ -18,7 +18,9 @@ from pathlib import Path
 
 from ci_lint.exceptions import apply_exceptions
 from ci_lint.finding import Finding, Status
+from ci_lint.rules.bin_artifacts import check_group_bin
 from ci_lint.rules.build_parallelism import check_gen_012
+from ci_lint.rules.cache_payload import check_cache_007_static
 from ci_lint.rules.cache_restore_copy import check_gen_013
 from ci_lint.rules.cache_static import check_group9
 from ci_lint.rules.ci_pre import check_group12
@@ -54,7 +56,12 @@ LOCAL_SKIPPED_CHECKS: tuple[tuple[str, str], ...] = (
         "PR cache save/trim policy audit against live cache entries "
         "(GitHub Actions cache API + GraphQL PR state)",
     ),
-    ("ACT-001", "local act cache-store audit against the remote cache policy"),
+    (
+        "ACT-001",
+        "local act cache-store audit against the remote cache policy -- implemented as a "
+        "distinct command, 'ci-lint act audit --store-dir <dir>' (round M2-20), not folded into "
+        "precheck because it needs a real local act cache-store path",
+    ),
 )
 
 # The subset of LOCAL_SKIPPED_CHECKS that `--live` actually covers (round
@@ -89,8 +96,8 @@ GROUP_LABELS: dict[int, str] = {
     5: "secrets (SEC-001/002)",
     6: "layout (LAYOUT-001)",
     7: "tests & units (RUST-005/011/012/013)",
-    8: "packaging (PKG-003/004/005)",
-    9: "cache static (CACHE-001/002/003/004)",
+    8: "packaging (PKG-001/002/003/004/005)",
+    9: "cache static (CACHE-001/002/003/004/007)",
     10: "lint pin (CT-004, checked inside group 2)",
     11: "release gate (REL-001/002)",
     12: "ci-pre.yml shape + PR cache keys (GEN-014..018, CACHE-013)",
@@ -136,6 +143,8 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(check_group8(ci, repo_root))
         findings9, cache_arithmetic = check_group9(ci, repo_root)
         all_findings.extend(findings9)
+        all_findings.extend(check_cache_007_static(ci, repo_root))
+        all_findings.extend(check_group_bin(ci, repo_root))
         all_findings.extend(check_group11(ci, repo_root))
         all_findings.extend(check_group12(ci, repo_root))
         all_findings.extend(check_group13(ci, repo_root))

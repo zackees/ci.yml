@@ -1,0 +1,151 @@
+# ci.toml — this repo's CI contract. Checked and planned by ci-lint (zackees/ci.yml).
+# Nothing here generates YAML: it bounds what the YAML may do and decides what each run selects.
+schema  = 3
+profile = "rust-pypi-app"
+linter  = "zackees/ci.yml@<40-hex-sha>"      # the exact ci-lint commit precheck runs
+
+# ── Platforms ────────────────────────────────────────────────────────────────
+# Every platform compiles on linux (Soldr cross) and executes on its own runner.
+# Each id generates a [ci-<id>] tag; `group` generates [ci-<group>].
+[platforms]
+linux-x64     = { target = "x86_64-unknown-linux-gnu",  runs-on = "ubuntu-24.04",     group = "linux",   wheel = "manylinux_2_17" }
+linux-arm64   = { target = "aarch64-unknown-linux-gnu", runs-on = "ubuntu-24.04-arm", group = "linux",   wheel = "manylinux_2_17" }
+windows-x64   = { target = "x86_64-pc-windows-msvc",    runs-on = "windows-2025",     group = "windows" }
+windows-arm64 = { target = "aarch64-pc-windows-msvc",   runs-on = "windows-11-arm",   group = "windows" }
+macos-arm64   = { target = "aarch64-apple-darwin",      runs-on = "macos-15",         group = "macos" }
+macos-x64     = { target = "x86_64-apple-darwin",       runs-on = "macos-15-intel",   group = "macos" }
+
+# ── Python packaging (§13) ───────────────────────────────────────────────────
+[python]
+backend = "soldr"                   # the only PEP 517 backend; maturin only as Soldr's own dependency
+cli     = { name = "template-cli", crate = "template-cli", native = true }   # on PATH = the Rust binary
+abi3    = "cp310"                   # one wheel per platform
+pythons = ["3.11", "3.14"]          # PR smoke uses the first (floor); release smokes all
+
+# ── Rust workspace discipline (§12) ──────────────────────────────────────────
+[rust]
+public  = "crates/template"         # the amalgam we ship: re-exports + dep: feature wiring only
+private = "crates/private/*"        # publish = false, no [features], no cfg(feature); each tested once
+ship    = [[], ["json"]]            # the ONLY amalgam feature sets ever compiled
+
+[rust.tests]                        # test functions are free; test binaries are declared and capped
+max-binary = "40MB"
+max-total  = "150MB"
+# "<crate>:lib" = the lib unit-test harness; "<crate>:bin:<name>" = a bin's harness;
+# "<crate>:test:<name>" = an integration-test target (tests/<name>.rs or tests/<name>/main.rs)
+binaries = [
+  "template-core:lib",
+  "template-platform:lib",
+  "template-json:lib",
+  "template:test:api",
+  "template-cli:test:cli",
+]
+
+# ── Lint lanes ───────────────────────────────────────────────────────────────
+[lint.dylint]
+targets = "all-platforms"           # one check-only pass per declared target, all on Linux
+shape   = "multi-target"            # "multi-target" | "sequential" | "per-target-jobs"; round 3B measured multi-target 23-37% faster than sequential
+budget  = { warm = "115s", cold = "235s" }  # template round-3B measurements
+
+# ── Suites ───────────────────────────────────────────────────────────────────
+# Each id generates [ci-test-<id>] and [no-test-<id>]. A skip inside a required suite is a failure.
+[suites]
+unit        = { run = "ci/test.py unit",        required = true }
+smoke       = { run = "ci/wheel.py smoke",      required = true }    # clean venv: import + native CLI
+integration = { run = "ci/test.py integration" }
+init        = { run = "ci/test.py init",        cache = "none" }     # from zero: proves caches mask nothing
+perf        = { run = "ci/perf.py",             kind = "bench", gating = false }
+
+# ── Flows ────────────────────────────────────────────────────────────────────
+[flow.pr]                                   # every PR push; tags compose on top
+platforms = ["linux-x64"]
+suites    = ["unit", "smoke"]
+dylint    = "all-platforms"
+budget    = { critical-path = "8m" }
+
+[flow.main]
+extends   = "pr"
+cache     = "write"
+pre-prune = true                    # CACHE-004: without this, worst case (incl. the lockfile-change
+                                     # peak) exceeds [cache].budget; see docs/ci-toml.md.
+
+[flow.release]
+platforms = "all"
+suites    = "all"
+wheels    = "all"
+publish   = "pypi"
+
+[flow.nightly]
+extends   = "release"
+schedule  = "daily"
+cache     = "write"
+janitor   = true
+publish   = "none"
+pre-prune = true
+
+# ── Tags that are not derived ────────────────────────────────────────────────
+[tags]
+ci-full        = { add = { platforms = "all", suites = ["integration"] } }
+ci-perf        = { add = { suites = ["perf"] } }
+ci-cache-save  = { cache = "pr-base" }                # allow a capped PR-scoped base save (lockfile/toolchain change)
+no-test        = { remove = { suites = "tests" } }    # any removal => not mergeable
+release        = { flow = "release", publish = "rehearsal" }
+
+# ── Caches (§6) ──────────────────────────────────────────────────────────────
+[cache]
+budget   = "9GB"                    # proven statically: steady + lockfile peak + PR budget
+write-on = ["main", "nightly"]      # base layers: default branch only (setup-soldr#527, #5 RUST-010)
+never    = ["linked-tests", "nextest-archives", "wheels", "incremental", "target-dir", "perf-results"]
+retired  = ["solo-toolchain", "cook-delta-v2"]
+pr       = { mode = "delta", families = ["compile"], max-per-pr = "128MB", budget = "1GB", trim = "on-close" }
+
+[cache.family]
+registry   = { via = "setup-soldr:cargo-registry",  max = "100MB", lockfile = true, per = "none" }
+deps       = { via = "setup-soldr:cook",            max = "150MB", lockfile = true, per = "none" }
+compile    = { via = "setup-soldr:build-cache",     max = "150MB", lockfile = true, per = "platform", min = "1MB" }
+sdk        = { via = "setup-soldr:cross-targets",   max = "500MB", per = "cross-platform" }
+dylint     = { via = "setup-soldr:dylint",          max = "750MB", per = "none", min = "1MB" }               # tool/driver/foundation, one host (round-4A: the live template saves this today, undeclared)
+dylint-out = { via = "setup-soldr:dylint-output",   max = "150MB", lockfile = true, per = "none", min = "1MB" }  # one generation per lockfile, not per target (round-4B measured)
+soldr-mini = { via = "setup-soldr:soldr-mini",      max = "30MB",  per = "none", min = "1MB" }  # round-4A: ditto
+uv         = { via = "setup-uv", max = "100MB", per = "platform" }   # round-4A amendment: astral-sh/setup-uv's own built-in cache; the template's setup-uv step must set its own save-cache input so it saves ONLY on writer flows (CACHE-003 applies to it on a PR ref exactly like a base layer)
+
+# ── Local runs: bosn → act (§11) ─────────────────────────────────────────────
+[local]
+runner = "bosn-act"
+lanes  = ["precheck", "fast", "dylint"]
+cache  = "machine"
+
+# ── Allowlists ───────────────────────────────────────────────────────────────
+[allow]
+workflows         = { "ci.yml" = ["pull_request", "push:main", "schedule", "workflow_dispatch"], "ci-pre.yml" = ["workflow_call"] }
+actions           = ["actions/checkout", "actions/upload-artifact", "actions/download-artifact", "actions/cache", "zackees/setup-soldr", "astral-sh/setup-uv"]
+# "plan" (round-4B): the wrapper's save-cache input must be an expression derived from the
+# precheck plan (needs.precheck.outputs.cache_save, passed through as inputs.save-cache), never a
+# literal -- saves only fire when plan.cache_mode == "write".
+setup-soldr       = { only-in = ".github/actions/soldr", require = { solo-toolchain-cache = "false", cook-delta = "false", save-cache = "plan" } }
+tools             = ["soldr", "uv", "python3", "yq", "git"]
+secrets           = []
+platform-selector = "crates/private/template-platform/src/lib.rs"   # the ONE file allowed to select on host
+platform-code     = ["crates/private/template-platform/src/platforms/**", "src/template_python_rust_cmd/platforms/**"]
+# Round-4B (SEC-002 refinement): top-level permissions are capped at contents:read + actions:read
+# (free on every job too); any wider per-job grant must be listed here by job id.
+permissions       = { "id-token: write" = ["publish"], "actions: write" = ["cache-maint", "precheck", "fast"] }
+# Round-4B (CACHE-001 refinement): actions/cache (and /save, /restore) may ONLY appear inside this
+# one SHA-pinned composite-action wrapper; its own key: input must be dynamic (CACHE-002), never a
+# literal -- see .github/actions/cache/action.yml. The wrapper location defaults to
+# `.github/actions/cache`, so (like the reference template) the table is omitted; declare
+# `cache-actions = { only-in = "<dir>" }` only to move the wrapper elsewhere.
+# Round-4B: astral-sh/setup-uv's own save-cache input is checked the same way as setup-soldr's
+# above, on every use of the action (it has no single wrapper location).
+setup-uv          = { require = { save-cache = "plan" } }
+
+[publish]
+pypi = { auth = "oidc", environment = "pypi", mode = "mock" }
+
+# ── Exceptions: declared, reported on EVERY run, fail once expired ──────────
+[[exceptions]]
+rule    = "GEN-005"
+path    = "ci.sh"
+reason  = "Gate launcher kept for now (owner-approved); replace with a Python entry point."
+issue   = "https://github.com/zackees/template-python-rust-cmd/issues/15"
+expires = "2026-12-31"

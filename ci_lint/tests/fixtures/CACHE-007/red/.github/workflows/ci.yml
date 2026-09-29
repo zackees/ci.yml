@@ -1,0 +1,14 @@
+name: ci
+on:
+  pull_request: {}
+jobs:
+  fast:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/cache@0000000000000000000000000000000000000a  # v4.0.0
+        with:
+          key: ${{ steps.plan.outputs.cache_key }}
+          path: |
+            target/
+            target/x86_64-unknown-linux-gnu/incremental/
