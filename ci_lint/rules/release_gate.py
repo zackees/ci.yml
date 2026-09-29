@@ -203,6 +203,10 @@ def _gitignore_covers_soldr_side_files(repo_root: Path) -> bool:
         if not pattern or pattern.startswith("#"):
             continue
         pattern = pattern.rstrip("/")
+        # A root-anchored "/target.soldr-*" is the precise form: setup-soldr
+        # writes its side files only at the checkout root (ci.yml#133).
+        if pattern.startswith("/") and not pattern.startswith("//"):
+            pattern = pattern[1:]
         if pattern in ("target.soldr-*", "target.soldr*", "target.*"):
             return True
         if pattern.startswith("**/") and pattern[3:] in ("target.soldr-*", "target.soldr*"):
