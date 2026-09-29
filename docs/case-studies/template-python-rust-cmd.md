@@ -268,6 +268,53 @@ The Dylint lane went from 153 s to 125 s to 49 s:
 - **setup-soldr#543 (open):** the build-cache "tiny-delta-skip" logged
   `0 new compile(s)` and skipped the save after ~130 fresh crates on the
   clud-scale push (run 36514690030, `fast`).
+- **`preserve-source-mtimes` re-probe, leaf-crate edit (ci.yml#41, round
+  M2-16, PR #47):** #41 asked for a probe shaped to actually exercise mtime
+  replay, since PR #29's D3 probe edited the workspace's root crate
+  (`template-core`), which forces the whole downstream chain to recompile
+  regardless of the flag. PR #47 instead edits only
+  `crates/template-cli/src/main.rs` (a doc comment) -- `template-cli` is a
+  true leaf, nothing else in the workspace depends on it -- with
+  `preserve-source-mtimes: "true"` on both the `fast` and `dylint` jobs, then
+  the same commit was re-run to test replay against a saved snapshot.
+  - Run 36519575251 (first push), `fast` job 109249344735: `cook-cache-base:
+    no entry for key ...` (MISS, first run in this PR); `source-mtime-replay:
+    snapshot file not found ..., skipping`. All 5 workspace crates compiled
+    (`template-platform`, `template-core`, `template-json`, `template`,
+    `template-cli`), as expected on a cold cache. `fast` took 1m30s, `dylint`
+    59s, `CI OK` green. At job end: `source-mtime-snapshot: wrote
+    .../setup-soldr-source-mtimes.json scanned=34 hashed=34 skipped=0`.
+  - Same run re-triggered (`gh run rerun 36519575251`) same commit, `fast`
+    job 109381182606: `cook-cache-base: no entry for key
+    cook-base-v2-linux-x64-glibc-rustc1.95.0-fnone-l40d011b8bf414a69-soldrv0.9.26`
+    (MISS again) and `0/5 exact-hit 1/5 any-hit` (only the cargo-registry
+    layer hit). All 5 workspace crates compiled again, plus `template-py`
+    which had not shown as a separate "Compiling" line in the first run's
+    grep window. No `source-mtime-replay` log line appears at all in the
+    rerun (not even a "skipping" line) -- the replay path was not exercised.
+  - **Root cause:** this repo's `[cache]` policy in `ci.toml`/`ci.yml` only
+    saves a `cook-base-*` build-cache layer on the default branch; PR runs
+    use `cook-delta` only, and this workflow's PR jobs additionally run with
+    `cook-delta=false` set by the delta-cache gate (`ci/cache_delta.py`),
+    so a PR run -- including a same-commit rerun of a PR run -- never has a
+    saved base layer to restore, and therefore never has a source-mtime
+    snapshot artifact tied to a *restored* base layer to replay onto. The
+    flag's mtime-preservation mechanism is scoped to the `cook-base`
+    restore path, which this probe shape cannot reach from a PR context.
+  - **Conclusion:** the probe is evidence, but it is inconclusive for the
+    question #41 actually asked (does mtime replay limit recompilation to
+    the edited leaf crate). It does confirm `preserve-source-mtimes: true`
+    remains *correct* here too (both runs green, no `CI OK` regression,
+    same test/lint results as `false`), consistent with round 4C's "correct,
+    not faster" finding. A conclusive replay test needs a base-cache-saving
+    context: two pushes to a real default branch (or a branch configured to
+    save `cook-base`), the second push touching only a leaf crate, comparing
+    the second push's compiled-crate list against the first. That is out of
+    scope for a template PR probe and is left as a follow-up if the flag is
+    ever proposed for `true` on `main`. Given the flag has never measured a
+    win (4C: correct-not-faster; M2-16: cache layer unreachable from PR
+    context), the template's shipped default stays `preserve-source-mtimes:
+    "false"` (PR #34); PR #47 is evidence-only and was not merged.
 
 **Owner decisions recorded on issue #6 (2026-09-28).** The first implementation
 of these is in zackees/soldr; the template is not covered here.
