@@ -198,6 +198,25 @@ class ClassifyGenerationSuffixedDeltaTest(unittest.TestCase):
         assert ci is not None, findings
         self.ci = ci
 
+    def test_delimited_pr_delta_key_is_classified_as_a_delta(self) -> None:
+        # zackees/ci.yml#23 §5: build_delta_key now emits `delta-v1-pr-<N>-...`.
+        entry = CacheEntry(
+            id=2,
+            ref="refs/pull/36/merge",
+            key="delta-v1-pr-36-compile-linux-x64-ba37ca145-g5601e597",
+            version="v1",
+            size_in_bytes=1_224_921,
+            created_at="2026-09-29T02:49:27Z",
+            last_accessed_at="2026-09-29T02:49:27Z",
+        )
+        (classified,) = classify(self.ci, [entry])
+        self.assertTrue(classified.is_delta, "delimited pr-<N> delta key must classify as a delta, not CACHE-001")
+        assert classified.delta is not None
+        self.assertEqual(36, classified.delta.pr)
+        self.assertEqual("compile", classified.delta.family)
+        self.assertEqual("linux-x64", classified.delta.platform)
+        self.assertEqual(36, classified.pr)
+
     def test_generation_suffixed_key_is_still_classified_as_a_delta(self) -> None:
         entry = CacheEntry(
             id=1,

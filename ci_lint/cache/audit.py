@@ -68,7 +68,8 @@ _RUST_004_JOBS_PER_PAGE = 50
 TINY_BYTES = 1024
 BUDGET_WARN_RATIO = 0.90
 
-# `delta-v1-pr<N>-<family>-<platform>-b<base8>[-g<gen8>]` -- family AND
+# `delta-v1-pr-<N>-<family>-<platform>-b<base8>[-g<gen8>]` (#23 §5 delimited
+# form; the legacy `delta-v1-pr<N>-` spelling still parses) -- family AND
 # platform ids both legitimately contain hyphens (e.g. "linux-x64"), so a
 # single blind regex with a `[^-]+` platform group mis-splits them
 # (round-4A: caught by ci_lint/tests/test_cache_audit.py against a
@@ -88,7 +89,7 @@ BUDGET_WARN_RATIO = 0.90
 # but not otherwise used by classification: the delta's identity for
 # staleness/closed-PR purposes is still (pr, family, platform, base8).
 DELTA_OUTER_RE = re.compile(
-    r"^delta-v1-pr(?P<pr>\d+)-(?P<rest>.+)-b(?P<base8>[0-9a-f]{8})(?:-g(?P<gen8>[0-9a-f]{6,40}))?$"
+    r"^delta-v1-pr-?(?P<pr>\d+)-(?P<rest>.+)-b(?P<base8>[0-9a-f]{8})(?:-g(?P<gen8>[0-9a-f]{6,40}))?$"
 )
 
 # CACHE-006 "superseded": two entries of the same declared family whose
