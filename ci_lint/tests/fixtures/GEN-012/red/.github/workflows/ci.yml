@@ -1,0 +1,21 @@
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SOLDR_JOBS: "4"
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - env:
+          CARGO_BUILD_JOBS: "1"
+        run: python3 ci/build.py
+      - run: cargo build -j 2
