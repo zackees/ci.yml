@@ -79,7 +79,7 @@ GROUP_LABELS: dict[int, str] = {
     1: "contract (CT-001..006, TAG-001, TAG-002)",
     2: "workflows (GEN-001/002/008, TAG-003, SEC-003/004, RUN-001, WF-001..003, CT-004)",
     3: "shell budget (GEN-005)",
-    4: "tools (TOOL-001/002, CACHE-009, RUST-002, GEN-004)",
+    4: "tools (TOOL-001/002/003, CACHE-009, RUST-002, GEN-004)",
     5: "secrets (SEC-001/002)",
     6: "layout (LAYOUT-001)",
     7: "tests & units (RUST-005/011/012)",
