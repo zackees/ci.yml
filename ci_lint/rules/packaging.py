@@ -430,11 +430,21 @@ def check_pkg_002(repo_root: Path) -> list[Finding]:
     ]
 
 
+# zackees/ci.yml#90: PKG-004 (soldr is the only PEP 517 backend) is a
+# requirement of the profiles that ship a native wheel -- today only
+# `rust-pypi-app` (docs/ci-toml.md: the only profile with enforced
+# requirements). A `rust-library` repo may carry an unrelated pure-Python
+# package (kernal-api: a hatchling `python/kernal_api`) that builds no
+# native wheel, so its pyproject backend is not this rule's business.
+NATIVE_WHEEL_PROFILES: frozenset[str] = frozenset({"rust-pypi-app"})
+
+
 def check_group8(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(check_pkg_001(ci))
     findings.extend(check_pkg_002(repo_root))
-    findings.extend(check_pkg_004(repo_root))
+    if ci.profile in NATIVE_WHEEL_PROFILES:
+        findings.extend(check_pkg_004(repo_root))
     findings.extend(check_pkg_003(ci, repo_root))
     findings.extend(check_pkg_005(repo_root))
     findings.extend(check_pkg_007(repo_root))

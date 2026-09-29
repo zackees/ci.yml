@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import unittest
 
-from ci_lint.rules.packaging import check_pkg_003, check_pkg_004, check_pkg_005
+from ci_lint.rules.packaging import check_group8, check_pkg_003, check_pkg_004, check_pkg_005
 from ci_lint.schema import load_ci_toml
 from ci_lint.tests.helpers import fixture
 
@@ -14,6 +14,19 @@ class PackagingFixtureTest(unittest.TestCase):
     def test_pkg_004_maturin_backend(self) -> None:
         self.assertIn("PKG-004", [f.rule for f in check_pkg_004(fixture("PKG-004", "red"))])
         self.assertNotIn("PKG-004", [f.rule for f in check_pkg_004(fixture("PKG-004", "green"))])
+
+    def test_pkg_004_scoped_to_native_wheel_profiles(self) -> None:
+        """zackees/ci.yml#90: the same hatchling pyproject is PKG-004 under
+        `rust-pypi-app` (RED) but not under `rust-library` (GREEN), which
+        ships no native wheel (kernal-api's pure-Python package)."""
+
+        for name, expect in (("red-rust-pypi-app", True), ("green-rust-library", False)):
+            with self.subTest(fixture=name):
+                repo = fixture("PKG-004", name)
+                ci, findings = load_ci_toml(repo)
+                assert ci is not None, findings
+                rules = [f.rule for f in check_group8(ci, repo)]
+                self.assertEqual(expect, "PKG-004" in rules, rules)
 
     def test_pkg_003_cli_shadowed_by_python_script(self) -> None:
         repo = fixture("PKG-003", "red")
