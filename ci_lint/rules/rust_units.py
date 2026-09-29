@@ -12,6 +12,7 @@ from pathlib import Path
 from ci_lint.cargo_scan import CargoCrate, discover_workspace, expected_target_names, has_any_rust_test_attr, has_cfg_feature
 from ci_lint.finding import Finding
 from ci_lint.globs import matches_any
+from ci_lint.rules.soldr_pin import check_rust_013
 from ci_lint.rules.tools import _discover_python_command_files, _extract_ast_commands, ENV_ASSIGN_RE, _iter_run_steps, find_commands
 from ci_lint.schema import CiToml
 
@@ -232,4 +233,5 @@ def check_group7(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings.extend(check_rust_012(ci, crates, repo_root))
     findings.extend(check_rust_005(ci, crates))
     findings.extend(check_rust_011(ci, crates, repo_root))
+    findings.extend(check_rust_013(ci, repo_root))
     return findings

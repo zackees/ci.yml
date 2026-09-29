@@ -1,0 +1,10 @@
+name: soldr
+description: Wrapper around zackees/setup-soldr with mandatory inputs pinned.
+runs:
+  using: composite
+  steps:
+    - uses: zackees/setup-soldr@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v0
+      with:
+        solo-toolchain-cache: "false"
+        cook-delta: "false"
+        save-cache: "auto"

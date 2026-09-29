@@ -82,7 +82,7 @@ GROUP_LABELS: dict[int, str] = {
     4: "tools (TOOL-001/002/003, CACHE-009, RUST-002, GEN-004)",
     5: "secrets (SEC-001/002)",
     6: "layout (LAYOUT-001)",
-    7: "tests & units (RUST-005/011/012)",
+    7: "tests & units (RUST-005/011/012/013)",
     8: "packaging (PKG-003/004/005)",
     9: "cache static (CACHE-001/002/003/004)",
     10: "lint pin (CT-004, checked inside group 2)",
