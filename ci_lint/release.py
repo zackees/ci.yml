@@ -173,6 +173,7 @@ def verify_staged_artifacts(
     candidate_sha: str,
     ci_toml_digest: str,
     smoke_dir: Path | None = None,
+    soldr_floor: tuple[int, int, int] | None = None,
 ) -> ReleaseVerifyReport:
     if not SHA_RE.match(candidate_sha):
         raise ReleaseVerifyError(f"--sha {candidate_sha!r} is not a 40-hex-char commit SHA")
@@ -287,7 +288,7 @@ def verify_staged_artifacts(
     sdist_path = staged.sdist[0] if staged.sdist is not None else None
     all_staged_wheels = [w for lst in matched.values() for w in lst]
     for i, wheel in enumerate(all_staged_wheels):
-        report = check_wheel(ci, wheel.path, sdist_path if i == 0 else None)
+        report = check_wheel(ci, wheel.path, sdist_path if i == 0 else None, soldr_floor=soldr_floor)
         findings.extend(report.findings)
 
     if smoke_dir is not None:

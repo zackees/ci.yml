@@ -14,11 +14,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from ci_lint.finding import Finding
 from ci_lint.runtime.wheel import (
     check_installed,
     check_magic,
     check_wheel,
     parse_wheel_filename,
+    soldr_requires_floor,
 )
 from ci_lint.schema import load_ci_toml
 from ci_lint.tests.helpers import FIXTURES
@@ -173,12 +175,38 @@ class WheelCheckTest(unittest.TestCase):
         report = check_wheel(self.ci, whl)
         self.assertTrue(any(f.rule == "PKG-003" and "console_scripts" in f.message for f in report.findings))
 
-    def test_generator_not_mentioning_soldr_is_needs_review_not_violation(self) -> None:
-        whl = _build_wheel(self.tmp_path, generator="bdist_wheel (0.42.0)")
-        report = check_wheel(self.ci, whl)
-        pkg004 = [f for f in report.findings if f.rule == "PKG-004" and "Generator" in f.message]
+    def _generator_findings(self, generator: str, floor_fixture: str | None) -> list[Finding]:
+        whl = _build_wheel(self.tmp_path, generator=generator)
+        floor = soldr_requires_floor(FIXTURES / "PKG-004" / floor_fixture) if floor_fixture else None
+        report = check_wheel(self.ci, whl, soldr_floor=floor)
+        return [f for f in report.findings if f.rule == "PKG-004" and "Generator" in f.message]
+
+    def test_generator_without_known_floor_is_needs_review(self) -> None:
+        pkg004 = self._generator_findings("bdist_wheel (0.42.0)", None)
         self.assertEqual(1, len(pkg004))
         self.assertEqual("needs_review", pkg004[0].status.value)
+
+    def test_generator_below_stamp_floor_is_needs_review(self) -> None:
+        pkg004 = self._generator_findings("maturin (1.14.1)", "needs-review-pre-stamp-floor")
+        self.assertEqual(1, len(pkg004))
+        self.assertEqual("needs_review", pkg004[0].status.value)
+        self.assertIn("soldr>=0.9.26", pkg004[0].fix)
+
+    def test_red_unstamped_generator_at_stamp_floor_is_violation(self) -> None:
+        # ci.yml#71: soldr >= 0.9.26 stamps its Generator, so a bare maturin
+        # Generator under that floor means soldr was bypassed.
+        pkg004 = self._generator_findings("maturin (1.14.1)", "red-generator-floor")
+        self.assertEqual(1, len(pkg004))
+        self.assertEqual("violation", pkg004[0].status.value)
+
+    def test_green_soldr_stamped_generator_at_stamp_floor_passes(self) -> None:
+        pkg004 = self._generator_findings("soldr 0.9.26 (maturin (1.14.1-post.1))", "green-generator-floor")
+        self.assertEqual([], pkg004)
+
+    def test_soldr_requires_floor_parses_operators(self) -> None:
+        self.assertEqual((0, 9, 26), soldr_requires_floor(FIXTURES / "PKG-004" / "red-generator-floor"))
+        self.assertEqual((1, 2, 3), soldr_requires_floor(FIXTURES / "PKG-004" / "green"))
+        self.assertIsNone(soldr_requires_floor(self.tmp_path))
 
     def test_wrong_abi_tag_is_pkg_004(self) -> None:
         whl = _build_wheel(self.tmp_path, abi_tag="cp310")

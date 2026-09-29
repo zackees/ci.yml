@@ -118,7 +118,7 @@ from ci_lint.runtime.tests_size import to_json_dict as tests_size_to_json_dict
 from ci_lint.runtime.units import compute_units
 from ci_lint.runtime.units import render_text as render_units_text
 from ci_lint.runtime.units import to_json_dict as units_to_json_dict
-from ci_lint.runtime.wheel import check_installed, check_wheel
+from ci_lint.runtime.wheel import check_installed, check_wheel, soldr_requires_floor
 from ci_lint.runtime.wheel import installed_check_to_json_dict, wheel_check_to_json_dict
 from ci_lint.runtime.wheel import render_installed_check, render_wheel_check
 from ci_lint.schema import CiToml, load_ci_toml
@@ -547,7 +547,7 @@ def _cmd_wheel_check(args: argparse.Namespace) -> int:
     if ci is None:
         return 1
     sdist_path = Path(args.sdist) if args.sdist else None
-    report = check_wheel(ci, Path(args.wheel), sdist_path)
+    report = check_wheel(ci, Path(args.wheel), sdist_path, soldr_floor=soldr_requires_floor(repo_root))
     print(json.dumps(wheel_check_to_json_dict(report), indent=2) if args.json else render_wheel_check(report))
     return 1 if any(f.status == Status.VIOLATION for f in report.findings) else 0
 
@@ -714,6 +714,7 @@ def _cmd_release_verify(args: argparse.Namespace) -> int:
             candidate_sha=args.sha,
             ci_toml_digest=ci_toml_digest,
             smoke_dir=smoke_dir,
+            soldr_floor=soldr_requires_floor(repo_root),
         )
     except ReleaseVerifyError as exc:
         print(f"ci-lint release verify: {exc}", file=sys.stderr)
