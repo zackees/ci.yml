@@ -31,6 +31,27 @@ class ToolFixtureTest(unittest.TestCase):
         rules = [f.rule for f in check_tool_rules_workflows(fixture("TOOL-001", "green"))]
         self.assertNotIn("TOOL-001", rules)
 
+    def test_rust_001_bare_rust_toolchain_is_soldr_bypass(self) -> None:
+        # M2-21 (ci.yml#44): RUST-001 fires alongside TOOL-001 for a bare
+        # cargo/rustc/rustup/maturin invocation.
+        rules = [f.rule for f in check_tool_rules_workflows(fixture("RUST-001", "red"))]
+        self.assertIn("RUST-001", rules)
+        rules = [f.rule for f in check_tool_rules_workflows(fixture("RUST-001", "green"))]
+        self.assertNotIn("RUST-001", rules)
+
+    def test_rust_001_setup_soldr_outside_wrapper_is_soldr_bypass(self) -> None:
+        repo = fixture("RUST-001", "red-outside-wrapper")
+        ci, _ = load_ci_toml(repo)
+        assert ci is not None
+        rules = [f.rule for f in check_cache_009(ci, repo)]
+        self.assertIn("RUST-001", rules)
+        self.assertIn("CACHE-009", rules)
+        repo = fixture("CACHE-009", "green")
+        ci, _ = load_ci_toml(repo)
+        assert ci is not None
+        rules = [f.rule for f in check_cache_009(ci, repo)]
+        self.assertNotIn("RUST-001", rules)
+
     def test_tool_002_missing_locked(self) -> None:
         rules = [f.rule for f in check_tool_rules_workflows(fixture("TOOL-002", "red"))]
         self.assertIn("TOOL-002", rules)
@@ -141,7 +162,7 @@ class ToolUnitTest(unittest.TestCase):
         from ci_lint.rules.tools import _tool_findings_for_commands
 
         findings = _tool_findings_for_commands([["cargo", "build", "--locked"]], "x.yml", "loc")
-        self.assertEqual(["TOOL-001"], [f.rule for f in findings])
+        self.assertEqual(["TOOL-001", "RUST-001"], [f.rule for f in findings])
 
     def test_ast_scan_finds_subprocess_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

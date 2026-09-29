@@ -115,6 +115,20 @@ def _tool_findings_for_commands(commands: list[list[str]], path: str, loc: str) 
                         "'soldr wheel ...') or through uv for Python packaging; never call it bare",
                     )
                 )
+                if cmd in ("cargo", "rustc", "rustup", "maturin"):
+                    # M2-21 (ci.yml#44): a bare Rust toolchain invocation is
+                    # also a Soldr bypass -- record it under RUST-001 too, so
+                    # a Rust-scoped audit finds it without cross-referencing
+                    # TOOL-001's generic banned-tool list.
+                    findings.append(
+                        Finding(
+                            rule="RUST-001",
+                            path=path,
+                            message=f"{loc}: bare '{cmd}' bypasses Soldr's Rust toolchain wrapper",
+                            fix=f"wrap this through soldr ('soldr cargo {cmd} ...') so the pinned "
+                            "toolchain, cache, and Dylint wiring apply",
+                        )
+                    )
         if (
             cargo_tokens is not None
             and len(cargo_tokens) > 1
@@ -324,6 +338,16 @@ def check_cache_009(ci: CiToml, repo_root: Path) -> list[Finding]:
                         path=path,
                         message=f"{loc}: zackees/setup-soldr is called outside the allowed wrapper "
                         f"location '{only_in}' (found in '{file_dir}')",
+                        fix=f"move this call into the wrapper composite action at {only_in}/action.yml "
+                        f"and call that wrapper from {path} instead",
+                    )
+                )
+                findings.append(
+                    Finding(
+                        rule="RUST-001",
+                        path=path,
+                        message=f"{loc}: zackees/setup-soldr called outside the sanctioned wrapper "
+                        f"'{only_in}' -- this is a Soldr bypass",
                         fix=f"move this call into the wrapper composite action at {only_in}/action.yml "
                         f"and call that wrapper from {path} instead",
                     )
