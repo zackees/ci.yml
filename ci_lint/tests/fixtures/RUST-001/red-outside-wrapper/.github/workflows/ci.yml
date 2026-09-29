@@ -1,0 +1,19 @@
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - uses: zackees/setup-soldr@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v0
+        with:
+          solo-toolchain-cache: "false"
+          cook-delta: "false"
+          save-cache: "auto"

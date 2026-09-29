@@ -25,6 +25,8 @@ from ci_lint.rules.ci_pre import check_group12
 from ci_lint.rules.contract import check_ct_006, check_tag_001, check_tag_002
 from ci_lint.rules.layout import check_group6
 from ci_lint.rules.packaging import check_group8
+from ci_lint.rules.profile_required import check_group13
+from ci_lint.rules.py_benchmark import check_group14
 from ci_lint.rules.release_gate import check_group11
 from ci_lint.rules.rust_units import check_group7
 from ci_lint.rules.secrets_rules import check_group5
@@ -136,6 +138,8 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(findings9)
         all_findings.extend(check_group11(ci, repo_root))
         all_findings.extend(check_group12(ci, repo_root))
+        all_findings.extend(check_group13(ci, repo_root))
+        all_findings.extend(check_group14(ci, repo_root))
 
         outcome = apply_exceptions(ci, all_findings)
         all_findings = outcome.findings
