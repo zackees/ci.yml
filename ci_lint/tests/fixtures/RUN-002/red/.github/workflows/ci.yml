@@ -1,0 +1,46 @@
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  precheck:
+    uses: ./.github/workflows/ci-precheck.yml
+  # RUN-002 red: cross-compiles on ubuntu-24.04 for every lane's target,
+  # but the display name says nothing about the build host -- a glance at
+  # the Checks tab makes "platform-build (windows-x64)" look native.
+  platform-build:
+    needs: precheck
+    name: platform-build (${{ matrix.lane.id }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        lane: ${{ fromJSON(needs.precheck.outputs.platform_lanes_todo_json) }}
+    steps:
+      - run: python3 ci/platform_build.py
+  # RUN-002 red: executes natively on the lane's own runner, but the
+  # display name doesn't say so either.
+  platform-run:
+    needs: [precheck, platform-build]
+    name: platform-run (${{ matrix.lane.id }})
+    runs-on: ${{ matrix.lane.runs_on }}
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        lane: ${{ fromJSON(needs.precheck.outputs.platform_lanes_todo_json) }}
+    steps:
+      - run: python3 ci/platform_run.py
