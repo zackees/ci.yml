@@ -1,0 +1,21 @@
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+jobs:
+  precheck:
+    uses: ./.github/workflows/ci-precheck.yml
+  # PKG-007 red (zackees/ci.yml#19): the release Linux wheel is built with
+  # maturin's --zig cross path (not 'soldr wheel --release'), on an arm64
+  # runner, with no glibc verification step, and with --host-glibc passed
+  # unrecorded. Each condition alone would be a separate PKG-007 finding;
+  # this fixture stacks all four so the RED case is unambiguous.
+  release-linux-x64:
+    needs: precheck
+    name: release-linux-x64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - run: maturin build --release --target x86_64-unknown-linux-gnu --zig --host-glibc 2.28 --out dist/release-linux-x64

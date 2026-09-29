@@ -1,7 +1,10 @@
-"""Group 8: packaging (PKG-003, PKG-004, PKG-005).
+"""Group 8: packaging (PKG-003, PKG-004, PKG-005, PKG-007).
 
 Soldr is the only PEP 517 backend, the wheel bundles the native CLI as the
-`PATH` command, and a missing native extension must fail loudly.
+`PATH` command, and a missing native extension must fail loudly. PKG-007
+(zackees/ci.yml#19) is the release-Linux-wheel glibc-2.17 floor: enforced by
+the build tool (soldr's catalogue toolchain), verified here statically
+against the workflow that drives a release build.
 """
 
 from __future__ import annotations
@@ -14,8 +17,98 @@ from pathlib import Path
 from ci_lint.finding import Finding
 from ci_lint.repo_files import list_repo_files
 from ci_lint.schema import CliBinary, CiToml
+from ci_lint.workflow_scan import as_dict, jobs_of, load_workflows, steps_of
+from ci_lint.yaml_io import LoadStatus
 
 SOLDR_PIN_RE = re.compile(r"^soldr\s*(==|>=|~=|>)")
+
+# PKG-007 detection: a job step's `run:` text that builds a release wheel
+# for a `*-unknown-linux-gnu` target -- the case zackees/soldr#3432 /
+# zackees/ci.yml#19 covers. A bare `--target` + `--release` pair is enough
+# to identify "this job builds a Linux release wheel", regardless of
+# whether it goes through soldr, a wrapper script (`ci/release.py build`),
+# or (the violation this rule exists to catch) a bypass like maturin+zig.
+_LINUX_GNU_TARGET_RE = re.compile(r"-unknown-linux-gnu\b")
+_RELEASE_FLAG_RE = re.compile(r"--release\b")
+_SOLDR_WHEEL_RE = re.compile(r"\bsoldr\s+wheel\b|\brelease\.py\s+build\b", re.IGNORECASE)
+_BARE_MATURIN_ZIG_RE = re.compile(r"\bmaturin\b[^\n]*--zig\b|--zig\b[^\n]*\bmaturin\b", re.IGNORECASE)
+_GLIBC_VERIFY_RE = re.compile(r"glibc[-_ ]?check|verify_wheel_glibc|--max-glibc", re.IGNORECASE)
+_HOST_GLIBC_RE = re.compile(r"--host-glibc\b")
+_ARM_RUNNER_RE = re.compile(r"arm", re.IGNORECASE)
+
+
+def check_pkg_007(repo_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    for wf in load_workflows(repo_root):
+        if wf.status != LoadStatus.OK or wf.document is None:
+            continue
+        doc = as_dict(wf.document)
+        for job_id, job in jobs_of(doc).items():
+            run_texts = [
+                s.get("run") for s in steps_of(job) if isinstance(s.get("run"), str)
+            ]
+            joined = "\n".join(t for t in run_texts if isinstance(t, str))
+            if not (_LINUX_GNU_TARGET_RE.search(joined) and _RELEASE_FLAG_RE.search(joined)):
+                continue  # not a release build of a *-unknown-linux-gnu wheel
+            job_loc = f"{wf.path}#jobs.{job_id}"
+            runs_on = job.get("runs-on")
+            runs_on_str = runs_on if isinstance(runs_on, str) else str(runs_on)
+
+            if _BARE_MATURIN_ZIG_RE.search(joined) and not _SOLDR_WHEEL_RE.search(joined):
+                findings.append(
+                    Finding(
+                        rule="PKG-007",
+                        path=job_loc,
+                        message=f"jobs.{job_id} builds a release *-unknown-linux-gnu wheel with "
+                        "maturin's --zig cross path instead of 'soldr wheel --release'",
+                        fix="build the release Linux wheel with 'soldr wheel --release --target "
+                        "<triple>' (or a wrapper that calls it); soldr's catalogue toolchain is "
+                        "what enforces the glibc-2.17 floor -- maturin --zig is not the blessed path "
+                        "(zackees/ci.yml#17/#19)",
+                    )
+                )
+
+            if _ARM_RUNNER_RE.search(runs_on_str):
+                findings.append(
+                    Finding(
+                        rule="PKG-007",
+                        path=job_loc,
+                        message=f"jobs.{job_id} builds a release *-unknown-linux-gnu wheel on "
+                        f"runs-on: {runs_on_str!r} (an arm64 runner); no catalogue glibc-2.17 "
+                        "bundle is hosted on arm64 today (soldr#2874)",
+                        fix="build Linux release wheels on an x86_64 runner (e.g. ubuntu-24.04); "
+                        "cross-build the aarch64 wheel from there instead of hosting the build on "
+                        "an arm64 runner",
+                    )
+                )
+
+            if not _GLIBC_VERIFY_RE.search(joined):
+                findings.append(
+                    Finding(
+                        rule="PKG-007",
+                        path=job_loc,
+                        message=f"jobs.{job_id} builds a release *-unknown-linux-gnu wheel but no "
+                        "step verifies its glibc symbol floor against the tag",
+                        fix="add a glibc verification step right after the build (e.g. "
+                        "'python3 ci/release.py glibc-check --wheel <wheel> --max-glibc 2.17', "
+                        "wrapping soldr's verify_wheel_glibc.py) that fails the job on any mismatch "
+                        "or any floor above policy",
+                    )
+                )
+
+            if _HOST_GLIBC_RE.search(joined):
+                findings.append(
+                    Finding(
+                        rule="PKG-007",
+                        path=job_loc,
+                        message=f"jobs.{job_id} passes --host-glibc, overriding the catalogue "
+                        "glibc-2.17 toolchain for a release wheel",
+                        fix="remove --host-glibc from a release build, or record a "
+                        f'[[exceptions]] entry (rule = "PKG-007", path = "{job_loc}") in ci.toml '
+                        "with an issue link, owner and review date",
+                    )
+                )
+    return findings
 
 
 def _load_toml(path: Path) -> dict[str, object] | None:
@@ -246,4 +339,5 @@ def check_group8(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings.extend(check_pkg_004(repo_root))
     findings.extend(check_pkg_003(ci, repo_root))
     findings.extend(check_pkg_005(repo_root))
+    findings.extend(check_pkg_007(repo_root))
     return findings
