@@ -31,3 +31,16 @@ jobs:
           ref: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           path: ci.yml
       - run: python3 ci/build.py
+  # RUN-001, round-6C: same matrix-over-platform_lanes_todo_json pattern
+  # as the red fixture, but every [platforms].*.runs-on in this ci.toml
+  # is a fleet label, so this resolves clean -- no RUN-001, and no
+  # needs_review either.
+  platform-run:
+    needs: precheck
+    runs-on: ${{ matrix.lane.runs_on }}
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        lane: ${{ fromJSON(needs.precheck.outputs.platform_lanes_todo_json) }}
+    steps:
+      - run: python3 ci/platform_run.py

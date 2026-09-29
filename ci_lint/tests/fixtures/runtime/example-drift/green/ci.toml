@@ -1,0 +1,39 @@
+schema  = 3
+profile = "rust-pypi-app"
+linter  = "zackees/ci.yml@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+[platforms]
+linux-x64 = { target = "x86_64-unknown-linux-gnu", runs-on = "ubuntu-24.04-arm", group = "linux", wheel = "manylinux_2_28" }
+
+[python]
+backend = "soldr"
+cli     = { name = "demo-cli", crate = "demo-cli", native = true }
+
+[rust]
+public  = "crates/demo"
+private = "crates/private/other/*"
+ship    = [[], ["json"]]
+
+[rust.tests]
+binaries = ["demo-core:lib", "demo-cli:bin:cli"]
+
+[lint.dylint]
+shape  = "measure"
+budget = { warm = "235s", cold = "480s" }
+
+[suites]
+unit = { run = "pytest tests/unit", required = true }
+
+[cache.family]
+registry = { via = "setup-soldr:cargo-registry", max = "50MB", lockfile = true }
+
+[allow]
+platform-selector = "crates/private/demo-platform/src/lib.rs"
+platform-code     = ["crates/private/demo-platform/src/platforms/**"]
+
+[[exceptions]]
+rule    = "GEN-005"
+path    = "ci.sh"
+reason  = "kept for now"
+issue   = "https://github.com/zackees/demo/issues/1"
+expires = "2026-12-31"

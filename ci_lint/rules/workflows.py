@@ -293,8 +293,73 @@ def check_sec_004(
     return findings
 
 
-def check_run_001(workflows: list[ParsedYamlFile]) -> list[Finding]:
+# A precheck-plan output that enumerates platform matrix legs built from
+# ci.toml's [platforms] table (see `ci_lint.plan.PlatformLane.to_json_dict`,
+# which emits a `runs_on` field per leg straight from `Platform.runs_on`).
+# A `strategy.matrix.<key>` sourced from one of these, combined with a
+# `runs-on: ${{ matrix.<key>.runs_on }}` expression using that same key, is
+# resolvable statically: it can only ever take the values ci.toml's
+# [platforms] declare, so RUN-001 validates those instead of giving up.
+PLATFORM_LANES_OUTPUTS: frozenset[str] = frozenset(
+    {"platform_lanes_todo_json", "platform_lanes_json"}
+)
+_NEEDS_OUTPUTS_RE = re.compile(r"needs\.[A-Za-z0-9_-]+\.outputs\.[A-Za-z0-9_]+")
+
+
+def _matrix_platform_lane_key(job: dict[str, YamlValue]) -> str | None:
+    """Return the `strategy.matrix` key (e.g. `"lane"`) whose value is a
+    `fromJSON(needs.<job>.outputs.<platform-lanes output>)` expression, or
+    None if this job's matrix isn't built from a precheck plan platform-
+    lanes output."""
+    strategy = job.get("strategy")
+    if not isinstance(strategy, dict):
+        return None
+    matrix = strategy.get("matrix")
+    if not isinstance(matrix, dict):
+        return None
+    for key, val in matrix.items():
+        if not isinstance(val, str):
+            continue
+        if not _NEEDS_OUTPUTS_RE.search(val):
+            continue
+        if any(output in val for output in PLATFORM_LANES_OUTPUTS):
+            return key
+    return None
+
+
+def _check_platform_runs_on(ci: CiToml) -> list[Finding]:
+    """RUN-001 resolved for the matrix case: validate ci.toml's own
+    [platforms].*.runs-on values, since that is what the matrix leg's
+    `runs_on` field can ever contain at runtime."""
     findings: list[Finding] = []
+    for pid, platform in sorted(ci.platforms.items()):
+        label = platform.runs_on
+        if not label:
+            continue
+        if label in FLEET_RUNNERS:
+            continue
+        reason = (
+            "a '-latest' label (retires without notice)"
+            if label.endswith("-latest")
+            else "not in the fleet runner list"
+        )
+        findings.append(
+            Finding(
+                rule="RUN-001",
+                path="ci.toml",
+                message=f"[platforms.{pid}].runs-on = '{label}' is {reason} (resolved from a "
+                "matrix built over ci.toml's [platforms] and used as 'runs-on: "
+                "${{ matrix.<var>.runs_on }}')",
+                fix=f"set [platforms.{pid}].runs-on in ci.toml to one of the fleet labels: "
+                f"{sorted(FLEET_RUNNERS)}",
+            )
+        )
+    return findings
+
+
+def check_run_001(ci: CiToml, workflows: list[ParsedYamlFile]) -> list[Finding]:
+    findings: list[Finding] = []
+    platform_runs_on_checked = False
     for wf in workflows:
         if wf.status != LoadStatus.OK:
             continue
@@ -305,8 +370,14 @@ def check_run_001(workflows: list[ParsedYamlFile]) -> list[Finding]:
                 labels = [runs_on]
             elif isinstance(runs_on, list):
                 labels = [x for x in runs_on if isinstance(x, str)]
+            lane_key = _matrix_platform_lane_key(job)
             for label in labels:
                 if "${{" in label:
+                    if lane_key is not None and f"matrix.{lane_key}.runs_on" in label:
+                        if not platform_runs_on_checked:
+                            findings.extend(_check_platform_runs_on(ci))
+                            platform_runs_on_checked = True
+                        continue
                     findings.append(
                         Finding(
                             rule="RUN-001",
@@ -523,7 +594,7 @@ def check_group2(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings.extend(check_tag_003(workflows))
     findings.extend(check_sec_003(workflows))
     findings.extend(check_sec_004(ci, workflows, actions))
-    findings.extend(check_run_001(workflows))
+    findings.extend(check_run_001(ci, workflows))
     findings.extend(check_wf_001(workflows))
     findings.extend(check_wf_002(workflows))
     findings.extend(check_wf_003(workflows, actions))

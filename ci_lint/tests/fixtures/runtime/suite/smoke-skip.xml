@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" errors="0" failures="0" skipped="2" tests="4" time="0.09">
+    <testcase classname="test_cli" name="test_help" time="0.01" />
+    <testcase classname="test_cli" name="test_run">
+      <skipped message="demo-cli not found on PATH" />
+    </testcase>
+    <testcase classname="test_cli" name="test_version">
+      <skipped message="demo-cli not found on PATH" />
+    </testcase>
+    <testcase classname="test_cli" name="test_exit_code" time="0.01" />
+  </testsuite>
+</testsuites>

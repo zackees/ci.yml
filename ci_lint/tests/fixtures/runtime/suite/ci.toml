@@ -3,8 +3,8 @@ profile = "rust-pypi-app"
 linter  = "zackees/ci.yml@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 [platforms]
-linux-x64   = { target = "x86_64-unknown-linux-gnu", runs-on = "ubuntu-24.04",  group = "linux" }
-windows-x64 = { target = "x86_64-pc-windows-msvc",   runs-on = "windows-latest", group = "windows" }
+linux-x64   = { target = "x86_64-unknown-linux-gnu", runs-on = "ubuntu-24.04", group = "linux" }
+windows-x64 = { target = "x86_64-pc-windows-msvc",   runs-on = "windows-2025", group = "windows" }
 
 [python]
 backend = "soldr"

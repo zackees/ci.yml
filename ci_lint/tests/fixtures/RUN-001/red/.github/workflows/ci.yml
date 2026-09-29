@@ -31,3 +31,18 @@ jobs:
           ref: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           path: ci.yml
       - run: python3 ci/build.py
+  # RUN-001, round-6C: this job's runs-on is an expression over a matrix
+  # built from the precheck plan's platform_lanes_todo_json output, whose
+  # legs come straight from ci.toml's [platforms] table. That is
+  # statically resolvable: windows-x64's runs-on ('windows-latest', set
+  # above) is a '-latest' label, so this must report RUN-001 against
+  # ci.toml -- never needs_review.
+  platform-run:
+    needs: precheck
+    runs-on: ${{ matrix.lane.runs_on }}
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        lane: ${{ fromJSON(needs.precheck.outputs.platform_lanes_todo_json) }}
+    steps:
+      - run: python3 ci/platform_run.py

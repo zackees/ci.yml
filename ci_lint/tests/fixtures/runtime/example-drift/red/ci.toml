@@ -1,0 +1,49 @@
+schema  = 3
+profile = "rust-pypi-app"
+linter  = "zackees/ci.yml@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+[platforms]
+linux-x64 = { target = "x86_64-unknown-linux-gnu", runs-on = "ubuntu-24.04-arm", group = "linux", wheel = "manylinux_2_28" }
+
+[python]
+backend = "soldr"
+cli     = { name = "demo-cli", crate = "demo-cli", native = true }
+
+[rust]
+public  = "crates/demo"
+private = "crates/private/other/*"
+ship    = [[], ["json"]]
+
+[rust.tests]
+binaries = ["demo-core:lib", "demo-cli:bin:cli"]
+
+# Policy drift: [lint.dylint].shape is not in the round rule's allowed
+# repo-specific list -- it's the D6 shape decision, not a repo identifier.
+[lint.dylint]
+shape  = "multi-target"
+budget = { warm = "235s", cold = "480s" }
+
+# Policy drift: only [suites.<id>].run is allowed to differ; `required`
+# silently dropping required=true coverage is exactly what issue #6's
+# TEST-001 exists to catch, so it must never be classified repo-specific.
+[suites]
+unit = { run = "pytest tests/unit", required = false }
+
+[cache.family]
+registry = { via = "setup-soldr:cargo-registry", max = "50MB", lockfile = true }
+
+[allow]
+platform-selector = "crates/private/demo-platform/src/lib.rs"
+platform-code     = ["crates/private/demo-platform/src/platforms/**"]
+
+[[exceptions]]
+rule    = "GEN-005"
+path    = "ci.sh"
+reason  = "kept for now"
+issue   = "https://github.com/zackees/demo/issues/1"
+expires = "2026-12-31"
+
+# Policy drift: an extra top-level table the example doesn't declare at
+# all ("missing/extra tables or keys").
+[extra]
+foo = "bar"

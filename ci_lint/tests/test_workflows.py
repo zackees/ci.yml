@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import unittest
 
+from ci_lint.finding import Status
 from ci_lint.rules.workflows import (
     check_ct_004,
     check_gen_001,
@@ -20,7 +21,7 @@ from ci_lint.rules.workflows import (
 )
 from ci_lint.schema import load_ci_toml
 from ci_lint.tests.helpers import fixture, requires_yaml_tooling
-from ci_lint.workflow_scan import load_workflows
+from ci_lint.workflow_scan import as_dict, load_workflows
 
 
 def rule_ids(findings) -> list[str]:
@@ -70,10 +71,61 @@ class WorkflowFixtureTest(unittest.TestCase):
         self.assertNotIn("SEC-004", rule_ids(check_sec_004(ci, load_workflows(repo), [])))
 
     def test_run_001_bad_runner_label(self) -> None:
-        wfs = load_workflows(fixture("RUN-001", "red"))
-        self.assertIn("RUN-001", rule_ids(check_run_001(wfs)))
-        wfs = load_workflows(fixture("RUN-001", "green"))
-        self.assertNotIn("RUN-001", rule_ids(check_run_001(wfs)))
+        repo = fixture("RUN-001", "red")
+        ci, _ = load_ci_toml(repo)
+        findings = check_run_001(ci, load_workflows(repo))
+        self.assertIn("RUN-001", rule_ids(findings))
+        # The literal 'ubuntu-latest' on jobs.build.
+        self.assertTrue(
+            any("jobs.build.runs-on" in f.message for f in findings), msg=[f.message for f in findings]
+        )
+        repo = fixture("RUN-001", "green")
+        ci, _ = load_ci_toml(repo)
+        self.assertNotIn("RUN-001", rule_ids(check_run_001(ci, load_workflows(repo))))
+
+    def test_run_001_matrix_over_platform_lanes_is_resolved_not_needs_review(self) -> None:
+        """Round-6C: a `runs-on: ${{ matrix.lane.runs_on }}` job whose
+        `strategy.matrix.lane` is built from the precheck plan's
+        `platform_lanes_todo_json` output (which enumerates ci.toml's
+        [platforms]) is resolvable. RUN-001 must validate ci.toml's own
+        [platforms].*.runs-on values instead of reporting needs_review."""
+        repo = fixture("RUN-001", "red")
+        ci, _ = load_ci_toml(repo)
+        findings = check_run_001(ci, load_workflows(repo))
+        self.assertNotIn(Status.NEEDS_REVIEW, [f.status for f in findings])
+        # windows-x64's runs-on is 'windows-latest' in the red ci.toml --
+        # resolved through the matrix, that must surface as RUN-001 against
+        # ci.toml, not against the workflow file.
+        self.assertTrue(
+            any(f.rule == "RUN-001" and f.path == "ci.toml" and "platforms.windows-x64" in f.message
+                for f in findings),
+            msg=[f.message for f in findings],
+        )
+
+        repo = fixture("RUN-001", "green")
+        ci, _ = load_ci_toml(repo)
+        findings = check_run_001(ci, load_workflows(repo))
+        self.assertEqual([], [f for f in findings if f.status == Status.NEEDS_REVIEW])
+        self.assertEqual([], [f for f in findings if f.path == "ci.toml"])
+
+    def test_run_001_unresolvable_expression_stays_needs_review(self) -> None:
+        """An expression that is NOT sourced from a precheck plan
+        platform-lanes output can't be statically resolved and must stay
+        needs_review, exactly as before round-6C."""
+        repo = fixture("RUN-001", "green")
+        ci, _ = load_ci_toml(repo)
+        wfs = load_workflows(repo)
+        doc = as_dict(wfs[0].document)
+        doc["jobs"]["unresolvable"] = {
+            "runs-on": "${{ matrix.lane.runs_on }}",
+            "strategy": {"matrix": {"lane": "${{ fromJSON(vars.CUSTOM_MATRIX_JSON) }}"}},
+        }
+        findings = check_run_001(ci, wfs)
+        needs_review = [f for f in findings if f.status == Status.NEEDS_REVIEW]
+        self.assertTrue(
+            any("jobs.unresolvable.runs-on" in f.message for f in needs_review),
+            msg=[f.message for f in findings],
+        )
 
     def test_wf_001_missing_timeout(self) -> None:
         wfs = load_workflows(fixture("WF-001", "red"))
