@@ -13,8 +13,10 @@ this refinement makes free instead of exception-worthy). Any JOB may also
 hold `contents: read`/`actions: read` for free; any wider per-job grant
 (`actions: write`, `id-token: write`, `contents: write`, ...) is SEC-002
 unless the job's id is listed for that exact grant in `ci.toml`'s new
-`[allow].permissions` table. `id-token: write` additionally still requires
-`environment: pypi` on that same job -- being allowlisted in
+`[allow].permissions` table. `id-token: write` additionally must sit on an
+OIDC publisher -- the `publish` job in `[publish].pypi.environment`, or a
+crates.io trusted-publishing job running rust-lang/crates-io-auth-action
+under an `environment:` (ci.yml#134) -- being allowlisted in
 `[allow].permissions` does not waive that second constraint.
 """
 
@@ -132,6 +134,40 @@ def _top_level_permission_findings(perms: YamlValue, path: str) -> list[Finding]
     return findings
 
 
+CRATES_IO_AUTH_ACTION = "rust-lang/crates-io-auth-action"
+
+
+def _pypi_environment(ci: CiToml) -> str:
+    pypi = ci.publish.pypi
+    return pypi.environment if pypi is not None and pypi.environment else "pypi"
+
+
+def _uses_action(job: dict[str, YamlValue], action: str) -> bool:
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        return False
+    for step in steps:
+        uses = step.get("uses") if isinstance(step, dict) else None
+        if isinstance(uses, str) and uses.split("@", 1)[0] == action:
+            return True
+    return False
+
+
+def _is_oidc_publisher(
+    ci: CiToml, job_id: str, job: dict[str, YamlValue], env_name: YamlValue
+) -> bool:
+    """ci.yml#134: the PyPI publisher is the 'publish' job in
+    [publish].pypi.environment; a crates.io trusted publisher is any job
+    that exchanges its OIDC token through rust-lang/crates-io-auth-action
+    inside a deployment environment (crates.io binds the registration to
+    the workflow/job/environment, so its names are not ours to choose).
+    Either way the job must still be listed in [allow].permissions."""
+
+    if job_id == "publish" and env_name == _pypi_environment(ci):
+        return True
+    return isinstance(env_name, str) and bool(env_name) and _uses_action(job, CRATES_IO_AUTH_ACTION)
+
+
 def _job_permission_findings(
     ci: CiToml, perms: YamlValue, path: str, job_id: str, job: dict[str, YamlValue]
 ) -> list[Finding]:
@@ -178,15 +214,19 @@ def _job_permission_findings(
                     f"{loc}.{key}",
                 )
             )
-        if key == "id-token" and val == "write" and not (job_id == "publish" and env_name == "pypi"):
+        if key == "id-token" and val == "write" and not _is_oidc_publisher(ci, job_id, job, env_name):
+            pypi_env = _pypi_environment(ci)
             findings.append(
                 Finding(
                     rule="SEC-002",
                     path=path,
-                    message=f"{loc}.id-token = 'write' is only allowed on the 'publish' job with "
-                    f"'environment: pypi' (job '{job_id}' has environment={env_name!r})",
-                    fix="remove 'id-token: write' here; set it only on the 'publish' job's own "
-                    "permissions block, alongside 'environment: pypi'",
+                    message=f"{loc}.id-token = 'write' is only allowed on an OIDC publisher: the 'publish' "
+                    f"job with 'environment: {pypi_env}' ([publish].pypi.environment), or a job that "
+                    f"exchanges the token via {CRATES_IO_AUTH_ACTION} inside a deployment environment "
+                    f"(job '{job_id}' has environment={env_name!r})",
+                    fix="remove 'id-token: write' here; mint OIDC tokens only in the publishing job -- "
+                    f"'publish' with 'environment: {pypi_env}', or a crates.io trusted-publishing job "
+                    f"that runs {CRATES_IO_AUTH_ACTION} under an 'environment:'",
                 )
             )
     return findings

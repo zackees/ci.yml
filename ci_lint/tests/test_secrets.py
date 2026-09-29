@@ -58,6 +58,25 @@ class SecretsFixtureTest(unittest.TestCase):
         self.assertNotIn("SEC-002", rules)
 
     @requires_yaml_tooling
+    def test_sec_002_id_token_follows_declared_publishers(self) -> None:
+        """ci.yml#134: 'id-token: write' is allowed on the 'publish' job in
+        [publish].pypi.environment (not a hard-coded 'pypi'), and on an
+        [allow].permissions-listed job that exchanges it through
+        rust-lang/crates-io-auth-action (crates.io trusted publishing)."""
+
+        repo = fixture("SEC-002", "green-oidc-publishers")
+        ci, _ = load_ci_toml(repo)
+        findings = check_sec_002(ci, repo)
+        self.assertEqual([], findings, msg=[f.render() for f in findings])
+
+        repo = fixture("SEC-002", "red-oidc-publishers")
+        ci, _ = load_ci_toml(repo)
+        messages = [f.message for f in check_sec_002(ci, repo) if f.rule == "SEC-002"]
+        self.assertEqual(2, len(messages), msg=messages)
+        self.assertTrue(any("jobs.publish." in m for m in messages), msg=messages)
+        self.assertTrue(any("jobs.publish-crates." in m for m in messages), msg=messages)
+
+    @requires_yaml_tooling
     def test_sec_002_actions_read_is_free_everywhere(self) -> None:
         """Evidence of need: zackees/template-python-rust-cmd#19 had to add
         two [[exceptions]] just for 'actions: read'; round-4B makes it free
