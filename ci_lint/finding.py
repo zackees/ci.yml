@@ -36,6 +36,10 @@ class Finding:
     path: str | None = None
     line: int | None = None
     status: Status = Status.VIOLATION
+    # A live cache-audit finding's subject entry id (ci.yml#137): GitHub
+    # cache keys are unique per ref, not per repository, so `path`
+    # ("cache:<key>") alone cannot say WHICH entry to delete. Not rendered.
+    cache_id: int | None = None
 
     def location(self) -> str:
         if self.path is None:

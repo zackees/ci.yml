@@ -78,20 +78,41 @@ def _apply(planned: list[DeletePlanEntry], *, delete: DeleteFn | None, token: st
     return OpsResult(planned=tuple(planned), deleted=tuple(deleted), errors=tuple(errors), dry_run=False)
 
 
+def _finding_entry(f, by_id: dict[int, ClassifiedEntry], by_key: dict[str, list[ClassifiedEntry]]) -> ClassifiedEntry | None:
+    """The one entry a live cache finding is about (ci.yml#137). GitHub
+    cache keys are unique per ref, not per repository: the same key can sit
+    on refs/heads/main and on refs/pull/N/merge at once, so resolve by the
+    finding's `cache_id`. A finding without one resolves by key only when
+    that key names exactly one entry -- never a guess between refs."""
+
+    if not f.path or not f.path.startswith("cache:"):
+        return None
+    if f.cache_id is not None:
+        return by_id.get(f.cache_id)
+    matches = by_key.get(f.path[len("cache:") :], [])
+    return matches[0] if len(matches) == 1 else None
+
+
+def _indexes(classified: list[ClassifiedEntry]) -> tuple[dict[int, ClassifiedEntry], dict[str, list[ClassifiedEntry]]]:
+    by_id = {c.entry.id: c for c in classified}
+    by_key: dict[str, list[ClassifiedEntry]] = {}
+    for c in classified:
+        by_key.setdefault(c.entry.key, []).append(c)
+    return by_id, by_key
+
+
 def _findings_to_plan(
-    report_findings, by_key: dict[str, ClassifiedEntry], rules: frozenset[str] | None
-) -> dict[str, DeletePlanEntry]:
-    out: dict[str, DeletePlanEntry] = {}
+    report_findings, classified: list[ClassifiedEntry], rules: frozenset[str] | None
+) -> dict[int, DeletePlanEntry]:
+    by_id, by_key = _indexes(classified)
+    out: dict[int, DeletePlanEntry] = {}
     for f in report_findings:
         if rules is not None and f.rule not in rules:
             continue
-        if not f.path or not f.path.startswith("cache:"):
+        c = _finding_entry(f, by_id, by_key)
+        if c is None or c.entry.id in out:
             continue
-        key = f.path[len("cache:") :]
-        c = by_key.get(key)
-        if c is None:
-            continue
-        out[key] = DeletePlanEntry(id=c.entry.id, key=c.entry.key, size_in_bytes=c.entry.size_in_bytes, reason=f"{f.rule}: {f.message}")
+        out[c.entry.id] = DeletePlanEntry(id=c.entry.id, key=c.entry.key, size_in_bytes=c.entry.size_in_bytes, reason=f"{f.rule}: {f.message}")
     return out
 
 
@@ -117,8 +138,7 @@ def trim(
         return OpsResult(planned=(), deleted=(), errors=(), dry_run=dry_run, warning=str(exc))
     classified = classify(ci, entries)
     report = audit_classified(ci, classified, graphql=graphql, token=token, repo=repo, default_branch=default_branch)
-    by_key = {c.entry.key: c for c in classified}
-    plan = _findings_to_plan(report.findings, by_key, frozenset({"CACHE-008"}))
+    plan = _findings_to_plan(report.findings, list(classified), frozenset({"CACHE-008"}))
     planned = list(plan.values())[:max_deletes]
     result = _apply(planned, delete=delete, token=token, repo=repo, dry_run=dry_run)
     if report.warning and result.warning is None:
@@ -231,11 +251,11 @@ def janitor(
         return OpsResult(planned=(), deleted=(), errors=(), dry_run=dry_run, warning=str(exc)), ""
     classified = classify(ci, entries)
     report = audit_classified(ci, classified, graphql=graphql, token=token, repo=repo, default_branch=default_branch)
-    by_key = {c.entry.key: c for c in classified}
-    plan = _findings_to_plan(report.findings, by_key, JANITOR_RULES)
+    by_id = {c.entry.id: c for c in classified}
+    plan = _findings_to_plan(report.findings, list(classified), JANITOR_RULES)
     for c in classified:
-        if c.entry.id in report.closed_pr_ids and c.entry.key not in plan:
-            plan[c.entry.key] = DeletePlanEntry(
+        if c.entry.id in report.closed_pr_ids and c.entry.id not in plan:
+            plan[c.entry.id] = DeletePlanEntry(
                 id=c.entry.id, key=c.entry.key, size_in_bytes=c.entry.size_in_bytes,
                 reason=f"closed PR: #{c.pr} is closed or merged",
             )
@@ -244,16 +264,16 @@ def janitor(
     now_ts = now if now is not None else time.time()
     cutoff = now_ts - stale_days * 86400
     for c in classified:
-        if c.entry.key in plan:
+        if c.entry.id in plan:
             continue
         if c.entry.id in lru:
-            plan[c.entry.key] = DeletePlanEntry(
+            plan[c.entry.id] = DeletePlanEntry(
                 id=c.entry.id, key=c.entry.key, size_in_bytes=c.entry.size_in_bytes, reason=lru[c.entry.id]
             )
             continue
         ts = _parse_iso8601(c.entry.last_accessed_at)
         if ts is not None and ts < cutoff:
-            plan[c.entry.key] = DeletePlanEntry(
+            plan[c.entry.id] = DeletePlanEntry(
                 id=c.entry.id,
                 key=c.entry.key,
                 size_in_bytes=c.entry.size_in_bytes,
@@ -263,13 +283,13 @@ def janitor(
     # Safety (#23 section 4.3), applied last so no reason can bypass it.
     protected = _protected_ids(ci, list(classified))
     grace_cutoff = now_ts - grace_seconds
-    for key, entry in list(plan.items()):
-        c = by_key[key]
+    for cache_id, entry in list(plan.items()):
+        c = by_id[cache_id]
         created = _parse_iso8601(c.entry.created_at)
         if created is not None and created > grace_cutoff:
-            del plan[key]  # too young: may race its producer and consumers
+            del plan[cache_id]  # too young: may race its producer and consumers
         elif entry.id in protected and not entry.reason.startswith(("CACHE-005", "CACHE-009", "closed PR")):
-            del plan[key]  # the newest entry a required job restores
+            del plan[cache_id]  # the newest entry a required job restores
 
     planned = list(plan.values())[:max_deletes]
     result = _apply(planned, delete=delete, token=token, repo=repo, dry_run=dry_run)
@@ -362,12 +382,12 @@ def preprune(
 
     lockfile_families = {fid for fid, fam in ci.cache.family.items() if fam.lockfile}
     report = audit_classified(ci, classified, graphql=graphql, token=token, repo=repo, default_branch=default_branch)
-    by_key = {c.entry.key: c for c in classified}
+    by_id, by_key = _indexes(list(classified))
     planned: list[DeletePlanEntry] = []
     for f in report.findings:
-        if f.rule != "CACHE-006" or not f.path or not f.path.startswith("cache:"):
+        if f.rule != "CACHE-006":
             continue
-        c = by_key.get(f.path[len("cache:") :])
+        c = _finding_entry(f, by_id, by_key)
         if c is None or c.family_id not in lockfile_families:
             continue
         planned.append(
