@@ -1,0 +1,13 @@
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+jobs:
+  fast:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - run: soldr cargo check --locked --target x86_64-unknown-linux-gnu
+      - run: soldr cargo check --locked --target x86_64-pc-windows-msvc
+      - run: soldr cargo test --locked

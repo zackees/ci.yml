@@ -59,6 +59,19 @@ from ci_lint.perf import (
 )
 from ci_lint.perf import render_text as render_perf_text
 from ci_lint.perf import to_json_dict as perf_to_json_dict
+from ci_lint.runtime.pr_timing import (
+    PrTimingError,
+    compute_pr_timing,
+    load_history_file,
+)
+from ci_lint.runtime.pr_timing import render_text as render_pr_timing_text
+from ci_lint.runtime.pr_timing import to_json_dict as pr_timing_to_json_dict
+from ci_lint.runtime.toolchain_build import (
+    ToolchainBuildCheckError,
+    compute_toolchain_build_report,
+)
+from ci_lint.runtime.toolchain_build import render_text as render_toolchain_build_text
+from ci_lint.runtime.toolchain_build import to_json_dict as toolchain_build_to_json_dict
 from ci_lint.plan import Plan, PlanError, build_act_event, compute_plan
 from ci_lint.precheck import (
     has_violations,
@@ -713,6 +726,43 @@ def _cmd_perf_compare(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── `ci-lint perf pr-timing` (M2-22, PERF-001) ──────────────────────────────
+
+
+def _cmd_perf_pr_timing(args: argparse.Namespace) -> int:
+    try:
+        scans = [(str(p), load_history_file(Path(p))) for p in args.history]
+    except PrTimingError as exc:
+        print(f"ci-lint perf pr-timing: {exc}", file=sys.stderr)
+        return 2
+    report = compute_pr_timing(
+        scans,
+        min_samples=args.min_samples,
+        window_days=args.window_days,
+        job_threshold_seconds=args.job_threshold_minutes * 60.0,
+        critical_path_threshold_seconds=args.critical_path_threshold_minutes * 60.0,
+    )
+    print(json.dumps(pr_timing_to_json_dict(report), indent=2) if args.json else render_pr_timing_text(report))
+    return 1 if any(f.status == Status.VIOLATION for f in report.findings) else 0
+
+
+# ── `ci-lint rust toolchain-build-check` (M2-22, RUST-009) ──────────────────
+
+
+def _cmd_rust_toolchain_build_check(args: argparse.Namespace) -> int:
+    try:
+        report = compute_toolchain_build_report([Path(p) for p in (args.log or [])])
+    except ToolchainBuildCheckError as exc:
+        print(f"ci-lint rust toolchain-build-check: {exc}", file=sys.stderr)
+        return 2
+    print(
+        json.dumps(toolchain_build_to_json_dict(report), indent=2)
+        if args.json
+        else render_toolchain_build_text(report)
+    )
+    return 1 if any(f.status == Status.VIOLATION for f in report.findings) else 0
+
+
 # ── `ci-lint cache ...` (round-4A) ──────────────────────────────────────────
 
 
@@ -1363,7 +1413,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_release_verify.add_argument("--json", action="store_true")
     p_release_verify.set_defaults(func=_cmd_release_verify)
 
-    p_perf = sub.add_parser("perf", help="perf checks: compare")
+    p_perf = sub.add_parser("perf", help="perf checks: compare, pr-timing (PERF-001)")
     perf_sub = p_perf.add_subparsers(dest="perf_command", required=True)
 
     p_perf_compare = perf_sub.add_parser("compare", help="compare a baseline and a current benchmark report")
@@ -1384,6 +1434,31 @@ def build_parser() -> argparse.ArgumentParser:
     p_act_audit.add_argument("--store-dir", required=True, help="the act --cache-server-path directory")
     p_act_audit.add_argument("--json", action="store_true")
     p_act_audit.set_defaults(func=_cmd_act_audit)
+
+    p_perf_pr_timing = perf_sub.add_parser(
+        "pr-timing", help="PERF-001: PR timing breach from recorded run-history JSON (>= 2 scans -> --history twice)"
+    )
+    p_perf_pr_timing.add_argument(
+        "--history", action="append", required=True, help="one recorded scan's history JSON; repeat in scan order"
+    )
+    p_perf_pr_timing.add_argument("--min-samples", type=int, default=5)
+    p_perf_pr_timing.add_argument("--window-days", type=int, default=30)
+    p_perf_pr_timing.add_argument("--job-threshold-minutes", type=float, default=10.0)
+    p_perf_pr_timing.add_argument("--critical-path-threshold-minutes", type=float, default=15.0)
+    p_perf_pr_timing.add_argument("--json", action="store_true")
+    p_perf_pr_timing.set_defaults(func=_cmd_perf_pr_timing)
+
+    p_rust = sub.add_parser("rust", help="rust checks: toolchain-build-check (RUST-009)")
+    rust_sub = p_rust.add_subparsers(dest="rust_command", required=True)
+
+    p_rust_toolchain_build = rust_sub.add_parser(
+        "toolchain-build-check", help="RUST-009: per-run toolchain/std/driver builds from job-log evidence"
+    )
+    p_rust_toolchain_build.add_argument(
+        "--log", action="append", help="a job log file (raw text) or gh run view --job <id> --log output"
+    )
+    p_rust_toolchain_build.add_argument("--json", action="store_true")
+    p_rust_toolchain_build.set_defaults(func=_cmd_rust_toolchain_build_check)
 
     return parser
 
