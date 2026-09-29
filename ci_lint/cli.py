@@ -14,6 +14,7 @@ from pathlib import Path
 from ci_lint.cache.audit import AuditError, run_audit
 from ci_lint.cache.audit import render_text as render_cache_audit_text
 from ci_lint.cache.audit import to_json_dict as cache_audit_to_json_dict
+from ci_lint.cache.budget import run_budget as cache_run_budget
 from ci_lint.cache.delta import (
     DeltaError,
     StaleBaseError,
@@ -131,6 +132,15 @@ def _sha_from_event(event: dict[str, object]) -> str | None:
     return None
 
 
+def _pr_number_from_event(event: dict[str, object]) -> int | None:
+    pr = event.get("pull_request")
+    if isinstance(pr, dict):
+        number = pr.get("number")
+        if isinstance(number, int) and not isinstance(number, bool) and number > 0:
+            return number
+    return None
+
+
 def _head_sha_from_event(event: dict[str, object]) -> str | None:
     pr = event.get("pull_request")
     if isinstance(pr, dict):
@@ -176,7 +186,9 @@ def _compute_reuse_for_plan(plan: Plan, event_name: str, event: dict[str, object
     return result
 
 
-def _plan_github_output_lines(plan: Plan, reuse_result: ReuseResult | None) -> list[str]:
+def _plan_github_output_lines(
+    plan: Plan, reuse_result: ReuseResult | None, pr_number: int | None = None
+) -> list[str]:
     payload = plan.to_json_dict()
     compact = json.dumps(payload, separators=(",", ":"))
     platforms_json = json.dumps([p.id for p in plan.platforms])
@@ -207,6 +219,10 @@ def _plan_github_output_lines(plan: Plan, reuse_result: ReuseResult | None) -> l
         f"lane_digests_json={lane_digests_json}",
         # Round-4B.
         f"cache_save={cache_save}",
+        # zackees/ci.yml#23 §5 (CACHE-013): the delimited PR key component
+        # every PR-context cache save embeds ('pr-<N>'), empty outside a PR
+        # so main/nightly keys carry no PR tag.
+        f"cache_key_pr={f'pr-{pr_number}' if pr_number is not None else ''}",
     ]
 
     if reuse_result is not None:
@@ -235,12 +251,14 @@ def _plan_github_output_lines(plan: Plan, reuse_result: ReuseResult | None) -> l
     return lines
 
 
-def _write_plan_github_output(plan: Plan, reuse_result: ReuseResult | None) -> None:
+def _write_plan_github_output(
+    plan: Plan, reuse_result: ReuseResult | None, pr_number: int | None = None
+) -> None:
     gh_out = os.environ.get("GITHUB_OUTPUT")
     if not gh_out:
         return
     with open(gh_out, "a", encoding="utf-8") as fh:
-        for line in _plan_github_output_lines(plan, reuse_result):
+        for line in _plan_github_output_lines(plan, reuse_result, pr_number):
             fh.write(line + "\n")
 
 
@@ -340,7 +358,7 @@ def _cmd_precheck(args: argparse.Namespace) -> int:
                         payload["reuse"] = reuse_result.to_json_dict()
                     Path(args.plan_out).write_text(json.dumps(payload, indent=2), encoding="utf-8")
                 if args.github_output:
-                    _write_plan_github_output(plan, reuse_result)
+                    _write_plan_github_output(plan, reuse_result, _pr_number_from_event(event))
 
     return 1 if has_violations(result) else 0
 
@@ -389,7 +407,7 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         Path(args.act).write_text(json.dumps(build_act_event(title), indent=2), encoding="utf-8")
 
     if args.github_output:
-        _write_plan_github_output(plan, reuse_result)
+        _write_plan_github_output(plan, reuse_result, _pr_number_from_event(event))
 
     return 0
 
@@ -851,6 +869,29 @@ def _cmd_cache_janitor(args: argparse.Namespace) -> int:
     return 1 if result.errors else 0
 
 
+def _cmd_cache_budget(args: argparse.Namespace) -> int:
+    """zackees/ci.yml#23 section 6: the `cache-budget` job's verdict."""
+
+    repo_root = Path(args.repo).resolve()
+    ci = _load_ci_or_die(repo_root, "cache budget")
+    if ci is None:
+        return 1
+    creds = _cache_write_creds("budget")  # only needs actions: read
+    if creds is None:
+        return 1
+    token, repo_slug = creds
+    event = _load_event(args.event)
+    event_name = args.event_name or os.environ.get("GITHUB_EVENT_NAME") or ""
+    ref = args.ref or os.environ.get("GITHUB_REF") or ""
+    pr_number = args.pr if args.pr is not None else _pr_number_from_event(event)
+    verdict = cache_run_budget(
+        ci, fetch=default_fetch, token=token, repo=repo_slug, event_name=event_name, ref=ref,
+        pr_number=pr_number, default_branch=args.default_branch,
+    )
+    print(json.dumps(verdict.to_json_dict(), indent=2) if args.json else verdict.render())
+    return 1 if verdict.failed else 0
+
+
 def _cmd_cache_heal(args: argparse.Namespace) -> int:
     creds = _cache_write_creds("heal")
     if creds is None:
@@ -1080,7 +1121,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_selftest = sub.add_parser("selftest", help="run ci_lint's own unittest suite")
     p_selftest.set_defaults(func=_cmd_selftest)
 
-    p_cache = sub.add_parser("cache", help="cache runtime: key, save-ok, audit, trim, janitor, heal, preprune, delta")
+    p_cache = sub.add_parser("cache", help="cache runtime: key, save-ok, audit, trim, janitor, budget, heal, preprune, delta")
     cache_sub = p_cache.add_subparsers(dest="cache_command", required=True)
 
     p_cache_key = cache_sub.add_parser("key", help="build a cache key for a declared family, or a PR delta key")
@@ -1155,7 +1196,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_cache_trim.set_defaults(func=_cmd_cache_trim)
 
     p_cache_janitor = cache_sub.add_parser(
-        "janitor", help="delete CACHE-001/003/005/006/009 + stale entries; prints a before/after table"
+        "janitor", help="delete closed-PR entries, CACHE-001/003/005/006/009, LRU overflow and stale entries (10-min grace, newest restored entry kept); prints a before/after table"
     )
     p_cache_janitor.add_argument("--repo", default=".")
     p_cache_janitor.add_argument("--default-branch", default="main")
@@ -1164,6 +1205,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_cache_janitor.add_argument("--dry-run", action="store_true")
     p_cache_janitor.add_argument("--json", action="store_true")
     p_cache_janitor.set_defaults(func=_cmd_cache_janitor)
+
+    p_cache_budget = cache_sub.add_parser(
+        "budget", help="live budget verdict: warn-only in PR context (except the PR's own pr-<N> entries), "
+        "hard fail on the default branch/schedule/dispatch when over budget"
+    )
+    p_cache_budget.add_argument("--repo", default=".")
+    p_cache_budget.add_argument("--default-branch", default="main")
+    p_cache_budget.add_argument("--event-name", default=None, help="default: $GITHUB_EVENT_NAME")
+    p_cache_budget.add_argument("--ref", default=None, help="default: $GITHUB_REF")
+    p_cache_budget.add_argument("--event", default=None, help="event JSON (default: $GITHUB_EVENT_PATH)")
+    p_cache_budget.add_argument("--pr", type=int, default=None, help="PR number (default: from the event)")
+    p_cache_budget.add_argument("--json", action="store_true")
+    p_cache_budget.set_defaults(func=_cmd_cache_budget)
 
     p_cache_heal = cache_sub.add_parser("heal", help="delete exactly one cache key (a writer flow's self-heal)")
     p_cache_heal.add_argument("--repo", default=".")

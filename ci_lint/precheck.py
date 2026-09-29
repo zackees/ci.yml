@@ -21,6 +21,7 @@ from ci_lint.finding import Finding, Status
 from ci_lint.rules.build_parallelism import check_gen_012
 from ci_lint.rules.cache_restore_copy import check_gen_013
 from ci_lint.rules.cache_static import check_group9
+from ci_lint.rules.ci_pre import check_group12
 from ci_lint.rules.contract import check_ct_006, check_tag_001, check_tag_002
 from ci_lint.rules.layout import check_group6
 from ci_lint.rules.packaging import check_group8
@@ -90,6 +91,7 @@ GROUP_LABELS: dict[int, str] = {
     9: "cache static (CACHE-001/002/003/004)",
     10: "lint pin (CT-004, checked inside group 2)",
     11: "release gate (REL-001/002)",
+    12: "ci-pre.yml shape + PR cache keys (GEN-014..018, CACHE-013)",
 }
 
 
@@ -133,6 +135,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         findings9, cache_arithmetic = check_group9(ci, repo_root)
         all_findings.extend(findings9)
         all_findings.extend(check_group11(ci, repo_root))
+        all_findings.extend(check_group12(ci, repo_root))
 
         outcome = apply_exceptions(ci, all_findings)
         all_findings = outcome.findings

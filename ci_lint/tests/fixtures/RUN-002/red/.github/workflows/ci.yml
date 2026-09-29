@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   precheck:
-    uses: ./.github/workflows/ci-precheck.yml
+    uses: ./.github/workflows/ci-pre.yml
   # RUN-002 red: cross-compiles on ubuntu-24.04 for every lane's target,
   # but the display name says nothing about the build host -- a glance at
   # the Checks tab makes "platform-build (windows-x64)" look native.

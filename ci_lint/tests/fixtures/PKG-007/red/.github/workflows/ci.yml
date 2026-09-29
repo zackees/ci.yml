@@ -6,7 +6,7 @@ on:
     branches: [main]
 jobs:
   precheck:
-    uses: ./.github/workflows/ci-precheck.yml
+    uses: ./.github/workflows/ci-pre.yml
   # PKG-007 red (zackees/ci.yml#19): the release Linux wheel is built with
   # maturin's --zig cross path (not 'soldr wheel --release'), on an arm64
   # runner, with no glibc verification step, and with --host-glibc passed

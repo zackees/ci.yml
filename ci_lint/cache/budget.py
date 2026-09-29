@@ -1,0 +1,125 @@
+"""`ci-lint cache budget`: the `cache-budget` job's verdict (zackees/ci.yml#23
+section 6). Evaluates live cache state independently of the janitor.
+
+- `pull_request` (and a push to any branch other than the default branch):
+  WARN-ONLY (exit 0) for state the PR did not create. It FAILS only for the
+  PR's own entries -- those carrying its delimited `pr-<N>` key component or
+  saved on `refs/pull/<N>/merge` -- when they alone exceed `[cache.pr].budget`
+  or when the account is over `[cache].budget` and would not be without them
+  (a breach caused by the PR's own additions).
+- `push` to the default branch, `schedule`, `workflow_dispatch`: a HARD
+  failure when live usage is over `[cache].budget`. A transient race with an
+  in-flight janitor sweep resolves on the next run.
+
+A failed cache listing is a warning (exit 0): the verdict never fails a run
+on state it could not read.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from ci_lint.cache.audit import classify
+from ci_lint.cache.github_cache import CacheApiError, list_caches
+from ci_lint.github_api import FetchFn
+from ci_lint.rules.cache_static import parse_size
+from ci_lint.schema import CiToml
+
+HARD_EVENTS: frozenset[str] = frozenset({"schedule", "workflow_dispatch"})
+
+
+@dataclass(frozen=True)
+class BudgetVerdict:
+    verdict: str  # "ok" | "warn" | "fail"
+    total_bytes: int
+    budget_bytes: int | None
+    own_bytes: int
+    pr_budget_bytes: int | None
+    reason: str
+
+    @property
+    def failed(self) -> bool:
+        return self.verdict == "fail"
+
+    def to_json_dict(self) -> dict[str, object]:
+        return {
+            "verdict": self.verdict,
+            "total_bytes": self.total_bytes,
+            "budget_bytes": self.budget_bytes,
+            "own_bytes": self.own_bytes,
+            "pr_budget_bytes": self.pr_budget_bytes,
+            "reason": self.reason,
+        }
+
+    def render(self) -> str:
+        budget = f"{self.budget_bytes}B" if self.budget_bytes is not None else "?"
+        line = f"ci-lint cache budget: {self.verdict.upper()} -- live {self.total_bytes}B / budget {budget}"
+        if self.own_bytes:
+            line += f"; this PR's own entries {self.own_bytes}B"
+        return f"{line}\n  {self.reason}"
+
+
+def is_hard_context(event_name: str, ref: str, default_branch: str) -> bool:
+    if event_name in HARD_EVENTS:
+        return True
+    return event_name == "push" and ref == f"refs/heads/{default_branch}"
+
+
+def evaluate(
+    ci: CiToml,
+    entries_total: int,
+    *,
+    own_bytes: int,
+    hard: bool,
+    pr_number: int | None,
+) -> BudgetVerdict:
+    budget = parse_size(ci.cache.budget) if ci.cache.budget else None
+    pr_budget = parse_size(ci.cache.pr.budget) if ci.cache.pr.budget else None
+    over = budget is not None and entries_total > budget
+    fix = "run 'ci-lint cache janitor' (or wait for the next push sweep); if a family's steady state cannot fit, shrink its declared max/per (CACHE-004)"
+    if hard:
+        if over:
+            return BudgetVerdict("fail", entries_total, budget, own_bytes, pr_budget, f"over [cache].budget on a hard-verdict ref: {fix}")
+        return BudgetVerdict("ok", entries_total, budget, own_bytes, pr_budget, "within [cache].budget")
+    if pr_number is not None:
+        if pr_budget is not None and own_bytes > pr_budget:
+            return BudgetVerdict(
+                "fail", entries_total, budget, own_bytes, pr_budget,
+                f"PR #{pr_number}'s own pr-{pr_number} entries exceed [cache.pr].budget: save fewer/smaller "
+                "PR entries (only the declared [cache.pr].families, within max-per-pr)",
+            )
+        if over and budget is not None and entries_total - own_bytes <= budget:
+            return BudgetVerdict(
+                "fail", entries_total, budget, own_bytes, pr_budget,
+                f"PR #{pr_number}'s own pr-{pr_number} entries push the account over [cache].budget: "
+                "save fewer/smaller PR entries",
+            )
+    if over:
+        return BudgetVerdict(
+            "warn", entries_total, budget, own_bytes, pr_budget,
+            f"over [cache].budget, but not because of this run's own entries (warn-only here): {fix}",
+        )
+    return BudgetVerdict("ok", entries_total, budget, own_bytes, pr_budget, "within [cache].budget")
+
+
+def run_budget(
+    ci: CiToml,
+    *,
+    fetch: FetchFn,
+    token: str,
+    repo: str,
+    event_name: str,
+    ref: str,
+    pr_number: int | None,
+    default_branch: str = "main",
+) -> BudgetVerdict:
+    try:
+        entries = list_caches(fetch, token, repo)
+    except CacheApiError as exc:
+        return BudgetVerdict("warn", 0, None, 0, None, f"could not list live caches ({exc}); not failing on unread state")
+    classified = classify(ci, entries)
+    total = sum(c.entry.size_in_bytes for c in classified)
+    own = sum(c.entry.size_in_bytes for c in classified if pr_number is not None and c.pr == pr_number)
+    return evaluate(
+        ci, total, own_bytes=own, hard=is_hard_context(event_name, ref, default_branch), pr_number=pr_number
+    )

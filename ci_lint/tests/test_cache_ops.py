@@ -118,13 +118,17 @@ class JanitorTest(unittest.TestCase):
         self.fetch = _fetch_from(_load("caches-synthetic-rules.json"))
         self.graphql = _graphql_from(_load("pr-states.json"))
 
-    def test_deletes_cache_003_005_009_but_not_cache_008(self) -> None:
+    def test_deletes_cache_003_005_009_and_closed_pr_but_not_stale_base_delta(self) -> None:
+        """#23 section 4.1: the janitor deletes every entry of a closed PR
+        (9001, PR #7 CLOSED); an open PR's stale-base delta (9002) stays
+        trim's job."""
+
         result, table = janitor(
             self.ci, fetch=self.fetch, graphql=self.graphql, delete=None, token=TOKEN, repo=REPO_SLUG,
             dry_run=True, stale_days=999999,  # disable the stale-entry sweep for this assertion
         )
         planned_ids = {p.id for p in result.planned}
-        self.assertEqual({9003, 9004, 9005}, planned_ids)
+        self.assertEqual({9001, 9003, 9004, 9005}, planned_ids)
         self.assertIn("family", table)
 
     def test_stale_entries_are_swept_too(self) -> None:
@@ -138,8 +142,10 @@ class JanitorTest(unittest.TestCase):
             dry_run=True, stale_days=5, now=far_future, max_deletes=100,
         )
         planned_ids = {p.id for p in result.planned}
-        # 8237210113 (the live "compile" base entry) is also in this fixture and is stale too.
-        self.assertIn(8237210113, planned_ids)
+        self.assertIn(9002, planned_ids)  # an open PR's delta, stale by access time
+        # 8237210113 (the live "compile" base entry) is stale too, but it is the newest
+        # entry a required job restores (#23 section 4.3) -- never deleted.
+        self.assertNotIn(8237210113, planned_ids)
 
     def test_before_after_table_reflects_a_live_delete(self) -> None:
         calls: list[str] = []
@@ -147,8 +153,94 @@ class JanitorTest(unittest.TestCase):
             self.ci, fetch=self.fetch, graphql=self.graphql, delete=_recording_delete(calls), token=TOKEN,
             repo=REPO_SLUG, dry_run=False, stale_days=999999,
         )
-        self.assertEqual(3, len(result.deleted))
+        self.assertEqual(4, len(result.deleted))
         self.assertIn("retired", table)  # id 9003's family label
+
+
+def _entry(cid: int, key: str, ref: str, size: int, created: str, accessed: str) -> dict[str, object]:
+    return {
+        "id": cid, "ref": ref, "key": key, "version": "v", "size_in_bytes": size,
+        "created_at": created, "last_accessed_at": accessed,
+    }
+
+
+MB = 1024 * 1024
+NOW = 1790000000.0
+
+
+def _iso(offset_seconds: float) -> str:
+    import datetime
+
+    return datetime.datetime.fromtimestamp(NOW + offset_seconds, tz=datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
+class JanitorIssue23Test(unittest.TestCase):
+    """zackees/ci.yml#23 section 4: closed-PR deletion by delimited pr-<N> key,
+    fail-safe lookup, grace window, LRU convergence, newest-entry protection."""
+
+    def setUp(self) -> None:
+        ci, findings = load_ci_toml(REPO)
+        assert ci is not None, findings
+        self.ci = ci
+        old = _iso(-3600)
+        self.entries = [
+            _entry(1, "setup-soldr-buildcache-v2-linux-x64-pr-7-aaaaaaaaaaaaaaaa", "refs/heads/feat", 5 * MB, old, old),
+            _entry(2, "setup-soldr-buildcache-v2-linux-x64-pr-8-bbbbbbbbbbbbbbbb", "refs/heads/other", 5 * MB, old, old),
+            # PR #7 is closed, but this one is inside the 10-minute grace window
+            _entry(3, "setup-soldr-buildcache-v2-linux-x64-pr-7-young-cccccccccccccccc", "refs/heads/feat", 5 * MB,
+                   _iso(-60), _iso(-60)),
+        ]
+
+    def _run(self, entries, graphql, ci=None):
+        result, _table = janitor(
+            ci or self.ci, fetch=_fetch_from({"actions_caches": entries}), graphql=graphql, delete=None,
+            token=TOKEN, repo=REPO_SLUG, dry_run=True, stale_days=999999, now=NOW,
+        )
+        return result
+
+    def test_closed_pr_keyed_entries_deleted_open_and_young_kept(self) -> None:
+        result = self._run(self.entries, _graphql_from(_load("pr-states.json")))
+        self.assertEqual({1}, {p.id for p in result.planned})
+        self.assertIn("closed PR", result.planned[0].reason)
+
+    def test_failed_pr_lookup_keeps_everything(self) -> None:
+        def graphql(query: str, token: str):
+            raise GitHubApiError("boom")
+
+        result = self._run(self.entries, graphql)
+        self.assertEqual((), result.planned)
+        self.assertIn("fail safe", result.warning or "")
+
+    def test_lru_family_converges_to_its_footprint(self) -> None:
+        from dataclasses import replace
+
+        fams = dict(self.ci.cache.family)
+        fams["dylint"] = replace(fams["dylint"], evict="lru")  # max 80MB, per none -> 80MB footprint
+        ci = replace(self.ci, cache=replace(self.ci.cache, family=fams))
+        old = _iso(-7200)
+        entries = [
+            _entry(11, "setup-soldr-dylint-v2-1111111111111111", "refs/heads/main", 50 * MB, old, _iso(-100)),
+            _entry(12, "setup-soldr-dylint-v2-2222222222222222-x", "refs/heads/main", 20 * MB, old, _iso(-200)),
+            _entry(13, "setup-soldr-dylint-v2-3333333333333333-y", "refs/heads/main", 20 * MB, old, _iso(-300)),
+        ]
+        result = self._run(entries, None, ci)
+        planned = {p.id: p.reason for p in result.planned}
+        self.assertNotIn(11, planned)  # newest
+        self.assertNotIn(12, planned)  # 70MB cumulative: fits
+        self.assertIn(13, planned)  # 90MB cumulative: evicted, least recently used
+        self.assertTrue(planned[13].startswith("lru"))
+
+    def test_non_lru_family_keeps_newest_per_prefix(self) -> None:
+        old = _iso(-7200)
+        entries = [
+            _entry(21, "setup-soldr-dylint-v2-1111111111111111", "refs/heads/main", 50 * MB, old, _iso(-100)),
+            _entry(22, "setup-soldr-dylint-v2-2222222222222222", "refs/heads/main", 50 * MB, old, _iso(-200)),
+        ]
+        result = self._run(entries, None)
+        self.assertEqual({22}, {p.id for p in result.planned})
+        self.assertTrue(result.planned[0].reason.startswith("CACHE-006"))
 
 
 class HealTest(unittest.TestCase):
