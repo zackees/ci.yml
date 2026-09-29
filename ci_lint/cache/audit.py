@@ -68,15 +68,28 @@ _RUST_004_JOBS_PER_PAGE = 50
 TINY_BYTES = 1024
 BUDGET_WARN_RATIO = 0.90
 
-# `delta-v1-pr<N>-<family>-<platform>-b<base8>` -- family AND platform ids
-# both legitimately contain hyphens (e.g. "linux-x64"), so a single blind
-# regex with a `[^-]+` platform group mis-splits them (round-4A: caught by
-# ci_lint/tests/test_cache_audit.py against a synthetic "compile"/
-# "linux-x64" delta key, which a naive regex parsed as family="compile-
-# linux", platform="x64"). Only the PR number and the base8 suffix are
-# unambiguous from the string alone; `_split_family_platform` below
-# resolves the rest against ci.toml's own declared platform ids.
-DELTA_OUTER_RE = re.compile(r"^delta-v1-pr(?P<pr>\d+)-(?P<rest>.+)-b(?P<base8>[0-9a-f]{8})$")
+# `delta-v1-pr<N>-<family>-<platform>-b<base8>[-g<gen8>]` -- family AND
+# platform ids both legitimately contain hyphens (e.g. "linux-x64"), so a
+# single blind regex with a `[^-]+` platform group mis-splits them
+# (round-4A: caught by ci_lint/tests/test_cache_audit.py against a
+# synthetic "compile"/"linux-x64" delta key, which a naive regex parsed as
+# family="compile-linux", platform="x64"). Only the PR number and the
+# base8 suffix are unambiguous from the string alone; `_split_family_
+# platform` below resolves the rest against ci.toml's own declared
+# platform ids. The trailing `-g<gen8>` is round-4C's per-generation
+# commit-sha suffix (docs/ci-toml.md, template-python-rust-cmd#31): cache
+# entries are immutable, so each save needs a distinct key, and the
+# previous generation is healed (deleted) once a new one lands -- but
+# CLOSED/MERGED-PR trim (CACHE-008) must still recognize a generation-
+# suffixed key as a delta at all (round-4A's classifier predates the
+# generation suffix and silently misclassified it as CACHE-001
+# "undeclared family" instead, so a merged PR's straggler generation
+# was never trimmed -- see the round-4C worker report). `gen8` is parsed
+# but not otherwise used by classification: the delta's identity for
+# staleness/closed-PR purposes is still (pr, family, platform, base8).
+DELTA_OUTER_RE = re.compile(
+    r"^delta-v1-pr(?P<pr>\d+)-(?P<rest>.+)-b(?P<base8>[0-9a-f]{8})(?:-g(?P<gen8>[0-9a-f]{6,40}))?$"
+)
 
 # CACHE-006 "superseded": two entries of the same declared family whose
 # keys differ only in a trailing lockfile/version hash. Best-effort: strip

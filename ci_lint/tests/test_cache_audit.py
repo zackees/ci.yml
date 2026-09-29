@@ -183,6 +183,57 @@ class ClassifySyntheticRulesTest(unittest.TestCase):
                 self.assertIn("closed", f.message)
 
 
+class ClassifyGenerationSuffixedDeltaTest(unittest.TestCase):
+    """Round-4C: a delta key carries a `-g<sha8>` per-generation commit-sha
+    suffix (template-python-rust-cmd#31 -- cache entries are immutable, so
+    each save needs a distinct key; the previous generation is healed once
+    a new one lands). `classify()` predates that suffix and, before this
+    fix, silently fell through to CACHE-001 "undeclared family" instead of
+    recognizing it as a delta at all -- which meant CACHE-008 (closed/
+    merged-PR trim) never saw it either. RED: reverting DELTA_OUTER_RE's
+    trailing `(?:-g...)?` group reproduces the miss (is_delta=False)."""
+
+    def setUp(self) -> None:
+        ci, findings = load_ci_toml(REPO)
+        assert ci is not None, findings
+        self.ci = ci
+
+    def test_generation_suffixed_key_is_still_classified_as_a_delta(self) -> None:
+        entry = CacheEntry(
+            id=1,
+            ref="refs/pull/31/merge",
+            key="delta-v1-pr31-compile-linux-x64-ba37ca145-g5601e597",
+            version="v1",
+            size_in_bytes=1_224_921,
+            created_at="2026-09-29T02:49:27Z",
+            last_accessed_at="2026-09-29T02:49:27Z",
+        )
+        (classified,) = classify(self.ci, [entry])
+        self.assertTrue(classified.is_delta, "generation-suffixed delta key must classify as a delta, not CACHE-001")
+        assert classified.delta is not None
+        self.assertEqual(31, classified.delta.pr)
+        self.assertEqual("compile", classified.delta.family)
+        self.assertEqual("linux-x64", classified.delta.platform)
+        self.assertEqual("a37ca145", classified.delta.base8)
+
+    def test_non_suffixed_key_still_classifies_identically(self) -> None:
+        # The optional group must not change parsing for every EXISTING
+        # (pre-round-4C) delta key shape.
+        entry = CacheEntry(
+            id=2,
+            ref="refs/pull/7/merge",
+            key="delta-v1-pr7-compile-linux-x64-b43cef837",
+            version="v1",
+            size_in_bytes=1000,
+            created_at="2026-09-29T02:49:27Z",
+            last_accessed_at="2026-09-29T02:49:27Z",
+        )
+        (classified,) = classify(self.ci, [entry])
+        self.assertTrue(classified.is_delta)
+        assert classified.delta is not None
+        self.assertEqual("43cef837", classified.delta.base8)
+
+
 class RunAuditErrorHandlingTest(unittest.TestCase):
     def test_fetch_failure_raises_audit_error_not_a_crash(self) -> None:
         from ci_lint.cache.audit import AuditError
