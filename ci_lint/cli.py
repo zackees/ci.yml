@@ -60,6 +60,12 @@ from ci_lint.selftest import run_selftest
 
 
 def _load_event(path: str | None) -> dict[str, object]:
+    """Load the GitHub event payload from `--event`, falling back to the
+    runner's `GITHUB_EVENT_PATH` (also set by act). Without this fallback a
+    workflow step that omitted `--event` silently lost the PR head SHA, and
+    title-edit reuse never fired (template-python-rust-cmd#19)."""
+    if path is None:
+        path = os.environ.get("GITHUB_EVENT_PATH") or None
     if path is None:
         return {}
     try:
@@ -107,8 +113,15 @@ def _compute_reuse_for_plan(plan: Plan, event_name: str, event: dict[str, object
     token = os.environ.get("GITHUB_TOKEN")
     repo_slug = os.environ.get("GITHUB_REPOSITORY")
     head_sha = _head_sha_from_event(event)
-    if not token or not repo_slug or not head_sha:
+    if not token or not repo_slug:
         return empty_result(lane_digests)
+    if not head_sha:
+        warning = (
+            "reuse: no pull_request.head.sha in the event payload; pass --event or run "
+            "inside GitHub Actions (GITHUB_EVENT_PATH) -- reusing nothing"
+        )
+        print(f"ci-lint: {warning}", file=sys.stderr)
+        return empty_result(lane_digests, warning=warning)
     result = compute_reuse(
         repo=repo_slug,
         head_sha=head_sha,
