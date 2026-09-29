@@ -8,6 +8,7 @@ import unittest
 from ci_lint.cache.families import (
     ALLOWED_VIA_VALUES,
     resolve_prefix,
+    resolve_prefixes,
     resolve_retired_prefix,
 )
 
@@ -35,6 +36,12 @@ class FamilyResolutionTest(unittest.TestCase):
     def test_ci_lint_via_uses_the_familys_own_id(self) -> None:
         self.assertEqual("uv-v1-", resolve_prefix("ci-lint", "uv"))
         self.assertEqual("compile-v1-", resolve_prefix("ci-lint", "compile"))
+
+    def test_setup_uv_accepts_the_v6_legacy_generation(self) -> None:
+        # zackees/ci.yml#87: building keys uses the current generation only.
+        self.assertEqual(("setup-uv-2-", "setup-uv-1-"), resolve_prefixes("setup-uv", "uv"))
+        self.assertEqual(("uv-v1-",), resolve_prefixes("ci-lint", "uv"))
+        self.assertEqual((), resolve_prefixes("bogus:family", "x"))
 
     def test_unknown_via_resolves_to_none(self) -> None:
         self.assertIsNone(resolve_prefix("bogus:family", "x"))

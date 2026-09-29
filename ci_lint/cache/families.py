@@ -26,6 +26,11 @@ class FamilyShape:
     prefix: str
     source: str
     note: str = ""
+    # Older, still-live key generations the same `via` produces when a repo
+    # pins an older major of the action (zackees/ci.yml#87). Classification
+    # (`resolve_prefixes`) accepts them; key BUILDING (`resolve_prefix`)
+    # always uses the current `prefix`.
+    legacy_prefixes: tuple[str, ...] = ()
 
 
 EXTERNAL_FAMILY_SHAPES: tuple[FamilyShape, ...] = (
@@ -92,6 +97,7 @@ EXTERNAL_FAMILY_SHAPES: tuple[FamilyShape, ...] = (
     FamilyShape(
         via="setup-uv",
         prefix="setup-uv-2-",
+        legacy_prefixes=("setup-uv-1-",),
         source="astral-sh/setup-uv src/cache/restore-cache.ts:12,105 -- "
         'const CACHE_VERSION = "2"; return `setup-uv-${CACHE_VERSION}-${getArch()}-${platform}-'
         "${osNameVersion}-${version}${pruned}${python}${cacheDependencyPathHash}${suffix}`;",
@@ -109,7 +115,10 @@ EXTERNAL_FAMILY_SHAPES: tuple[FamilyShape, ...] = (
         "cardinality can exceed a family declared 'per = \"os\"' (3 groups) -- template-python-"
         "rust-cmd showed 6+ distinct entries across its 6 declared platforms on 2026-09-29; noted "
         "as an open question for a future round rather than changed here (the amendment says "
-        "'keep max/per').",
+        "'keep max/per'). setup-uv v6 (e.g. d0d8abe699bfb85fec6de9f7adb5ae17292296ff) still "
+        "writes CACHE_VERSION = \"1\" keys (src/cache/restore-cache.ts:18,65 at that SHA: "
+        "`setup-uv-1-${arch}-${platform}-${pythonVersion}${pruned}${hash}${suffix}`), so "
+        "`setup-uv-1-` is accepted as a legacy generation of the same family (ci.yml#87).",
     ),
 )
 
@@ -155,6 +164,19 @@ def resolve_prefix(via: str, family_id: str) -> str | None:
         return f"{family_id}-{CI_LINT_KEY_VERSION}-"
     shape = EXTERNAL_SHAPES_BY_VIA.get(via)
     return shape.prefix if shape is not None else None
+
+
+def resolve_prefixes(via: str, family_id: str) -> tuple[str, ...]:
+    """Every live cache-key prefix `via` can produce: the current one
+    first, then any `legacy_prefixes` an older pinned action major still
+    writes (zackees/ci.yml#87: setup-uv v6's `setup-uv-1-`). Used to
+    CLASSIFY live entries; empty for an unrecognized `via`."""
+
+    current = resolve_prefix(via, family_id)
+    if current is None:
+        return ()
+    shape = EXTERNAL_SHAPES_BY_VIA.get(via)
+    return (current, *(shape.legacy_prefixes if shape is not None else ()))
 
 
 def resolve_retired_prefix(retired_name: str) -> str:

@@ -40,7 +40,7 @@ import hashlib
 import re
 from dataclasses import dataclass, replace
 
-from ci_lint.cache.families import resolve_prefix, resolve_retired_prefix
+from ci_lint.cache.families import resolve_prefixes, resolve_retired_prefix
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.cache.github_cache import (
     CacheApiError,
@@ -211,8 +211,7 @@ def _classify_one(ci: CiToml, entry: CacheEntry) -> ClassifiedEntry:
             return ClassifiedEntry(entry=entry, family_id=None, is_delta=False, delta=None, is_retired=True)
 
     for fam_id, fam in ci.cache.family.items():
-        prefix = resolve_prefix(fam.via, fam_id)
-        if prefix is not None and entry.key.startswith(prefix):
+        if any(entry.key.startswith(p) for p in resolve_prefixes(fam.via, fam_id)):
             return ClassifiedEntry(entry=entry, family_id=fam_id, is_delta=False, delta=None, is_retired=False)
 
     return ClassifiedEntry(entry=entry, family_id=None, is_delta=False, delta=None, is_retired=False)
