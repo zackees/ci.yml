@@ -25,6 +25,11 @@ class ReleaseGateFixtureTest(unittest.TestCase):
         rules = [f.rule for f in check_rel_002(fixture("REL-002", "green"))]
         self.assertNotIn("REL-002", rules)
 
+    def test_rel_002_root_anchored_pattern_is_clean(self) -> None:
+        # ci.yml#133: kernal-api's exact "/target.soldr-*" gitignore line.
+        rules = [f.rule for f in check_rel_002(fixture("REL-002", "green-anchored"))]
+        self.assertNotIn("REL-002", rules)
+
     def test_rel_005_publish_script_rebuilds(self) -> None:
         rules = [f.rule for f in check_rel_005(fixture("REL-005", "red"))]
         self.assertIn("REL-005", rules)
