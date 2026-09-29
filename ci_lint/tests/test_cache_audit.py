@@ -13,6 +13,7 @@ import unittest
 
 from ci_lint.cache.audit import ClassifiedEntry, audit_classified, classify, run_audit
 from ci_lint.cache.github_cache import CacheEntry, GitHubApiError, list_caches
+from ci_lint.finding import Status
 from ci_lint.schema import load_ci_toml
 from ci_lint.tests.helpers import FIXTURES
 
@@ -557,3 +558,60 @@ class RegistryPerJobDigestTest(unittest.TestCase):
         self.assertEqual(1, len(c006), [f.message for f in c006])
         self.assertTrue(c006[0].message.startswith("cache id=4 "), c006[0].message)
         self.assertIn("kept newest id=1 ", c006[0].message)
+
+
+class FamilyLiveExcessTest(unittest.TestCase):
+    """ci.yml#139 (kernal-api #93): live default-branch entries beyond a
+    family's declared per-cardinality or max are CACHE-004 -- a violation
+    when the family's live bytes exceed its declared worst case, else
+    needs_review. The fixture's soldr-mini family is per = "platform" (2
+    platforms) with max = "5MB"."""
+
+    MB = 1024 * 1024
+
+    def setUp(self) -> None:
+        ci, findings = load_ci_toml(REPO)
+        assert ci is not None, findings
+        self.ci = ci
+
+    def _family_findings(self, specs: list[tuple[str, str, int]]):
+        entries = [
+            {
+                "id": i, "ref": ref, "key": key, "version": "v", "size_in_bytes": size,
+                "created_at": "2026-09-01T00:00:00Z", "last_accessed_at": "2026-09-01T00:00:00Z",
+            }
+            for i, (key, ref, size) in enumerate(specs, start=1)
+        ]
+        classified = classify(self.ci, list_caches(_fetch_from({"actions_caches": entries}), TOKEN, REPO_SLUG))
+        report = audit_classified(self.ci, classified, graphql=None, token=TOKEN, repo=REPO_SLUG)
+        return [f for f in report.findings if f.rule == "CACHE-004" and f.path == "cache:family:soldr-mini"]
+
+    def test_green_within_model(self) -> None:
+        found = self._family_findings([
+            ("soldr-mini-v2-linux-x64-glibc-v0.9.25", "refs/heads/main", 4 * self.MB),
+            ("soldr-mini-v2-windows-x64-msvc-v0.9.25", "refs/heads/main", 4 * self.MB),
+            # A PR-ref entry is CACHE-003/008's business, not this model check.
+            ("soldr-mini-v2-linux-x64-glibc-v0.9.26", "refs/pull/7/merge", 4 * self.MB),
+        ])
+        self.assertEqual([], found)
+
+    def test_red_leftover_writer_shapes_break_the_proof(self) -> None:
+        found = self._family_findings([
+            ("soldr-mini-v2-linux-x64-glibc-v0.9.25", "refs/heads/main", 4 * self.MB),
+            ("soldr-mini-v2-linux-x64-musl-v0.9.25", "refs/heads/main", 4 * self.MB),
+            ("soldr-mini-v2-linux-arm64-glibc-v0.9.25", "refs/heads/main", 4 * self.MB),
+            ("soldr-mini-v2-windows-x64-msvc-v0.9.25", "refs/heads/main", 6 * self.MB),
+        ])
+        self.assertEqual(1, len(found), [f.message for f in found])
+        self.assertEqual(Status.VIOLATION, found[0].status)
+        self.assertIn("4 live entries", found[0].message)
+        self.assertIn("exceed max", found[0].message)
+
+    def test_count_excess_that_fits_the_bytes_is_needs_review(self) -> None:
+        found = self._family_findings([
+            ("soldr-mini-v2-linux-x64-glibc-v0.9.25", "refs/heads/main", 2 * self.MB),
+            ("soldr-mini-v2-linux-x64-musl-v0.9.25", "refs/heads/main", 2 * self.MB),
+            ("soldr-mini-v2-windows-x64-msvc-v0.9.25", "refs/heads/main", 2 * self.MB),
+        ])
+        self.assertEqual(1, len(found), [f.message for f in found])
+        self.assertEqual(Status.NEEDS_REVIEW, found[0].status)

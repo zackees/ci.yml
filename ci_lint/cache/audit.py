@@ -49,9 +49,9 @@ from ci_lint.cache.github_cache import (
     fetch_pr_states,
     list_caches,
 )
-from ci_lint.finding import Finding
+from ci_lint.finding import Finding, Status
 from ci_lint.github_api import FetchFn, GitHubApiError, GraphQLFn
-from ci_lint.rules.cache_static import parse_size
+from ci_lint.rules.cache_static import cardinality, parse_size
 from ci_lint.schema import CiToml
 
 # RUST-004: the two `via` values whose live entries this correlates against
@@ -604,6 +604,70 @@ def _check_cache_008(
     return findings, warning, frozenset(closed_ids)
 
 
+def _check_family_live_excess(
+    ci: CiToml, classified: tuple[ClassifiedEntry, ...], default_branch: str
+) -> list[Finding]:
+    """CACHE-004 (live, ci.yml#139): compare each declared family's LIVE
+    default-branch entries with the model CACHE-004's static proof sums --
+    at most `cardinality(per)` entries (doubled for a `lockfile = true`
+    family's lockfile-change peak), each at most `max`. Restore-only
+    leftovers from an older writer shape (kernal-api: 3 compile, 7
+    toolchain, 3 soldr-mini entries against `per = "none"`, 5.45 GB live
+    vs a 2.97 GB proven worst case) otherwise pass every other live rule
+    while silently breaking the static proof. PR/delta entries are out of
+    scope (CACHE-008 owns them)."""
+
+    default_ref = f"refs/heads/{default_branch}"
+    findings: list[Finding] = []
+    for fam_id, fam in ci.cache.family.items():
+        live = [
+            c
+            for c in classified
+            if c.family_id == fam_id
+            and not c.is_delta
+            and c.pr is None
+            and (not c.entry.ref or c.entry.ref == default_ref)
+        ]
+        if not live:
+            continue
+        declared_count = cardinality(ci, fam.per) * (2 if fam.lockfile else 1)
+        max_bytes = parse_size(fam.max) if fam.max else None
+        oversized = [c for c in live if max_bytes is not None and c.entry.size_in_bytes > max_bytes]
+        if len(live) <= declared_count and not oversized:
+            continue
+        live_bytes = sum(c.entry.size_in_bytes for c in live)
+        problems: list[str] = []
+        if len(live) > declared_count:
+            peak = ", x2 lockfile peak" if fam.lockfile else ""
+            problems.append(
+                f"{len(live)} live entries on {default_ref} but the model allows {declared_count} "
+                f"(per = {fam.per or 'none'!r}{peak})"
+            )
+        if oversized:
+            ids = ", ".join(f"id={c.entry.id} {c.entry.size_in_bytes}B" for c in oversized)
+            problems.append(f"{len(oversized)} entrie(s) exceed max = {fam.max!r} ({ids})")
+        declared_bytes = declared_count * max_bytes if max_bytes is not None else None
+        bound = f" vs a declared worst case of {declared_bytes}B" if declared_bytes is not None else ""
+        # The static proof is actually broken only when the family's live
+        # bytes exceed what it budgets; a shape mismatch that still fits
+        # the bytes is surfaced for review, not failed.
+        broken = declared_bytes is not None and live_bytes > declared_bytes
+        findings.append(
+            Finding(
+                rule="CACHE-004",
+                path=f"cache:family:{fam_id}",
+                status=Status.VIOLATION if broken else Status.NEEDS_REVIEW,
+                message=f"[cache.family.{fam_id}] live footprint {live_bytes}B{bound} no longer matches "
+                f"its declared model: {'; '.join(problems)}",
+                fix="the static CACHE-004 proof undercounts this family: delete the leftover entries "
+                "from older writer shapes ('ci-lint cache janitor' once they go unaccessed, or "
+                f"'ci-lint cache heal --key <key> --ref {default_ref}'), or correct "
+                f"[cache.family.{fam_id}]'s per/max to the shapes the writers really save",
+            )
+        )
+    return findings
+
+
 def audit_classified(
     ci: CiToml,
     classified: tuple[ClassifiedEntry, ...],
@@ -631,6 +695,7 @@ def audit_classified(
     findings.extend(_check_cache_005(ci, classified))
     findings.extend(_check_cache_006(classified))
     findings.extend(_check_cache_009(classified))
+    findings.extend(_check_family_live_excess(ci, classified, default_branch))
     cache008_findings, warning, closed_pr_ids = _check_cache_008(
         classified, graphql=graphql, token=token, repo=repo
     )
