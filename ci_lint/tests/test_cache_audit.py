@@ -115,9 +115,13 @@ class ClassifyLiveTemplateTest(unittest.TestCase):
         self.assertEqual(1, len(findings_for("CACHE-003", 8236693780)))  # refs/pull/17/merge
         self.assertEqual(0, len(findings_for("CACHE-003", 8237209367)))  # refs/heads/main
         self.assertEqual(2, sum(1 for f in report.findings if f.rule == "CACHE-003"))
-        # the older (less-recently-accessed) of the two "registry" entries
-        # that differ only in their trailing lockfile-hash component
-        self.assertEqual(1, len(findings_for("CACHE-006", 8237210495)))
+        # zackees/ci.yml#88: the two "registry" entries share the Cargo.lock
+        # hash (a87d2454829c34f1) and differ only in the trailing TOOLCHAIN
+        # digest (5820... = the main build job, b72e... = the dylint job --
+        # the same digests the two buildcache keys carry), so both are live
+        # per-job entries, not generations. A real superseded registry
+        # generation is covered by RegistryPerJobDigestTest below.
+        self.assertEqual(0, len(findings_for("CACHE-006", 8237210495)))
         self.assertEqual(0, len(findings_for("CACHE-006", 8237268308)))
         # 8237209367 (main) and 8236693780 (pr17) share an IDENTICAL key
         # (same shape) -- the older-accessed one (pr17's) is superseded too.
@@ -486,3 +490,27 @@ class SetupUvLegacyGenerationTest(unittest.TestCase):
         c001 = [f for f in report.findings if f.rule == "CACHE-001"]
         self.assertEqual(1, len(c001))
         self.assertIn("id=3 ", c001[0].message)
+
+
+class RegistryPerJobDigestTest(unittest.TestCase):
+    """zackees/ci.yml#88: setup-soldr cargo-registry keys end in
+    `<Cargo.lock hash>-<toolchain digest>`; per-job digests are concurrent
+    live entries (GREEN), only an older Cargo.lock hash under the SAME digest
+    is superseded (RED, CACHE-006)."""
+
+    def setUp(self) -> None:
+        ci, findings = load_ci_toml(REPO)
+        assert ci is not None, findings
+        self.ci = ci
+        entries = list_caches(_fetch_from(_load("caches-registry-per-job.json")), TOKEN, REPO_SLUG)
+        self.classified = classify(ci, entries)
+
+    def test_only_the_older_lockfile_generation_is_superseded(self) -> None:
+        self.assertTrue(all(c.family_id == "registry" for c in self.classified))
+        report = audit_classified(
+            self.ci, self.classified, graphql=None, token=TOKEN, repo=REPO_SLUG, default_branch="main"
+        )
+        c006 = [f for f in report.findings if f.rule == "CACHE-006"]
+        self.assertEqual(1, len(c006), [f.message for f in c006])
+        self.assertTrue(c006[0].message.startswith("cache id=4 "), c006[0].message)
+        self.assertIn("kept newest id=1 ", c006[0].message)
