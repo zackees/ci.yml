@@ -69,8 +69,12 @@ EXTERNAL_FAMILY_SHAPES: tuple[FamilyShape, ...] = (
     ),
     FamilyShape(
         via="setup-soldr:dylint-output",
-        prefix="setup-soldr-dylint-output-v1-",
-        source="setup-soldr src/lib/resolve-setup.ts:1204 -- dylintOutputKey",
+        prefix="setup-soldr-dylint-output-v2-",
+        source="setup-soldr src/lib/resolve-setup.ts:1258 -- dylintOutputKeyPrefix = "
+        "`setup-soldr-dylint-output-v2-${runnerOs}-${runnerArch}-${dylintOutputNonLockHash}`",
+        note="v2 since setup-soldr v0.9.82 (source-SHA-keyed output cache); the pre-v0.9.82 "
+        "`setup-soldr-dylint-output-v1-` entries are a dead generation -- list that literal "
+        "prefix in [cache].retired so the janitor deletes them (CACHE-009).",
     ),
     FamilyShape(
         via="setup-soldr:soldr-mini",

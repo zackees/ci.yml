@@ -9,7 +9,7 @@ state this package cannot reproduce without invoking soldr itself (issue #6
 §6: "Keys are built by exactly two builders, never written by hand").  This
 module builds the OTHER builder's half: a `via = "ci-lint"` family's own
 key from its declared `[cache.family.<id>].key` components, and the delta
-wrapper `delta-v1-pr<N>-<family>-<platform>-b<base8>`, which wraps ANY
+wrapper `delta-v1-pr-<N>-<family>-<platform>-b<base8>`, which wraps ANY
 family's base key -- a setup-soldr one included, passed in literally via
 `--base-key` since only setup-soldr (or a restore step that already has it)
 knows that string at runtime.
@@ -100,7 +100,7 @@ def build_family_key(ci: CiToml, family_id: str, *, platform_id: str | None, rep
 
 
 def build_delta_key(*, family_id: str, platform_id: str, pr: int, base_key: str) -> str:
-    """`delta-v1-pr<N>-<family>-<platform>-b<first 8 hex of
+    """`delta-v1-pr-<N>-<family>-<platform>-b<first 8 hex of
     sha256(base key)>` (issue #6 §6, "PR caches: a small delta, never a
     base"). `base_key` is the literal restored base cache's key string --
     the self-heal property ("A delta whose b<hash> doesn't match the
@@ -108,4 +108,4 @@ def build_delta_key(*, family_id: str, platform_id: str, pr: int, base_key: str)
     string, not some derived identity of it."""
 
     base8 = hashlib.sha256(base_key.encode("utf-8")).hexdigest()[:8]
-    return f"delta-{DELTA_KEY_VERSION}-pr{pr}-{family_id}-{platform_id}-b{base8}"
+    return f"delta-{DELTA_KEY_VERSION}-pr-{pr}-{family_id}-{platform_id}-b{base8}"

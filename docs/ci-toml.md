@@ -256,12 +256,12 @@ not a `[cache.family].via` value at all.
 | `setup-soldr:cook-delta` | `cook-delta-v2-` | `cook-cache.ts:248` (retired fleet-wide, setup-soldr#533; declared only so a `[cache].retired` entry resolves to a real prefix) |
 | `setup-soldr:cross-targets` | `setup-soldr-prepare-v3-` | `blessed-cross-prepare.ts:89` |
 | `setup-soldr:dylint` | `setup-soldr-dylint-v2-` | `resolve-setup.ts:1185-1186` (one entry covers the dylint tool/driver/foundation together; v1 when `dylintModeEnabled` is false) |
-| `setup-soldr:dylint-output` | `setup-soldr-dylint-output-v1-` | `resolve-setup.ts:1204` |
+| `setup-soldr:dylint-output` | `setup-soldr-dylint-output-v2-` | `resolve-setup.ts:1258` (v2 since setup-soldr v0.9.82; list the literal `setup-soldr-dylint-output-v1` in `[cache].retired` to delete the old generation) |
 | `setup-soldr:soldr-mini` | `soldr-mini-v2-` | `soldr-mini-cache.ts:85` |
 | `setup-soldr:solo-toolchain` | `solo-toolchain-v3-` | `solo-toolchain-cache.ts:276,280` (retired in the template, issue #6 D14; declared only so a `[cache].retired` entry resolves to a real prefix) |
 | `setup-uv` | `setup-uv-2-` | astral-sh/setup-uv `src/cache/restore-cache.ts:12,105` -- `CACHE_VERSION = "2"`, `` `setup-uv-${CACHE_VERSION}-${getArch()}-${platform}-${osNameVersion}-${version}${pruned}${python}${cacheDependencyPathHash}${suffix}` ``. See "astral-sh/setup-uv's own cache" below. |
 | `ci-lint` | `<family-id>-v1-` | this package (`ci_lint.cache.keys.build_family_key`); the round-4A brief writes this generically as `ci-lint:<family> -> <family>-v1-`, and `via = "ci-lint"` (the literal value schema-3 has always accepted, no colon) is treated as that same convention -- a round-4A decision, not a second `via` spelling |
-| *(delta wrapper, not a `via` value)* | `delta-v1-pr<N>-<family>-<platform>-b<base8>` | `ci_lint.cache.keys.build_delta_key` |
+| *(delta wrapper, not a `via` value)* | `delta-v1-pr-<N>-<family>-<platform>-b<base8>` | `ci_lint.cache.keys.build_delta_key` |
 
 Round-4A added `setup-soldr:soldr-mini` and `setup-soldr:dylint` to the
 allowlist and to `examples/rust-pypi-app/ci.toml`'s `[cache.family]`: the
@@ -335,7 +335,7 @@ K]` -- two distinct things depending on `--pr`:
   returns its bare prefix, useful for e.g. `cache heal`'s exact-key
   deletes.
 - **With `--pr N` (also needs `--platform` and `--base-key`):** builds the
-  PR delta key `delta-v1-pr<N>-<family>-<platform>-b<base8>`, where `base8`
+  PR delta key `delta-v1-pr-<N>-<family>-<platform>-b<base8>`, where `base8`
   is the first 8 hex chars of `sha256(--base-key)` -- `--base-key` is the
   literal restored base cache's key string (whatever built it: setup-soldr
   or `ci-lint`), so a delta always self-heals the moment its base moves

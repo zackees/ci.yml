@@ -75,7 +75,7 @@ class BuildFamilyKeyTest(unittest.TestCase):
 class BuildDeltaKeyTest(unittest.TestCase):
     def test_matches_the_design_shape(self) -> None:
         key = build_delta_key(family_id="compile", platform_id="linux-x64", pr=42, base_key="some-base-key")
-        self.assertTrue(key.startswith("delta-v1-pr42-compile-linux-x64-b"))
+        self.assertTrue(key.startswith("delta-v1-pr-42-compile-linux-x64-b"))
         base8 = key.rsplit("-b", 1)[1]
         self.assertEqual(8, len(base8))
         self.assertEqual(hashlib.sha256(b"some-base-key").hexdigest()[:8], base8)

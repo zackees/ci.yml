@@ -22,7 +22,7 @@ class FamilyResolutionTest(unittest.TestCase):
             "setup-soldr:cook": "cook-base-v2-",
             "setup-soldr:cross-targets": "setup-soldr-prepare-v3-",
             "setup-soldr:dylint": "setup-soldr-dylint-v2-",
-            "setup-soldr:dylint-output": "setup-soldr-dylint-output-v1-",
+            "setup-soldr:dylint-output": "setup-soldr-dylint-output-v2-",
             "setup-soldr:soldr-mini": "soldr-mini-v2-",
             "setup-soldr:solo-toolchain": "solo-toolchain-v3-",
             "setup-soldr:cook-delta": "cook-delta-v2-",
