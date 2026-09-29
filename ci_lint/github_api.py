@@ -50,6 +50,15 @@ GraphQLFn = Callable[[str, str], JsonValue]
 # caller of FetchFn/default_fetch is untouched.
 FetchStatusFn = Callable[[str, str], "tuple[int, JsonValue]"]
 
+# (url, token, method, json-body) -> (status_code, parsed JSON body or None).
+# Round M2-42 (`ci_lint.sync_issues --apply`, zackees/ci.yml#98): the ONLY
+# write surface in this package that mutates repository content (issues),
+# as opposed to `DeleteFn` (Actions cache entries). `method` is "POST" or
+# "PATCH". Every caller MUST have already decided this write should happen
+# (opt-in checked, cap not exceeded, fingerprint verified) -- like
+# `DeleteFn`, this function does no policy of its own.
+WriteFn = Callable[[str, str, str, "dict[str, JsonValue]"], "tuple[int, JsonValue]"]
+
 _API_ROOT = "https://api.github.com"
 
 
@@ -131,6 +140,39 @@ def default_delete(url: str, token: str) -> None:
             response.read()
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise GitHubApiError(f"DELETE {url} failed: {exc}") from exc
+
+
+def default_write(url: str, token: str, method: str, payload: "dict[str, JsonValue]") -> tuple[int, JsonValue]:
+    """POST/PATCH via stdlib `urllib`. Round M2-42: `ci_lint.sync_issues`'s
+    `--apply` path is the only caller (issue create/update/close). Like
+    `default_fetch_status`, a non-2xx HTTP status is returned rather than
+    raised, so the caller can log exactly what GitHub said instead of
+    losing the response body to a generic exception."""
+
+    if method not in ("POST", "PATCH"):
+        raise ValueError(f"default_write: unsupported method {method!r}")
+    body = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        method=method,
+        headers={**_headers(token), "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310 -- fixed https GitHub API host
+            resp_body = response.read()
+            status = response.status
+    except urllib.error.HTTPError as exc:
+        resp_body = exc.read()
+        status = exc.code
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise GitHubApiError(f"{method} {url} failed: {exc}") from exc
+    if not resp_body:
+        return status, None
+    try:
+        return status, json.loads(resp_body)
+    except json.JSONDecodeError:
+        return status, None
 
 
 def default_graphql(query: str, token: str) -> JsonValue:

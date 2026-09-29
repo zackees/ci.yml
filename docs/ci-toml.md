@@ -607,6 +607,28 @@ A finding matching a non-expired exception is printed with status
 `approved_exception` on every run (never silent); it does not count toward
 precheck's exit code.
 
+## `[fleet]` (round M2-42, zackees/ci.yml#98)
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `sync-issues` | bool (default `false`) | This repository's explicit opt-in for `ci-lint sync-issues --apply` (the central fleet scanner, `ci_lint.fleet`/`ci_lint.sync_issues`) to create, update, and close fingerprinted `ci-lint`-labelled GitHub issues here. Absent table or key both mean `false` -- `--apply` performs zero API calls (not even a GET) against a repository without this key set `true`; `--dry-run` still prints the plan regardless, so an owner can preview before opting in. |
+
+This table is optional (`ci.toml` predating round M2-42 still loads unchanged) and is parsed by `ci_lint.schema._parse_fleet` into `CiToml.fleet: FleetConfig`, so an unrecognized key under `[fleet]` is still `CT-001` like every other table.
+
+### `ci-lint sync-issues --apply` (write path)
+
+```
+python3 -m ci_lint sync-issues --apply [--max-writes N] [--owners ...] [--repos ...] [--from-scan scan.json]
+```
+
+Requires `GITHUB_TOKEN`/`GH_TOKEN` with `issues: write` on every repository it may touch; cannot be combined with `--offline` (existing issues must be read live) or `--replay` (no write replay support -- use `--dry-run` against a recording instead). Three independent guards, every one of which must hold before a single write happens (see docs/agent-guide.md's "Findings and issue lifecycle" for the full rationale):
+
+1. **Per-repository opt-in**: `[fleet].sync-issues = true`, above.
+2. **`--max-writes N`** (default 5): a hard cap on writes (create + update + close, each counted once) per run; actions beyond the cap are reported under `skipped_cap`, not dropped silently -- rerun to continue.
+3. **The fingerprint marker**: `update`/`close` only ever act on an issue `fetch_existing` matched by `<!-- ci-lint-fingerprint: <16 hex> -->` in its body, re-verified immediately before every write.
+
+Idempotent: an `unchanged` action (title and body already match) performs no write, so a rerun against the same findings writes nothing; a finding that stops reproducing closes its issue with an explanatory comment (state -> `closed`) rather than deleting it. Exit code is `1` if any write failed (see the `errors` list in `--json`/text output), else `0`.
+
 ## Rule catalog
 
 Every finding names its rule ID, a `path:line` when known, what is wrong,

@@ -41,6 +41,7 @@ from ci_lint.finding import Finding, Status
 from ci_lint.github_api import FetchStatusFn, GitHubApiError
 from ci_lint.rules.setup_soldr_freshness import check_rust_014
 from ci_lint.rules.workflows import FLEET_RUNNERS
+from ci_lint.schema import load_ci_toml
 from ci_lint.settings_audit import _fetch_branch_protection, _fetch_rulesets, check_gen_006, check_sec_007
 from ci_lint.workflow_scan import as_dict, get_on_section, jobs_of, load_workflows
 from ci_lint.yaml_io import LoadStatus
@@ -75,6 +76,7 @@ class RepoScan:
     pr_entrypoints: tuple[str, ...]
     cache_bytes: int | None
     findings: tuple[Finding, ...]
+    sync_issues_opt_in: bool = False
 
     @property
     def violations(self) -> int:
@@ -336,6 +338,7 @@ def scan_repo(fetch_status: FetchStatusFn, token: str, ref: RepoRef) -> RepoScan
             )
         )
 
+    sync_issues_opt_in = False
     with tempfile.TemporaryDirectory(prefix="ci-lint-fleet-") as tmp:
         root = Path(tmp)
         for rel, wf_text in workflow_texts.items():
@@ -345,6 +348,11 @@ def scan_repo(fetch_status: FetchStatusFn, token: str, ref: RepoRef) -> RepoScan
         wf_count, pr_entrypoints, wf_findings = check_workflows(root)
         findings.extend(wf_findings)
         findings.extend(check_rust_014(fetch_status, token, root))
+        if text is not None:
+            (root / "ci.toml").write_text(text, encoding="utf-8")
+            ci, _ = load_ci_toml(root)
+            if ci is not None:
+                sync_issues_opt_in = ci.fleet.sync_issues
 
     findings.extend(check_sec_007(fetch_status, token, repo))
     bp = _fetch_branch_protection(fetch_status, token, repo, ref.default_branch)
@@ -361,6 +369,7 @@ def scan_repo(fetch_status: FetchStatusFn, token: str, ref: RepoRef) -> RepoScan
         pr_entrypoints=pr_entrypoints,
         cache_bytes=cache_bytes,
         findings=tuple(findings),
+        sync_issues_opt_in=sync_issues_opt_in,
     )
 
 
@@ -429,6 +438,7 @@ def to_json_dict(report: FleetReport) -> dict[str, object]:
                 "workflow_count": s.workflow_count,
                 "pr_entrypoints": list(s.pr_entrypoints),
                 "cache_bytes": s.cache_bytes,
+                "sync_issues_opt_in": s.sync_issues_opt_in,
                 "findings": [finding_to_json(f) for f in s.findings],
             }
             for i, s in enumerate(report.repos)
@@ -500,6 +510,7 @@ def load_report_json(text: str) -> FleetReport:
                 pr_entrypoints=tuple(p for p in prs if isinstance(p, str)) if isinstance(prs, list) else (),
                 cache_bytes=cache if isinstance(cache, int) else None,
                 findings=tuple(findings),
+                sync_issues_opt_in=item.get("sync_issues_opt_in") is True,
             )
         )
     owners = data.get("owners")
