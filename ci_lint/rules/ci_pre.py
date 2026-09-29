@@ -50,12 +50,14 @@ JANITOR_GROUP = "cache-janitor"
 INSTALL_ACTIONS: frozenset[str] = frozenset({"astral-sh/setup-uv", "actions/setup-python"})
 INSTALL_RUN_RE = re.compile(r"(?:^|[\s;&|(])(?:uv|uvx|pip|pip3|pipx)(?=\s|$)|-m\s+pip\b")
 
-# (action slug, input carrying the key, input that disables saving when "false")
-PR_KEY_INPUTS: tuple[tuple[str, str, str | None], ...] = (
-    ("zackees/setup-soldr", "cache-key-suffix", "save-cache"),
-    ("astral-sh/setup-uv", "cache-suffix", "enable-cache"),
-    ("actions/cache", "key", None),
-    ("actions/cache/save", "key", None),
+# (action slug, input carrying the key, inputs any one of which disables saving when "false").
+# setup-uv: `enable-cache: false` disables the cache outright; `save-cache: false`
+# keeps restore but never saves -- either way nothing PR-scoped is written.
+PR_KEY_INPUTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("zackees/setup-soldr", "cache-key-suffix", ("save-cache",)),
+    ("astral-sh/setup-uv", "cache-suffix", ("enable-cache", "save-cache")),
+    ("actions/cache", "key", ()),
+    ("actions/cache/save", "key", ()),
 )
 PR_NUMBER_REFS: tuple[str, ...] = ("github.event.pull_request.number", "outputs.cache_key_pr")
 
@@ -228,11 +230,11 @@ def check_cache_010(ci: CiToml, repo_root: Path) -> list[Finding]:
             if not isinstance(uses, str):
                 continue
             slug = _slug(uses)
-            for action, key_input, save_input in PR_KEY_INPUTS:
+            for action, key_input, save_inputs in PR_KEY_INPUTS:
                 if slug != action:
                     continue
                 with_ = as_dict(step.get("with"))
-                if save_input is not None and str(with_.get(save_input, "")).strip().lower() == "false":
+                if any(str(with_.get(i, "")).strip().lower() == "false" for i in save_inputs):
                     continue  # this step never saves
                 value = with_.get(key_input)
                 if carries_pr_number(value, is_composite=is_composite):
