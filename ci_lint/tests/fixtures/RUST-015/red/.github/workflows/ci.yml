@@ -1,0 +1,9 @@
+name: ci
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: soldr cargo nextest run --locked -p running-process --features daemon -E '"test(compile_session) | test(/^daemon_env::/)"'
+      - run: soldr cargo test --locked --no-default-features daemon_ -- --exact

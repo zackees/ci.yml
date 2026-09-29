@@ -18,6 +18,7 @@ from pathlib import Path
 
 from ci_lint.finding import Status
 from ci_lint.rules.doc_claims import check_gen_010_static, scan_text
+from ci_lint.tests.helpers import requires_yaml_tooling
 
 RED_WORKFLOW = """\
 name: CI
@@ -62,6 +63,7 @@ class Gen010StaticTest(unittest.TestCase):
             self.assertEqual(native[0].status, Status.VIOLATION)
             self.assertTrue(any(c.kind == "native_dylint" for c in claims))
 
+    @requires_yaml_tooling  # the native job is only visible in parsed workflow YAML
     def test_green_native_dylint_claim_with_matching_job_is_clean(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

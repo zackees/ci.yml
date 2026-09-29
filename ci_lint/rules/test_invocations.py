@@ -83,15 +83,23 @@ def logical_lines(text: str) -> list[str]:
 
 
 def split_commands(line: str) -> list[list[str]]:
+    """Tokenize one logical shell line into commands, splitting on unquoted
+    `;`/`&&`/`||`/`|`/`&` only (a quoted nextest filter like
+    `'test(a) | test(b)'` stays one token)."""
+
+    lexer = shlex.shlex(_strip_comment(line), posix=True, punctuation_chars=";&|")
+    lexer.whitespace_split = True
+    commands: list[list[str]] = [[]]
+    try:
+        for tok in lexer:
+            if tok and set(tok) <= set(";&|"):
+                commands.append([])
+            else:
+                commands[-1].append(tok)
+    except ValueError:
+        return []
     out: list[list[str]] = []
-    for seg in re.split(r"&&|\|\||[;|]", _strip_comment(line)):
-        seg = seg.strip()
-        if not seg:
-            continue
-        try:
-            tokens = shlex.split(seg)
-        except ValueError:
-            continue
+    for tokens in commands:
         i = 0
         while i < len(tokens) and ENV_ASSIGN_RE.match(tokens[i]):
             i += 1
