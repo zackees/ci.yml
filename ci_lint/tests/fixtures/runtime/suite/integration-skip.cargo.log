@@ -1,0 +1,9 @@
+   Compiling demo-core v0.1.0
+    Finished test [unoptimized + debuginfo] target(s) in 1.20s
+     Running tests/integration/main.rs (target/debug/deps/integration-def456)
+
+running 2 tests
+test it_syncs ... ok
+test it_syncs_over_a_flaky_link ... ignored
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.03s

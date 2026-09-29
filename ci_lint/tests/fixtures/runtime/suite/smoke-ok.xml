@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" errors="0" failures="0" skipped="0" tests="4" time="0.12">
+    <testcase classname="test_cli" name="test_help" time="0.01" />
+    <testcase classname="test_cli" name="test_run" time="0.02" />
+    <testcase classname="test_cli" name="test_version" time="0.01" />
+    <testcase classname="test_cli" name="test_exit_code" time="0.01" />
+  </testsuite>
+</testsuites>

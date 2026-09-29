@@ -31,6 +31,9 @@ from ci_lint.cache.ops import trim as cache_trim
 from ci_lint.cache.save_ok import SaveOkInputError, SaveOkRequest, evaluate_save_ok
 from ci_lint.cargo_messages import JsonValue, load_artifacts_file
 from ci_lint.cargo_scan import discover_workspace
+from ci_lint.example_drift import ExampleDriftError, compute_example_drift
+from ci_lint.example_drift import render_text as render_example_drift_text
+from ci_lint.example_drift import to_json_dict as example_drift_to_json_dict
 from ci_lint.finding import Finding, Status
 from ci_lint.github_api import default_delete, default_fetch, default_fetch_status, default_graphql
 from ci_lint.perf import (
@@ -71,6 +74,9 @@ from ci_lint.rules.contract import extract_bracket_tokens
 from ci_lint.runtime.gate import compute_gate
 from ci_lint.runtime.gate import render_text as render_gate_text
 from ci_lint.runtime.gate import to_json_dict as gate_to_json_dict
+from ci_lint.runtime.suite import SuiteCheckError, compute_suite_check
+from ci_lint.runtime.suite import render_text as render_suite_check_text
+from ci_lint.runtime.suite import to_json_dict as suite_check_to_json_dict
 from ci_lint.runtime.tests_size import compute_tests_size
 from ci_lint.runtime.tests_size import render_text as render_tests_size_text
 from ci_lint.runtime.tests_size import to_json_dict as tests_size_to_json_dict
@@ -412,6 +418,40 @@ def _cmd_tests_size(args: argparse.Namespace) -> int:
     report = compute_tests_size(ci, artifacts)
     print(json.dumps(tests_size_to_json_dict(report), indent=2) if args.json else render_tests_size_text(report))
     return 1 if any(f.status == Status.VIOLATION for f in report.findings) else 0
+
+
+def _cmd_suite_check(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo).resolve()
+    ci = _load_ci_or_die(repo_root, "suite check")
+    if ci is None:
+        return 1
+    try:
+        report = compute_suite_check(
+            ci,
+            args.suite,
+            [Path(p) for p in (args.cargo_test_log or [])],
+            [Path(p) for p in (args.pytest_junit or [])],
+        )
+    except SuiteCheckError as exc:
+        print(f"ci-lint suite check: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(suite_check_to_json_dict(report), indent=2) if args.json else render_suite_check_text(report))
+    return 1 if report.findings else 0
+
+
+def _cmd_example_drift(args: argparse.Namespace) -> int:
+    example_path = Path(args.example)
+    repo_ci_toml = Path(args.repo) / "ci.toml"
+    try:
+        entries = compute_example_drift(example_path, repo_ci_toml)
+    except ExampleDriftError as exc:
+        print(f"ci-lint example drift: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(example_drift_to_json_dict(entries), indent=2))
+    else:
+        print(render_example_drift_text(entries, example_path=example_path, repo_ci_toml=repo_ci_toml))
+    return 1 if any(not e.repo_specific for e in entries) else 0
 
 
 def _cmd_wheel_check(args: argparse.Namespace) -> int:
@@ -914,6 +954,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_tests_size.add_argument("--artifacts", required=True)
     p_tests_size.add_argument("--json", action="store_true")
     p_tests_size.set_defaults(func=_cmd_tests_size)
+
+    p_suite = sub.add_parser("suite", help="suite checks: check (TEST-001/002)")
+    suite_sub = p_suite.add_subparsers(dest="suite_command", required=True)
+    p_suite_check = suite_sub.add_parser(
+        "check",
+        help="TEST-001 (a skip in a required suite) / TEST-002 (zero executed tests in a required "
+        "suite) from a libtest log and/or a pytest JUnit XML report",
+    )
+    p_suite_check.add_argument("--repo", default=".")
+    p_suite_check.add_argument("--suite", required=True)
+    p_suite_check.add_argument("--cargo-test-log", action="append", default=[])
+    p_suite_check.add_argument("--pytest-junit", action="append", default=[])
+    p_suite_check.add_argument("--json", action="store_true")
+    p_suite_check.set_defaults(func=_cmd_suite_check)
+
+    p_example = sub.add_parser("example", help="canonical-example checks: drift")
+    example_sub = p_example.add_subparsers(dest="example_command", required=True)
+    p_example_drift = example_sub.add_parser(
+        "drift",
+        help="key-by-key ci.toml diff against the canonical example, classified repo-specific "
+        "vs schema/policy drift (issue #6's 'identical apart from repo-specific values' rule)",
+    )
+    p_example_drift.add_argument("--example", required=True)
+    p_example_drift.add_argument("--repo", required=True)
+    p_example_drift.add_argument("--json", action="store_true")
+    p_example_drift.set_defaults(func=_cmd_example_drift)
 
     p_wheel = sub.add_parser("wheel", help="wheel packaging checks (PKG-003/004/005)")
     wheel_sub = p_wheel.add_subparsers(dest="wheel_command", required=True)

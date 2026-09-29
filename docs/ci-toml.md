@@ -536,7 +536,7 @@ when neither PyYAML nor `yq` is available).
 | `SEC-002` | Top-level permissions wider than `contents: read` + `actions: read` (round-4B: `actions: read` is now free at the top level too). Per job: any grant beyond `contents: read`/`actions: read` (free) whose job id is not listed in `[allow].permissions."<permission>: <value>"`; `id-token: write` additionally always requires `environment: pypi` on the `publish` job specifically. Checked identically inside a reusable (`workflow_call`) workflow file, by its own job ids. | Narrow the permissions block, or add the job id to `[allow].permissions` for that exact grant. |
 | `SEC-003` | `pull_request_target` or `workflow_run` declared anywhere. | Use `pull_request` instead. |
 | `SEC-004` | A `uses:` action not in `[allow].actions`, or not pinned to a 40-hex commit SHA. | Allowlist it and/or pin it by SHA. |
-| `RUN-001` | A `runs-on` label outside the fleet list, or any `-latest` label. | Use a fleet label: `ubuntu-24.04`, `ubuntu-24.04-arm`, `windows-2025`, `windows-11-arm`, `macos-15`, `macos-15-intel`. |
+| `RUN-001` | A `runs-on` label outside the fleet list, or any `-latest` label. A `runs-on: ${{ matrix.<var>.runs_on }}` job whose `strategy.matrix.<var>` is built from a precheck plan platform-lanes output (`platform_lanes_json`/`platform_lanes_todo_json` -- these enumerate `[platforms]`) is resolved statically the same way: every `[platforms].*.runs-on` is checked, reported against `ci.toml` if bad. Any other dynamic `runs-on` expression is `needs_review`, not a violation. | Use a fleet label: `ubuntu-24.04`, `ubuntu-24.04-arm`, `windows-2025`, `windows-11-arm`, `macos-15`, `macos-15-intel`. |
 | `WF-001` | A job has no `timeout-minutes`. | Add one. |
 | `WF-002` | A workflow has no top-level `concurrency`. | Add one. |
 | `WF-003` | `continue-on-error` anywhere. | Remove it; fix or gate the step instead. |
@@ -697,6 +697,8 @@ above, which are all static.
 | `ci-lint wheel check --repo <path> --wheel <path.whl> [--sdist <path.tar.gz>]` | the wheel's own bytes (stdlib `zipfile`) | `PKG-003`: `<dist>.data/scripts/<cli>[.exe]` exists, has no `#!` shebang, its magic bytes match the wheel's platform tag (ELF/PE/Mach-O + machine/cputype), and no `console_scripts` entry shadows it. `PKG-004`: `*.dist-info/WHEEL`'s `Generator` is reported (`needs_review`, not a violation, if it doesn't mention soldr); the abi tag matches `[python].abi3`; with `--sdist`, its bundled `pyproject.toml` also declares `build-backend = "soldr"`. `PKG-005`: a `_native` extension file exists in the wheel. | 1 if any violation |
 | `ci-lint wheel installed --repo <path> --venv <dir>` | the venv's `bin`/`Scripts` dir + a subprocess run of the installed CLI and the venv's `python` | Same magic-byte check against the current host; `<cli> --version` exits 0 (`PKG-003`); `<venv python> -c "import <pkg>, <pkg>._native as n"` succeeds and `n.__file__` ends in a compiled-extension suffix (`PKG-005`). `<pkg>` is `pyproject.toml`'s `[project].name` with `-` replaced by `_`. | 1 if any violation |
 | `ci-lint gate --repo <path> --plan <plan.json> --needs <needs.json> [--reuse <reuse.json>] [--event <event.json>]` | `ci-lint plan`'s own JSON output + GitHub's `toJSON(needs)` verbatim, plus (round-3A) the plan's reuse map and the PR event JSON | The `CI OK` aggregator: every job in `plan.required_jobs` must have `needs[job].result == "success"`, or be a **verified reuse** (see "Reuse verification" below) when `skipped`. A `skipped` job that is neither is `TEST-001`; a job id absent from `needs` entirely is `needs_review`, never a silent pass. If `plan.mergeable` is `false`, prints `not mergeable: tag(s) <tags> remove required coverage` to stderr regardless of job results. | 1 if not green |
+| `ci-lint suite check --repo <path> --suite <id> [--cargo-test-log <file>...] [--pytest-junit <file>...]` (round-6C) | Every `--cargo-test-log` file, scanned for libtest summary lines (`test result: <outcome>. N passed; M failed; K ignored; ...`, one per test binary -- a merged-doctest binary's own line is summed in like any other); every `--pytest-junit` file, parsed as JUnit XML (stdlib `xml.etree.ElementTree`, `<testsuite>`/`<testsuites>` `tests`/`failures`/`errors`/`skipped` attributes) | `TEST-001`: `[suites.<id>].required = true` and at least one test was ignored/skipped across all sources. `TEST-002`: `[suites.<id>].required = true` and zero tests were executed (passed + failed) across all sources -- including when no `--cargo-test-log`/`--pytest-junit` files were given at all. A non-required suite only prints per-source and total counts; neither rule fires for it. An unknown `--suite` id, or a file that isn't a recognizable libtest log / JUnit XML, is an error (exit 2), never silently "zero tests". | 1 if any violation, 2 on a bad `--suite`/file |
+| `ci-lint example drift --example <path> --repo <path>` (round-6C) | Both ci.toml files, parsed with stdlib `tomllib` as raw tables (never through the typed schema loader, which would normalize away exactly the key-presence gaps this needs to catch) | Issue #6's round rule, "the ci.toml example is identical in both repos apart from repo-specific values," made machine-checked: every differing key is repo-specific (allowed) or schema/policy drift. See "example drift classification" below for the exact allowed list. | 1 if any schema/policy drift, 2 if a file can't be read/parsed |
 | `ci-lint precheck --local` (or env `ACT=true`) [`--github-output`] [`--reuse`] | -- | Runs every static group as usual, then adds one `needs_review` finding per check that needs the GitHub API and is not implemented yet (`CACHE-005`/`006`/`008`, `ACT-001`), each explicitly labeled `skipped (local): ...` -- never silently passed. Round-3A: `--github-output` writes the same `$GITHUB_OUTPUT` keys as `ci-lint plan --github-output` (computing a plan internally, same as `--plan-out` already did); `--reuse` adds the title-edit reuse lookup to both `--plan-out`'s written JSON (under a `"reuse"` key) and `--github-output`. | as `precheck` |
 | `ci-lint selftest` | -- | Runs this package's own `unittest` suite (`ci_lint.selftest`; zackees/zccache#1760 -- agents must be able to run this directly). | 0/1 |
 
@@ -729,9 +731,39 @@ fails (wrong digest, wrong head SHA, not `success`), is the pre-existing
 `TEST-001` "a skip is a failure" outcome. The gate's summary table shows
 `reused from run <N>` next to any job whose skip was accepted this way.
 
+### Example drift classification (round-6C, `ci-lint example drift`)
+
+`ci_lint.example_drift` walks both parsed `ci.toml` tables key by key and
+classifies every difference (missing key, extra key, or a differing
+value) as one of:
+
+- **repo-specific (allowed)**: the top-level `linter` pin; each
+  `[platforms.<id>]`'s `runs-on` and `wheel`; `[rust].public`,
+  `[rust].private`, `[rust].ship` and `[rust.tests].binaries`;
+  `[allow].platform-selector` and `[allow].platform-code`; each
+  `[suites.<id>]`'s `run` command (its own test-invocation path -- but
+  **not** `required`/`gating`/`cache`/`kind`, which are policy, not a
+  path); each `[cache.family.<name>]`'s `max` and `min`; the whole
+  `[[exceptions]]` array; `[python].cli`'s `name` and `crate`.
+- **schema/policy drift (must match)**: everything else -- a missing or
+  extra table/key at any level (including a whole extra platform, suite,
+  cache family, flow or tag the example doesn't declare), a different
+  enum or value (`[lint.dylint].shape`/`.budget`, `[suites.<id>]`'s
+  `required`/`gating`/`kind`, `[cache.family.<name>]`'s `via`/`lockfile`/
+  `per`, `[flow.*]`, `[tags.*]`, `[allow].permissions`, `[publish]`, ...).
+
+This is checked, not designed here: run `ci-lint example drift` against a
+candidate repository and read its report. If a repository's `ci.toml`
+disagrees with the example outside the allowed list, either the example
+needs the same fix (the repository found something the example got
+wrong) or the repository does (it drifted) -- the report doesn't decide
+which; that's a human/orchestrator call, recorded back into this file and
+`examples/rust-pypi-app/ci.toml` once made.
+
 Every command above is stdlib-only (`zipfile`, `tarfile`, `subprocess`,
-`tomllib`, `json`) and every finding is a `ci_lint.finding.Finding`
-(`--json` prints the same fields as `precheck --json`'s `findings` array).
+`tomllib`, `json`, `xml.etree.ElementTree`) and every finding is a
+`ci_lint.finding.Finding` (`--json` prints the same fields as
+`precheck --json`'s `findings` array).
 
 A `[tags.<id>]` entry with `flow` set switches the base flow itself (e.g.
 `[release]` on a PR runs the `release` flow as a rehearsal, with

@@ -1,0 +1,36 @@
+schema  = 3
+profile = "rust-pypi-app"
+linter  = "zackees/ci.yml@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+[platforms]
+linux-x64 = { target = "x86_64-unknown-linux-gnu", runs-on = "ubuntu-24.04", group = "linux", wheel = "manylinux_2_17" }
+
+[python]
+backend = "soldr"
+cli     = { name = "template-cli", crate = "template-cli", native = true }
+
+[rust]
+public  = "crates/template"
+private = "crates/private/*"
+ship    = [[]]
+
+[rust.tests]
+binaries = ["template-core:lib"]
+
+[lint.dylint]
+shape  = "measure"
+budget = { warm = "235s", cold = "480s" }
+
+[suites]
+unit = { run = "ci/test.py unit", required = true }
+
+[cache.family]
+registry = { via = "setup-soldr:cargo-registry", max = "100MB", lockfile = true }
+
+[allow]
+platform-selector = "crates/private/template-platform/src/lib.rs"
+platform-code     = ["crates/private/template-platform/src/platforms/**"]
+
+[[exceptions]]
+rule = "GEN-005"
+path = "ci.sh"
