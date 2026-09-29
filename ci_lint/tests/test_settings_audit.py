@@ -284,3 +284,71 @@ class SettingsAuditTest(unittest.TestCase):
         )
         report = self._run(table)
         self.assertTrue(any(f.status == Status.VIOLATION for f in report.findings))
+
+    # ── GEN-010 (live half, M2-23, issue #5) ───────────────────────────────
+
+    def test_gen_010_merge_queue_claim_with_no_ruleset_is_violation(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()  # rulesets: 200, [] -- no merge queue configured
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "AGENTS.md").write_text(
+                "This repository enforces merge queue protection on main.\n", encoding="utf-8"
+            )
+            report = self._run(table, repo_root=root)
+        f = next(f for f in report.findings if f.rule == "GEN-010")
+        self.assertEqual(Status.VIOLATION, f.status)
+        self.assertIn("no active merge-queue ruleset", f.message)
+
+    def test_gen_010_merge_queue_claim_with_active_ruleset_is_clean(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()
+        table[f"{API}/repos/{REPO_SLUG}/rulesets"] = (200, [{"id": 1}])
+        # detailed ruleset fetch:
+        table[f"{API}/repos/{REPO_SLUG}/rulesets/1"] = (
+            200,
+            {
+                "enforcement": "active",
+                "target": "branch",
+                "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
+                "rules": [{"type": "merge_queue"}],
+            },
+        )
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "AGENTS.md").write_text(
+                "This repository enforces merge queue protection on main.\n", encoding="utf-8"
+            )
+            report = self._run(table, repo_root=root)
+        self.assertEqual([], [f for f in report.findings if f.rule == "GEN-010"])
+
+    def test_gen_010_branch_protection_claim_with_no_protection_is_violation(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()
+        table[f"{API}/repos/{REPO_SLUG}/branches/main/protection"] = (404, {})
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "AGENTS.md").write_text(
+                "Branch protection is enabled and required status checks are enforced.\n", encoding="utf-8"
+            )
+            report = self._run(table, repo_root=root)
+        f = next(f for f in report.findings if f.rule == "GEN-010")
+        self.assertEqual(Status.VIOLATION, f.status)
+        self.assertIn("no branch protection configured", f.message)
+
+    def test_gen_010_no_claims_no_findings(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        table = _clean_table()
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "AGENTS.md").write_text("Nothing to see here.\n", encoding="utf-8")
+            report = self._run(table, repo_root=root)
+        self.assertEqual([], [f for f in report.findings if f.rule == "GEN-010"])

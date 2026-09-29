@@ -180,7 +180,31 @@ recorded in [issue #6](https://github.com/zackees/ci.yml/issues/6) ("Housekeepin
 | --- | --- | --- |
 | `RUST-005` | Per-crate top-level `tests/*.rs` integration-test link-target count is not evaluated against the crate's dependency-graph size; no consolidation into category `tests/<name>/main.rs` targets once the per-target link weight is large, even below a raw file-count threshold. | Enforced by ci-lint, narrower form — see policy-rust.md |
 | `RUST-006` | A linked test binary, bench, example-for-tests, or doctest product is admitted into a cross-run cache or persistent store, classified by contents rather than by the store's own cache-vs-artifact label. | Declared (`[cache].never`), not yet fully enforced — see policy-rust.md and `CACHE-007` in policy-general.md |
-| `GEN-010` (was proposed here as `GEN-005`) | A repository's documentation or CI code asserts that full/required validation is enforced at a merge queue or protected branch, but the repository has no corresponding branch protection rule or merge queue configured. Coverage claims must be verified against enforcement, not against workflow code that assumes enforcement exists. | Candidate — not yet implemented; see policy-general.md |
+| `GEN-010` (was proposed here as `GEN-005`) | A repository's documentation or CI code asserts that full/required validation is enforced at a merge queue or protected branch, but the repository has no corresponding branch protection rule or merge queue configured. Coverage claims must be verified against enforcement, not against workflow code that assumes enforcement exists. | Enforced by ci-lint (M2-23, round 2/#5) — live audit for the merge-queue/branch-protection half; see policy-general.md |
+
+### `GEN-010`'s third claim shape: native-OS Dylint
+
+M2-23 (ci.yml#5/#44) widened `GEN-010`'s mechanical signal beyond the
+merge-queue/branch-protection pair above to also cover a stale native-OS
+Dylint claim -- the shape issue #5's Gap 1 originally flagged: clud's
+`docs/architecture/ci.md` once read *"Every PR runs native Linux, Windows,
+and macOS Dylint"* while `_dylint.yml` ran host-only Dylint with no
+`--target`, a `GEN-005`(-general, doc/code mismatch)-shaped finding.
+Re-verified live for this round (`gh api repos/zackees/clud/contents/docs/
+architecture/ci.md`, 2026-09-28): that stale claim is **gone**. The current
+doc instead reads *"Every PR runs one Linux Dylint job for the custom late
+lint: a host pass plus [Windows/macOS] cross-target passes"* (line 14),
+and the table at line 273 spells out "Linux Dylint (host + Windows/macOS
+cross-target)" per mode -- exactly the check-only cross-target pattern
+issue #5's `RUST-008` candidate asks for, not a native-OS claim any more.
+So clud is no longer a live `GEN-010`/native-Dylint fixture; the finding is
+recorded here as **historical** (what issue #5 observed, and the fix
+pattern it names), not a currently-reproducible one. `ci_lint.rules
+.doc_claims`'s static scan (`check_gen_010_static`) is still fully
+offline-checkable for this claim shape against any repository that DOES
+still carry it -- see `ci_lint/tests/test_doc_claims.py`'s synthetic
+RED/GREEN fixtures for the mechanics, since clud's own docs no longer
+provide a live one.
 
 `RUST-005` and `RUST-006` generalize Part 1 (soldr's incident, clud's
 preemptive fix, zccache's admission bug). `GEN-010` generalizes Part 2 and is

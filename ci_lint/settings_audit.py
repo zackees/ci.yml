@@ -31,9 +31,11 @@ Rules implemented:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from ci_lint.finding import Finding, Status
 from ci_lint.github_api import FetchStatusFn, GitHubApiError
+from ci_lint.rules.doc_claims import DocClaim, scan_repo_docs
 from ci_lint.schema import CiToml
 
 API_ROOT = "https://api.github.com"
@@ -468,6 +470,96 @@ def check_gen_011(
     ]
 
 
+# ── GEN-010 (live half): merge-queue / branch-protection doc claims ───────
+#
+# The static half (ci_lint.rules.doc_claims.check_gen_010_static, run by
+# every `precheck`) already resolves the native-Dylint claim offline and
+# reports merge-queue/branch-protection claims as NEEDS_REVIEW ("cannot
+# confirm without a live read"). This reuses the SAME branch-protection and
+# rulesets payloads GEN-006/GEN-011 already fetch (no extra live call) to
+# turn each of those advisory claims into a real verdict.
+
+
+def check_gen_010(
+    claims: list[DocClaim],
+    branch_protection: tuple[int, dict[str, object] | None] | None,
+    rulesets: tuple[int, list[dict[str, object]]] | None,
+    default_branch: str,
+) -> list[Finding]:
+    relevant = [c for c in claims if c.kind in ("merge_queue", "branch_protection")]
+    if not relevant:
+        return []
+
+    bp_exists: bool | None = None  # None = unknown (network/403/unexpected)
+    if branch_protection is not None:
+        bp_status, _bp_body = branch_protection
+        if bp_status == 200:
+            bp_exists = True
+        elif bp_status == 404:
+            bp_exists = False
+
+    has_merge_queue: bool | None = None
+    if rulesets is not None:
+        rs_status, rs_list = rulesets
+        if rs_status in (200, 404):
+            has_merge_queue = _has_active_merge_queue(rs_list, default_branch)
+
+    findings: list[Finding] = []
+    for c in relevant:
+        if c.kind == "branch_protection":
+            if bp_exists is None:
+                findings.append(
+                    Finding(
+                        rule="GEN-010",
+                        status=Status.NEEDS_REVIEW,
+                        path=c.path,
+                        line=c.line,
+                        message=f"doc claims branch protection ({c.text!r}); could not confirm live "
+                        f"(branch protection lookup on {default_branch!r} was inconclusive)",
+                        fix=NEEDS_ADMIN_FIX,
+                    )
+                )
+            elif not bp_exists:
+                findings.append(
+                    Finding(
+                        rule="GEN-010",
+                        path=c.path,
+                        line=c.line,
+                        message=f"doc claims branch protection ({c.text!r}), but branch "
+                        f"{default_branch!r} has no branch protection configured at all",
+                        fix="either configure branch protection on the default branch (repo Settings "
+                        "-> Branches), or correct the doc to describe actual enforcement",
+                    )
+                )
+        elif c.kind == "merge_queue":
+            if has_merge_queue is None:
+                findings.append(
+                    Finding(
+                        rule="GEN-010",
+                        status=Status.NEEDS_REVIEW,
+                        path=c.path,
+                        line=c.line,
+                        message=f"doc claims a merge queue ({c.text!r}); could not confirm live "
+                        "(rulesets lookup was inconclusive)",
+                        fix=NEEDS_ADMIN_FIX,
+                    )
+                )
+            elif not has_merge_queue:
+                findings.append(
+                    Finding(
+                        rule="GEN-010",
+                        path=c.path,
+                        line=c.line,
+                        message=f"doc claims a merge queue ({c.text!r}), but no active merge-queue "
+                        f"ruleset covers {default_branch!r}",
+                        fix="either configure a merge queue (an active ruleset with a 'merge_queue' "
+                        "rule covering the default branch), or correct the doc to describe actual "
+                        "enforcement (docs/case-studies/clud-ci-cost.md's original GEN-010 finding)",
+                    )
+                )
+    return findings
+
+
 # ── Orchestration ──────────────────────────────────────────────────────────
 
 
@@ -479,6 +571,7 @@ def run_audit(
     repo: str,
     default_branch: str = "main",
     gate_check_name: str = DEFAULT_GATE_CHECK_NAME,
+    repo_root: Path | None = None,
 ) -> AuditReport:
     findings: list[Finding] = []
     findings.extend(check_sec_005(fetch_status, token, repo, ci))
@@ -489,6 +582,10 @@ def run_audit(
     rulesets = _fetch_rulesets(fetch_status, token, repo)
     findings.extend(check_gen_006(branch_protection, rulesets, default_branch))
     findings.extend(check_gen_011(branch_protection, default_branch, gate_check_name))
+
+    if repo_root is not None:
+        claims = scan_repo_docs(repo_root)
+        findings.extend(check_gen_010(claims, branch_protection, rulesets, default_branch))
 
     return AuditReport(findings=tuple(findings), repo=repo, default_branch=default_branch)
 
@@ -506,7 +603,7 @@ def to_json_dict(report: AuditReport) -> dict[str, object]:
 
 def render_text(report: AuditReport) -> str:
     lines = [f"ci-lint audit: {report.repo} (default branch: {report.default_branch})"]
-    rules = ("SEC-005", "SEC-006", "SEC-007", "GEN-006", "GEN-011")
+    rules = ("SEC-005", "SEC-006", "SEC-007", "GEN-006", "GEN-010", "GEN-011")
     by_rule: dict[str, list[Finding]] = {r: [] for r in rules}
     for f in report.findings:
         by_rule.setdefault(f.rule, []).append(f)
