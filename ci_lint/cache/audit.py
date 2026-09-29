@@ -94,12 +94,17 @@ DELTA_OUTER_RE = re.compile(
 
 # CACHE-006 "superseded": two entries of the same declared family whose
 # keys differ only in a trailing lockfile/version hash. Best-effort: strip
-# one or more trailing hyphen-hex segments (6-40 hex chars each -- covers
-# both the 16-hex short hashes and 8-hex base tokens observed live) and
-# group by what's left. A platform/os component earlier in the key (never
-# hex-only, e.g. "linux-x64") is never stripped, so per-platform families
-# are never treated as superseding each other.
-_TRAILING_HASH_RE = re.compile(r"(?:-[0-9a-f]{6,40})+$")
+# one or more trailing hyphen-hex segments and group by what's left. Each
+# segment is either 6-40 hex chars (covers both the 16-hex short hashes and
+# 8-hex base tokens observed live) or exactly 64 hex chars (zackees/ci.yml#104:
+# astral-sh/setup-uv's own dependency-file hash is a full sha256 hex digest,
+# e.g. "setup-uv-2-...-3.14.7-pruned-<64 hex>" -- kernal-api evidence showed
+# a superseded setup-uv-2- generation going undetected because the old
+# {6,40} bound never matched a 64-char segment, so `_shape` left the full
+# key untouched and two generations never grouped). A platform/os component
+# earlier in the key (never hex-only, e.g. "linux-x64") is never stripped,
+# so per-platform families are never treated as superseding each other.
+_TRAILING_HASH_RE = re.compile(r"(?:-(?:[0-9a-f]{64}|[0-9a-f]{6,40}))+$")
 
 # zackees/ci.yml#23 §4.1/§5: a cache belongs to PR N when its KEY contains a
 # delimited `pr-<N>` component (any position; delimiters `-`, `_`, `.`, `/`,

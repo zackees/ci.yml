@@ -123,10 +123,18 @@ class ClassifyLiveTemplateTest(unittest.TestCase):
         # generation is covered by RegistryPerJobDigestTest below.
         self.assertEqual(0, len(findings_for("CACHE-006", 8237210495)))
         self.assertEqual(0, len(findings_for("CACHE-006", 8237268308)))
-        # 8237209367 (main) and 8236693780 (pr17) share an IDENTICAL key
-        # (same shape) -- the older-accessed one (pr17's) is superseded too.
+        # zackees/ci.yml#104: 8238163287 (23:42), 8237209367 (main, 23:37)
+        # and 8236693780 (pr17, 22:47) are all the SAME "setup-uv-2-...
+        # ubuntu-24.04-3.12.3" platform/python stem; only their trailing
+        # 64-hex (sha256) dependency-file hash differs. Before #104's fix
+        # `_shape` only stripped 6-40 hex chars, so the 64-hex tail was
+        # never stripped and the older two never grouped with the newest
+        # -- exactly the kernal-api "superseded setup-uv generation missed"
+        # evidence. Now all three group together and both older-accessed
+        # entries are superseded, keeping only the newest (8238163287).
         self.assertEqual(1, len(findings_for("CACHE-006", 8236693780)))
-        self.assertEqual(0, len(findings_for("CACHE-006", 8237209367)))
+        self.assertEqual(1, len(findings_for("CACHE-006", 8237209367)))
+        self.assertEqual(0, len(findings_for("CACHE-006", 8238163287)))
         self.assertEqual(250382443, report.total_bytes)
         self.assertEqual(0, sum(1 for f in report.findings if f.rule == "CACHE-009"))
 
@@ -459,6 +467,41 @@ class Rust004DylintOutputCacheSaveTest(unittest.TestCase):
             ci, (), graphql=None, token=TOKEN, repo=REPO_SLUG, default_branch="main", fetch=unreachable_fetch
         )
         self.assertEqual([], [f for f in report.findings if f.rule == "RUST-004"])
+
+
+class SetupUv64HexGenerationTest(unittest.TestCase):
+    """zackees/ci.yml#104: setup-uv's own trailing key hash is a full
+    sha256 (64 hex chars), longer than the 6-40 hex bound `_shape` used to
+    strip. A superseded setup-uv-2- generation for the SAME platform stem
+    must still be detected (RED before the fix, GREEN after); a different
+    platform stem with the same hash shape must never be grouped with it,
+    and setup-soldr's cargo-registry toolchain-digest handling (#101) must
+    stay unaffected since it matches its own regex before the trailing-hash
+    strip ever runs."""
+
+    def setUp(self) -> None:
+        ci, findings = load_ci_toml(REPO)
+        assert ci is not None, findings
+        self.ci = ci
+        entries = list_caches(_fetch_from(_load("caches-setup-uv-64hex-generation.json")), TOKEN, REPO_SLUG)
+        self.classified = classify(ci, entries)
+        self.by_id = {c.entry.id: c for c in self.classified}
+
+    def test_all_three_classify_as_setup_uv_cache(self) -> None:
+        self.assertEqual("setup-uv-cache", self.by_id[1].family_id)
+        self.assertEqual("setup-uv-cache", self.by_id[2].family_id)
+        self.assertEqual("setup-uv-cache", self.by_id[3].family_id)
+
+    def test_older_same_platform_generation_is_superseded(self) -> None:
+        report = audit_classified(
+            self.ci, self.classified, graphql=None, token=TOKEN, repo=REPO_SLUG, default_branch="main"
+        )
+        c006 = [f for f in report.findings if f.rule == "CACHE-006"]
+        self.assertEqual(1, len(c006), [f.message for f in c006])
+        self.assertTrue(c006[0].message.startswith("cache id=1 "), c006[0].message)
+        self.assertIn("kept newest id=2 ", c006[0].message)
+        # id 3 (different platform) never appears as superseded or as "kept".
+        self.assertNotIn("id=3", c006[0].message)
 
 
 if __name__ == "__main__":
