@@ -436,6 +436,11 @@ def check_pkg_002(repo_root: Path) -> list[Finding]:
 # requirements). A `rust-library` repo may carry an unrelated pure-Python
 # package (kernal-api: a hatchling `python/kernal_api`) that builds no
 # native wheel, so its pyproject backend is not this rule's business.
+# zackees/ci.yml#106: PKG-003 (the native CLI must not be shadowed by a
+# Python script, and must be listed in [tool.soldr.pep517].bundle-bins) is
+# the same kind of wheel-shipping concern, so it is scoped identically --
+# a `rust-library` repo's [python].cli (if any) is not a bundled wheel CLI
+# and must not be checked against a wheel it never ships.
 NATIVE_WHEEL_PROFILES: frozenset[str] = frozenset({"rust-pypi-app"})
 
 
@@ -445,7 +450,7 @@ def check_group8(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings.extend(check_pkg_002(repo_root))
     if ci.profile in NATIVE_WHEEL_PROFILES:
         findings.extend(check_pkg_004(repo_root))
-    findings.extend(check_pkg_003(ci, repo_root))
+        findings.extend(check_pkg_003(ci, repo_root))
     findings.extend(check_pkg_005(repo_root))
     findings.extend(check_pkg_007(repo_root))
     return findings
