@@ -1,6 +1,6 @@
-"""`ci-lint sync-issues --dry-run`: the fingerprinted issue plan for a fleet
-scan (zackees/ci.yml#38; docs/agent-guide.md "Findings and issue
-lifecycle").
+"""`ci-lint sync-issues`: the fingerprinted issue plan for a fleet scan
+(zackees/ci.yml#38; docs/agent-guide.md "Findings and issue lifecycle"),
+and, since round M2-42 (zackees/ci.yml#98), `--apply` to actually write it.
 
 One issue per (repository, rule ID, subject), where the subject is the
 finding's file (or `repo:<owner/name>` for a settings finding). The
@@ -12,9 +12,30 @@ Only `violation` findings are planned; a `needs_review` finding is never
 filed (agent-guide.md: "Do not file issues from a single ambiguous run").
 Issues are planned in the scanned repository itself, labelled `ci-lint`.
 
-This round is dry-run ONLY: the module computes and prints the exact
-create/update/close actions, reading existing issues with GET requests. It
-has no write path at all -- enabling writes is a tracked follow-up.
+`--dry-run` computes and prints the exact create/update/close actions,
+reading existing issues with GET requests, and writes nothing.
+
+`--apply` (round M2-42) actually performs those writes, gated by THREE
+independent guards, every one of which must hold:
+
+  1. Per-repository opt-in: `ci.toml`'s `[fleet].sync-issues = true`
+     (`ci_lint.schema.FleetConfig`, wired into `RepoScan.sync_issues_opt_in`
+     by `ci_lint.fleet.scan_repo`). A repository without this key gets
+     zero writes, ever, no matter how many violations it has.
+  2. `--max-writes N` (small default): a hard cap on the number of issue
+     writes (create + update + close, each counted once) in one run, so a
+     bug or a huge fleet scan cannot flood a repository's issue tracker.
+  3. The fingerprint marker: `update`/`close` only ever act on an
+     `ExistingIssue` that `fetch_existing` already matched by
+     `<!-- ci-lint-fingerprint: ... -->`, and `_execute` re-checks that
+     marker is present in the body being sent before every PATCH, as a
+     second, structural guarantee that this module can never touch an
+     issue that was not one of its own.
+
+Idempotency: a rerun against unchanged findings produces `unchanged`
+actions only (no writes); `plan_repo`'s body/title comparison against the
+fetched `ExistingIssue` is the single source of truth for "nothing changed"
+-- `run_apply` never re-creates or re-updates an issue that already matches.
 """
 
 from __future__ import annotations
@@ -25,7 +46,7 @@ from dataclasses import dataclass
 
 from ci_lint.finding import Finding, Status
 from ci_lint.fleet import API_ROOT, FleetReport, RepoScan
-from ci_lint.github_api import FetchStatusFn, GitHubApiError
+from ci_lint.github_api import FetchStatusFn, GitHubApiError, WriteFn
 
 ISSUE_LABEL = "ci-lint"
 _FP_RE = re.compile(r"<!--\s*ci-lint-fingerprint:\s*([0-9a-f]{16})\s*-->")
@@ -188,4 +209,155 @@ def render_text(actions: list[IssueAction], errors: list[str]) -> str:
     if errors:
         lines.extend(["", "errors:"])
         lines.extend(f"  {e}" for e in errors)
+    return "\n".join(lines)
+
+
+# ── --apply (round M2-42, zackees/ci.yml#98) ────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ApplyResult:
+    executed: tuple[IssueAction, ...]
+    skipped_not_opted_in: tuple[str, ...]  # repo names with violations but no [fleet].sync-issues opt-in
+    skipped_cap: tuple[IssueAction, ...]  # actions that would write but hit --max-writes
+    errors: tuple[str, ...]
+
+
+def _execute(write: WriteFn, token: str, action: IssueAction) -> str | None:
+    """Perform ONE issue write for `action`. Returns None on success, else
+    an error string. Never called for `action.action in ("unchanged",)`."""
+
+    try:
+        if action.action == "create":
+            status, _ = write(
+                f"{API_ROOT}/repos/{action.repo}/issues",
+                token,
+                "POST",
+                {"title": action.title, "body": action.body, "labels": [ISSUE_LABEL]},
+            )
+            if status not in (200, 201):
+                return f"{action.repo}: create issue failed (HTTP {status})"
+            return None
+        if action.number is None:
+            return f"{action.repo}: {action.action} action has no issue number"
+        if action.action == "update":
+            # Structural guard: never PATCH a body that has lost its
+            # fingerprint marker (belt-and-suspenders over fetch_existing's
+            # own filter -- see module docstring point 3).
+            if _FP_RE.search(action.body) is None:
+                return f"{action.repo}#{action.number}: refusing update, body has no fingerprint marker"
+            status, _ = write(
+                f"{API_ROOT}/repos/{action.repo}/issues/{action.number}",
+                token,
+                "PATCH",
+                {"title": action.title, "body": action.body},
+            )
+            if status != 200:
+                return f"{action.repo}#{action.number}: update issue failed (HTTP {status})"
+            return None
+        if action.action == "close":
+            status, _ = write(
+                f"{API_ROOT}/repos/{action.repo}/issues/{action.number}/comments",
+                token,
+                "POST",
+                {"body": action.body},
+            )
+            if status not in (200, 201):
+                return f"{action.repo}#{action.number}: close comment failed (HTTP {status})"
+            status2, _ = write(
+                f"{API_ROOT}/repos/{action.repo}/issues/{action.number}",
+                token,
+                "PATCH",
+                {"state": "closed"},
+            )
+            if status2 != 200:
+                return f"{action.repo}#{action.number}: close failed (HTTP {status2})"
+            return None
+        return f"{action.repo}: unknown action {action.action!r}"
+    except GitHubApiError as exc:
+        return f"{action.repo}: {exc}"
+
+
+def run_apply(
+    report: FleetReport,
+    fetch_status: FetchStatusFn,
+    write: WriteFn,
+    token: str,
+    max_writes: int,
+) -> ApplyResult:
+    """Perform the writes `plan_sync` would only print. THREE guards (see
+    module docstring): per-repo `[fleet].sync-issues` opt-in, `max_writes`,
+    and the fingerprint marker re-check in `_execute`.
+
+    A repository with `sync_issues_opt_in=False` is skipped entirely --
+    `fetch_existing` is never even called for it, so an un-opted-in
+    repository gets zero API calls from this function, not just zero
+    writes."""
+
+    executed: list[IssueAction] = []
+    skipped_not_opted_in: list[str] = []
+    skipped_cap: list[IssueAction] = []
+    errors: list[str] = []
+    remaining = max_writes
+    for scan in report.repos:
+        if not scan.sync_issues_opt_in:
+            if any(f.status == Status.VIOLATION for f in scan.findings):
+                skipped_not_opted_in.append(scan.repo)
+            continue
+        existing, err = fetch_existing(fetch_status, token, scan.repo)
+        if err:
+            errors.append(err)
+            continue
+        for action in plan_repo(scan, existing):
+            if action.action == "unchanged":
+                continue
+            if remaining <= 0:
+                skipped_cap.append(action)
+                continue
+            error = _execute(write, token, action)
+            if error is not None:
+                errors.append(error)
+                continue
+            executed.append(action)
+            remaining -= 1
+    return ApplyResult(
+        executed=tuple(executed),
+        skipped_not_opted_in=tuple(skipped_not_opted_in),
+        skipped_cap=tuple(skipped_cap),
+        errors=tuple(errors),
+    )
+
+
+def apply_to_json(result: ApplyResult) -> dict[str, object]:
+    return {
+        "executed": to_json_list(list(result.executed)),
+        "skipped_not_opted_in": list(result.skipped_not_opted_in),
+        "skipped_cap": to_json_list(list(result.skipped_cap)),
+        "errors": list(result.errors),
+    }
+
+
+def render_apply_text(result: ApplyResult) -> str:
+    lines = [
+        f"ci-lint sync-issues --apply: {len(result.executed)} written, "
+        f"{len(result.skipped_cap)} skipped (cap), "
+        f"{len(result.skipped_not_opted_in)} repo(s) skipped (no [fleet].sync-issues opt-in)"
+    ]
+    for a in result.executed:
+        target = f"{a.repo}#{a.number}" if a.number is not None else a.repo
+        lines.append(f"  DID {a.action.upper()} {target} [{a.fingerprint}]")
+    if result.skipped_not_opted_in:
+        lines.append("")
+        lines.append("repos with findings but no opt-in (add `[fleet].sync-issues = true` to ci.toml):")
+        lines.extend(f"  {r}" for r in result.skipped_not_opted_in)
+    if result.skipped_cap:
+        lines.append("")
+        lines.append(f"skipped by --max-writes cap ({len(result.skipped_cap)} action(s) not applied):")
+        for a in result.skipped_cap:
+            target = f"{a.repo}#{a.number}" if a.number is not None else a.repo
+            lines.append(f"  {a.action.upper()} {target} [{a.fingerprint}]")
+    if result.errors:
+        lines.append("")
+        lines.append("errors:")
+        lines.extend(f"  {e}" for e in result.errors)
     return "\n".join(lines)

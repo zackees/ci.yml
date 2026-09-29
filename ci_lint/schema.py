@@ -212,6 +212,21 @@ class LocalConfig:
     cache: str
 
 
+# ── Fleet (central scanner opt-in) ────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class FleetConfig:
+    """`[fleet]` -- round M2-42 (zackees/ci.yml#98): `sync-issues = true` is
+    this repository's explicit opt-in for `ci-lint sync-issues --apply` to
+    file/update/close fingerprinted `ci-lint` findings as GitHub issues here.
+    Absent table or `sync-issues` key both default to `False` -- no fleet
+    repo gets automated issues without this owner consent, and a ci.toml
+    predating this key still loads unchanged."""
+
+    sync_issues: bool = False
+
+
 # ── Allowlists ────────────────────────────────────────────────────────────
 
 
@@ -307,6 +322,7 @@ class CiToml:
     allow: AllowConfig
     publish: PublishConfig
     exceptions: tuple[ExceptionEntry, ...]
+    fleet: FleetConfig
     source_path: str
 
 
@@ -664,6 +680,16 @@ def _parse_allow(root: Cursor) -> AllowConfig:
     )
 
 
+def _parse_fleet(root: Cursor) -> FleetConfig:
+    raw = root.table_("fleet", required=False)
+    if raw is None:
+        return FleetConfig()
+    sub = Cursor(raw, "fleet", root.findings, root.source)
+    sync_issues = sub.bool_("sync-issues", required=False, default=False)
+    sub.finish()
+    return FleetConfig(sync_issues=bool(sync_issues))
+
+
 def _parse_publish(root: Cursor) -> PublishConfig:
     raw = root.table_("publish", required=True)
     if raw is None:
@@ -786,6 +812,7 @@ def load_ci_toml(repo_root: Path) -> tuple[CiToml | None, list[Finding]]:
     allow = _parse_allow(root)
     publish = _parse_publish(root)
     exceptions = _parse_exceptions(root)
+    fleet = _parse_fleet(root)
 
     root.finish()
 
@@ -806,6 +833,7 @@ def load_ci_toml(repo_root: Path) -> tuple[CiToml | None, list[Finding]]:
         allow=allow,
         publish=publish,
         exceptions=exceptions,
+        fleet=fleet,
         source_path=source,
     )
 
