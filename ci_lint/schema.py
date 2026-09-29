@@ -212,6 +212,29 @@ class SetupSoldrAllow:
 
 
 @dataclass(frozen=True)
+class SetupUvAllow:
+    """Round-4B: `[allow].setup-uv.require` -- checked on every
+    `astral-sh/setup-uv` use, anywhere (unlike setup-soldr, there is no
+    single wrapper location to restrict it to). A `require` value of
+    `"plan"` means the input must be an expression derived from the
+    precheck plan rather than a literal (`CACHE-003`; see
+    `ci_lint.rules.cache_static.check_cache_003_setup_uv`)."""
+
+    require: dict[str, str]
+
+
+@dataclass(frozen=True)
+class CacheActionsAllow:
+    """Round-4B: `[allow].cache-actions.only-in` -- the one directory a raw
+    `actions/cache`/`actions/cache/save`/`actions/cache/restore` step may
+    appear in (a SHA-pinned composite-action wrapper); everywhere else is
+    `CACHE-001`. Defaults to `.github/actions/cache` when the table is
+    omitted, so a `ci.toml` predating this key still loads."""
+
+    only_in: str = ".github/actions/cache"
+
+
+@dataclass(frozen=True)
 class AllowConfig:
     workflows: dict[str, tuple[str, ...]]
     actions: tuple[str, ...]
@@ -220,6 +243,10 @@ class AllowConfig:
     secrets: tuple[str, ...]
     platform_selector: str
     platform_code: tuple[str, ...]
+    # Round-4B additions, all optional/backward-compatible (see _parse_allow).
+    permissions: dict[str, tuple[str, ...]]
+    setup_uv: SetupUvAllow
+    cache_actions: CacheActionsAllow
 
 
 # ── Publish ───────────────────────────────────────────────────────────────
@@ -533,6 +560,9 @@ def _parse_allow(root: Cursor) -> AllowConfig:
             secrets=(),
             platform_selector="",
             platform_code=(),
+            permissions={},
+            setup_uv=SetupUvAllow(require={}),
+            cache_actions=CacheActionsAllow(),
         )
     sub = Cursor(raw, "allow", root.findings, root.source)
     workflows_raw = sub.table_("workflows", required=True)
@@ -563,6 +593,29 @@ def _parse_allow(root: Cursor) -> AllowConfig:
     secrets = sub.list_str("secrets", required=False)
     platform_selector = sub.str_("platform-selector") or ""
     platform_code = sub.list_str("platform-code")
+
+    # Round-4B additions. Each is optional so a ci.toml predating this
+    # round still loads unchanged (an absent table means "nothing extra
+    # allowed" for permissions/setup-uv, and the documented default
+    # wrapper directory for cache-actions).
+    permissions = sub.dict_str_list_str("permissions", required=False)
+
+    setup_uv_raw = sub.table_("setup-uv", required=False)
+    setup_uv = SetupUvAllow(require={})
+    if setup_uv_raw is not None:
+        uvsub = Cursor(setup_uv_raw, "allow.setup-uv", root.findings, root.source)
+        uv_require = uvsub.dict_str_str("require", required=False)
+        uvsub.finish()
+        setup_uv = SetupUvAllow(require=uv_require)
+
+    cache_actions_raw = sub.table_("cache-actions", required=False)
+    cache_actions = CacheActionsAllow()
+    if cache_actions_raw is not None:
+        casub = Cursor(cache_actions_raw, "allow.cache-actions", root.findings, root.source)
+        only_in = casub.str_("only-in", required=False, default=CacheActionsAllow().only_in)
+        casub.finish()
+        cache_actions = CacheActionsAllow(only_in=only_in or CacheActionsAllow().only_in)
+
     sub.finish()
     return AllowConfig(
         workflows=workflows,
@@ -572,6 +625,9 @@ def _parse_allow(root: Cursor) -> AllowConfig:
         secrets=secrets,
         platform_selector=platform_selector,
         platform_code=platform_code,
+        permissions=permissions,
+        setup_uv=setup_uv,
+        cache_actions=cache_actions,
     )
 
 

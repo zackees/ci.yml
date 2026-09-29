@@ -24,6 +24,13 @@ round-2A) checks a real build's output against. It documents what
   `trim`/`janitor`/`heal`/`preprune` (live deletes), PR delta mechanics
   (`cache delta manifest|pack|apply`), and `precheck --live`. See "Cache
   runtime (round-4A)" below.
+- round-4B: per-job permission grants (`[allow].permissions`, `SEC-002`
+  refinement); the sanctioned `actions/cache*` wrapper (`[allow].cache-
+  actions`, `CACHE-001`/`CACHE-002` refinement); plan-driven cache saves
+  (`[allow].setup-soldr.require`/`[allow].setup-uv.require` values may be
+  the special string `"plan"`, and the planner's `cache_save` `--github-
+  output` key); and the static `GEN-004` implementation (Ruff + Pylint in
+  the `fast` job, no standalone Black/isort).
 
 `ci_lint audit` (the fleet-inventory/settings audit compared against
 observed GitHub runs, proposal.md's "ci-lint history") is still a later
@@ -453,11 +460,14 @@ round did not build) as still explicitly skipped.
 | `workflows` | table of string -> array of strings | Every workflow filename this repository may have, mapped to its allowed triggers (`"pull_request"`, `"push:main"`, `"schedule"`, `"workflow_dispatch"`, `"workflow_call"`). `GEN-008`. |
 | `actions` | array of strings | Allowed `owner/repo` action slugs. Every `uses:` (in a workflow or a composite action) must resolve to one of these, pinned to a 40-hex commit SHA. `SEC-004`. |
 | `setup-soldr.only-in` | string | The one directory allowed to call `zackees/setup-soldr` directly (a composite-action wrapper). `CACHE-009`. |
-| `setup-soldr.require` | table of string -> string | Inputs that wrapper's `zackees/setup-soldr` step must set, and to what value. `CACHE-009`. |
+| `setup-soldr.require` | table of string -> string | Inputs that wrapper's `zackees/setup-soldr` step must set, and to what value. A value of the special string `"plan"` (round-4B) means the actual input must instead be an expression derived from the precheck plan (contains `needs.precheck.outputs.`, or passes through an `inputs.*` value inside the composite) -- used for `save-cache`, so a save only fires when `plan.cache_mode == "write"`. `CACHE-009`. |
 | `tools` | array of strings | Allowed bare tool names outside the `TOOL-001` banned list. Informational in round 1A. |
 | `secrets` | array of strings | Allowed additional `secrets.*` references beyond `secrets.GITHUB_TOKEN`. Empty in the canonical example (OIDC-only, no repository secrets). |
 | `platform-selector` | string | The one file allowed to contain a host `cfg`/`sys.platform` selector. `LAYOUT-001`. |
 | `platform-code` | array of globs | Paths (globs; `**` supported) allowed to contain host selectors. `LAYOUT-001`. |
+| `permissions` | table of string -> array of strings (round-4B) | Maps one non-free permission grant, written `"<permission>: <value>"` (e.g. `"actions: write"`), to the job ids allowed to hold it. A top-level `permissions:` block may hold at most `contents: read` + `actions: read` (free, no entry needed); any job may hold those two for free as well, but any wider grant must list that job's id here. `id-token: write` additionally always requires `environment: pypi` on the `publish` job specifically, allowlisted or not. `SEC-002`. |
+| `cache-actions.only-in` | string (default `.github/actions/cache`) | The one directory allowed to call `actions/cache`/`actions/cache/save`/`actions/cache/restore` directly (a SHA-pinned composite-action wrapper). `CACHE-001`. Inside it, the wrapper's `key:` input must itself be a dynamic expression (a prior step's output, or an `inputs.*` passthrough), never a literal. `CACHE-002`. |
+| `setup-uv.require` | table of string -> string (round-4B) | Inputs every `astral-sh/setup-uv` use (anywhere -- unlike setup-soldr, there is no single wrapper location) must set, and to what value; `"plan"` works exactly like `setup-soldr.require`'s special value, above. Used for `save-cache`; missing or a literal `"true"` is `CACHE-003` (both save unconditionally, including on PRs -- see "astral-sh/setup-uv's own cache" below). |
 
 ## `[publish]`
 
@@ -504,10 +514,11 @@ when neither PyYAML nor `yq` is available).
 | `TAG-003` | `on.pull_request.types` omits `edited`. | Add `edited` to the `types` list. |
 | `GEN-001` | `.github/workflows/ci.yml` is missing or lacks `on.pull_request`. | Add it as the PR entry point. |
 | `GEN-002` | A job with a non-Linux runner has no `if:`/`strategy.matrix` referencing `needs.precheck.outputs`. | Gate the job on the precheck plan's output. |
+| `GEN-004` | (round-4B) The repo has Python sources but the `fast` job (directly in a `run:` line, or one level into a tracked `ci/*.py` script it calls) does not invoke `ruff check`, `ruff format --check`, and `pylint`; a standalone `black`/`isort` invocation is also `GEN-004`. An unresolvable script reference (missing file, parse error) is `needs_review`, never a silent pass. | Add the missing Ruff/Pylint invocation(s) to the `fast` job (directly or via a `ci/*.py` script); remove any Black/isort call. |
 | `GEN-005` | A `run:` step longer than one line, shell control syntax, a banned `shell:`, or a tracked `.sh/.ps1/.bat/.cmd`/shebang script file. | Move the logic into a Python script, called as one line. |
 | `GEN-008` | A workflow file (or one of its triggers) not declared in `[allow].workflows`, or more than one file declaring `pull_request`. | Declare it in `[allow].workflows`, or remove the trigger/file. |
 | `SEC-001` | `secrets.<X>` other than `secrets.GITHUB_TOKEN`, or `secrets: inherit`. | Remove the dependency; this profile is OIDC-only. |
-| `SEC-002` | Top-level permissions wider than `contents: read`, or `id-token: write` outside the `publish`/`pypi` job. | Narrow the permissions block. |
+| `SEC-002` | Top-level permissions wider than `contents: read` + `actions: read` (round-4B: `actions: read` is now free at the top level too). Per job: any grant beyond `contents: read`/`actions: read` (free) whose job id is not listed in `[allow].permissions."<permission>: <value>"`; `id-token: write` additionally always requires `environment: pypi` on the `publish` job specifically. Checked identically inside a reusable (`workflow_call`) workflow file, by its own job ids. | Narrow the permissions block, or add the job id to `[allow].permissions` for that exact grant. |
 | `SEC-003` | `pull_request_target` or `workflow_run` declared anywhere. | Use `pull_request` instead. |
 | `SEC-004` | A `uses:` action not in `[allow].actions`, or not pinned to a 40-hex commit SHA. | Allowlist it and/or pin it by SHA. |
 | `RUN-001` | A `runs-on` label outside the fleet list, or any `-latest` label. | Use a fleet label: `ubuntu-24.04`, `ubuntu-24.04-arm`, `windows-2025`, `windows-11-arm`, `macos-15`, `macos-15-intel`. |
@@ -516,7 +527,7 @@ when neither PyYAML nor `yq` is available).
 | `WF-003` | `continue-on-error` anywhere. | Remove it; fix or gate the step instead. |
 | `TOOL-001` | Bare `cargo`/`rustc`/`rustup`/`cargo-*`/`maturin`/`cross`/`cibuildwheel`/`pip`/`pipx`/`twine`/`curl`/`wget` as a command (in `run:` lines or `ci/*.py`/root `*.py` subprocess literals). | Wrap it through `soldr` or `uv`. |
 | `TOOL-002` | A dependency-resolving `cargo` subcommand (`build`/`test`/`check`/`clippy`/`doc`/`run`/`nextest`) without `--locked`. | Add `--locked`. |
-| `CACHE-009` | Static: `zackees/setup-soldr` used outside `[allow].setup-soldr.only-in`, missing/wrong `require` inputs, or an input enabling a retired cache family. Live (round-4A, `cache audit`/`precheck --live`): a live cache entry's key actually matches a `[cache].retired` prefix. | Call it only from the wrapper, with the required inputs; delete a live retired entry (`ci-lint cache janitor`). |
+| `CACHE-009` | Static: `zackees/setup-soldr` used outside `[allow].setup-soldr.only-in`, missing/wrong `require` inputs (round-4B: a `require` value of `"plan"` means the actual input must be an expression derived from the precheck plan, not a literal), or an input enabling a retired cache family. Live (round-4A, `cache audit`/`precheck --live`): a live cache entry's key actually matches a `[cache].retired` prefix. | Call it only from the wrapper, with the required inputs; delete a live retired entry (`ci-lint cache janitor`). |
 | `LAYOUT-001` | A host selector (`cfg(...)`, `sys.platform`, ...) outside `[allow].platform-code`/`platform-selector`. | Move it behind the platform facade. |
 | `RUST-005` | More integration-test targets exist than are declared in `[rust.tests].binaries`. | Declare each target, or consolidate `tests/*.rs`. |
 | `RUST-011` | A private crate without `publish = false` / with `[features]` / with an optional dependency / with `cfg(feature)`; the public crate's `[features]` not of the form `x = ["dep:<private-crate>"]`; or `--all-features`/`cargo hack`/`--feature-powerset`/an out-of-`[rust].ship` `--features` value. | Fix the crate's manifest, or use only a `[rust].ship` feature set. |
@@ -524,9 +535,9 @@ when neither PyYAML nor `yq` is available).
 | `PKG-003` | `[project.scripts]`/`[project.gui-scripts]` shadows `[python].cli.name`, or `[tool.soldr.pep517].bundle-bins` omits `[python].cli.crate`. | Remove the Python shim entry; add the crate to `bundle-bins`. |
 | `PKG-004` | `pyproject.toml`'s build backend isn't `"soldr"`, `requires` lacks an exact `soldr==` pin, maturin appears in build requires/dependency-groups, or `uv.lock` has a non-soldr package depending on maturin. | Use `soldr` as the sole backend and maturin dependent. |
 | `PKG-005` | A `try/except ImportError` around an import of `._native`. | Import it unconditionally so a missing native module fails loudly. |
-| `CACHE-001` | Static: a raw `actions/cache` (or any of its sub-actions) used directly. Live (round-4A): a cache entry whose key matches no declared `[cache.family]` prefix. | Use a declared cache family instead; declare one for a live undeclared entry, or stop writing it (`ci-lint cache janitor`). |
-| `CACHE-002` | A volatile component (`github.sha`, `github.run_id`, `github.run_number`) in a `key:`/`cache-key-suffix:` input or a `[cache.family].key` entry. | Key on `hashFiles(...)` or a date rotation instead. |
-| `CACHE-003` | (round-4A, live) A declared **base**-layer family's cache entry was saved on a ref other than the default branch. | Delete it (`ci-lint cache janitor`); check the writer job's ref condition and `save-ok` call site. |
+| `CACHE-001` | Static: a raw `actions/cache` (or any of its `/save`/`/restore` sub-actions) used anywhere OTHER than the one sanctioned wrapper directory `[allow].cache-actions.only-in` (round-4B; default `.github/actions/cache`, still SHA-pinned per `SEC-004`). Live (round-4A): a cache entry whose key matches no declared `[cache.family]` prefix. | Move the call into the wrapper (or declare a family for a live undeclared entry, or stop writing it via `ci-lint cache janitor`). |
+| `CACHE-002` | A volatile component (`github.sha`, `github.run_id`, `github.run_number`) in a `key:`/`cache-key-suffix:` input or a `[cache.family].key` entry. Round-4B: inside the sanctioned wrapper, a `key:` on the `actions/cache*` step that is a literal at all (even with no volatile token) -- it must be a step-output or `inputs.*` expression built by `ci_lint cache key`. | Key on `hashFiles(...)` or a date rotation instead; inside the wrapper, build the key from a prior step's output or an `inputs.*` passthrough. |
+| `CACHE-003` | (round-4A, live) A declared **base**-layer family's cache entry was saved on a ref other than the default branch. (round-4B, static) `astral-sh/setup-uv`'s `save-cache` input, when `[allow].setup-uv.require` marks it `"plan"`-driven, is missing or a literal `"true"` -- both save unconditionally, including on PRs. | Delete the live entry (`ci-lint cache janitor`); check the writer job's ref condition and `save-ok` call site; set `save-cache` to a plan-derived expression. |
 | `CACHE-004` | The proven worst-case cache footprint exceeds `[cache].budget`, or `[cache].budget` exceeds 10GB; (round-4A, live) total live bytes >= 90% of budget. `pre-prune = true` on every writer flow removes only the lockfile-change-peak term from the sum -- it does not waive the rest of the proof; `worst = steady + [cache.pr].budget` still must fit. | Lower family sizes/cardinality, raise the budget (up to 10GB), and/or set `pre-prune = true` on every writer flow (removes the lockfile-peak term only); live, run `ci-lint cache janitor`. |
 | `CACHE-005` | (round-4A, live) A cache entry is poisoned: <= 1KB regardless of family, or below its family's declared `min`. | Delete the exact key (`ci-lint cache heal --key <key>`) so the next writer run repopulates it. |
 | `CACHE-006` | (round-4A, live) >= 2 entries of the same declared family whose keys differ only in a trailing lockfile/version hash -- the family is superseded, not per-platform-distinct. | Delete the superseded (non-newest) entry (`ci-lint cache janitor`); disambiguate with `[cache.family.<id>].per` if more than one entry is legitimate. |
@@ -570,7 +581,11 @@ precheck --github-output`) adds `platform_lanes_json`, `fast_suites_json`
 and `lane_digests_json` (each the field above, compact-JSON-encoded) on top
 of the round-1A keys (`plan`, `platforms_json`, `cross_platforms_json`,
 `suites_json`, `dylint_targets_json`, `needs_platform_lanes`,
-`mergeable`).
+`mergeable`). Round-4B adds one more: `cache_save`, `"true"`/`"false"` =
+`(plan.cache_mode == "write")` -- a writer-flow step (`astral-sh/setup-uv`'s
+`save-cache`, or a `setup-soldr` wrapper's `save-cache` passthrough) binds
+straight to `needs.precheck.outputs.cache_save`, satisfying
+`[allow].setup-uv.require`/`[allow].setup-soldr.require`'s `"plan"` value.
 
 ## Title-edit reuse (round-3A)
 

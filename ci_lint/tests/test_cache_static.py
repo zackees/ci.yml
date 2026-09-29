@@ -1,10 +1,16 @@
-"""CACHE-001, CACHE-002, CACHE-004 -- ci_lint/rules/cache_static.py."""
+"""CACHE-001, CACHE-002, CACHE-003, CACHE-004 -- ci_lint/rules/cache_static.py."""
 
 from __future__ import annotations
 
 import unittest
 
-from ci_lint.rules.cache_static import check_cache_001, check_cache_002, check_cache_004, parse_size
+from ci_lint.rules.cache_static import (
+    check_cache_001,
+    check_cache_002,
+    check_cache_003_setup_uv,
+    check_cache_004,
+    parse_size,
+)
 from ci_lint.schema import load_ci_toml
 from ci_lint.tests.helpers import fixture, requires_yaml_tooling
 
@@ -12,8 +18,28 @@ from ci_lint.tests.helpers import fixture, requires_yaml_tooling
 class CacheStaticFixtureTest(unittest.TestCase):
     @requires_yaml_tooling
     def test_cache_001_raw_actions_cache(self) -> None:
-        self.assertIn("CACHE-001", [f.rule for f in check_cache_001(fixture("CACHE-001", "red"))])
-        self.assertNotIn("CACHE-001", [f.rule for f in check_cache_001(fixture("CACHE-001", "green"))])
+        repo = fixture("CACHE-001", "red")
+        ci, _ = load_ci_toml(repo)
+        self.assertIn("CACHE-001", [f.rule for f in check_cache_001(ci, repo)])
+
+        repo = fixture("CACHE-001", "green")
+        ci, _ = load_ci_toml(repo)
+        self.assertNotIn("CACHE-001", [f.rule for f in check_cache_001(ci, repo)])
+
+    @requires_yaml_tooling
+    def test_cache_001_wrapper_directory_is_sanctioned(self) -> None:
+        """Round-4B: actions/cache is allowed ONLY inside
+        [allow].cache-actions.only-in (default .github/actions/cache) --
+        the SAME raw action used from a DIFFERENT composite-action
+        directory is still CACHE-001."""
+
+        repo = fixture("CACHE-001", "green-wrapper")
+        ci, _ = load_ci_toml(repo)
+        self.assertNotIn("CACHE-001", [f.rule for f in check_cache_001(ci, repo)])
+
+        repo = fixture("CACHE-001", "red-outside-wrapper")
+        ci, _ = load_ci_toml(repo)
+        self.assertIn("CACHE-001", [f.rule for f in check_cache_001(ci, repo)])
 
     @requires_yaml_tooling
     def test_cache_002_volatile_key_component(self) -> None:
@@ -24,6 +50,34 @@ class CacheStaticFixtureTest(unittest.TestCase):
         repo = fixture("CACHE-002", "green")
         ci, _ = load_ci_toml(repo)
         self.assertNotIn("CACHE-002", [f.rule for f in check_cache_002(ci, repo)])
+
+    @requires_yaml_tooling
+    def test_cache_002_wrapper_key_must_be_dynamic(self) -> None:
+        """Round-4B: inside the sanctioned actions/cache wrapper, a literal
+        'key:' (even with no volatile token) is CACHE-002 -- keys must come
+        from 'ci_lint cache key' via a step output or an input passthrough."""
+
+        repo = fixture("CACHE-002", "red-wrapper-literal-key")
+        ci, _ = load_ci_toml(repo)
+        self.assertIn("CACHE-002", [f.rule for f in check_cache_002(ci, repo)])
+
+        repo = fixture("CACHE-002", "green-wrapper-dynamic-key")
+        ci, _ = load_ci_toml(repo)
+        self.assertNotIn("CACHE-002", [f.rule for f in check_cache_002(ci, repo)])
+
+    @requires_yaml_tooling
+    def test_cache_003_setup_uv_save_cache_must_be_plan_driven(self) -> None:
+        """Round-4B: astral-sh/setup-uv's 'save-cache' input, when
+        [allow].setup-uv.require says it must be 'plan'-derived, is
+        CACHE-003 if missing or a literal 'true'."""
+
+        repo = fixture("CACHE-003", "red")
+        ci, _ = load_ci_toml(repo)
+        self.assertIn("CACHE-003", [f.rule for f in check_cache_003_setup_uv(ci, repo)])
+
+        repo = fixture("CACHE-003", "green")
+        ci, _ = load_ci_toml(repo)
+        self.assertNotIn("CACHE-003", [f.rule for f in check_cache_003_setup_uv(ci, repo)])
 
     def test_cache_004_budget_exceeded_without_pre_prune(self) -> None:
         ci, _ = load_ci_toml(fixture("CACHE-004", "red"))

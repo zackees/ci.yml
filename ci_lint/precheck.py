@@ -79,12 +79,12 @@ GROUP_LABELS: dict[int, str] = {
     1: "contract (CT-001..006, TAG-001, TAG-002)",
     2: "workflows (GEN-001/002/008, TAG-003, SEC-003/004, RUN-001, WF-001..003, CT-004)",
     3: "shell budget (GEN-005)",
-    4: "tools (TOOL-001/002, CACHE-009)",
+    4: "tools (TOOL-001/002, CACHE-009, GEN-004)",
     5: "secrets (SEC-001/002)",
     6: "layout (LAYOUT-001)",
     7: "tests & units (RUST-005/011/012)",
     8: "packaging (PKG-003/004/005)",
-    9: "cache static (CACHE-001/002/004)",
+    9: "cache static (CACHE-001/002/003/004)",
     10: "lint pin (CT-004, checked inside group 2)",
 }
 
@@ -120,7 +120,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(check_group2(ci, repo_root))
         all_findings.extend(check_group3(ci, repo_root))
         all_findings.extend(check_group4(ci, repo_root))
-        all_findings.extend(check_group5(repo_root))
+        all_findings.extend(check_group5(ci, repo_root))
         all_findings.extend(check_group6(ci, repo_root))
         all_findings.extend(check_group7(ci, repo_root))
         all_findings.extend(check_group8(ci, repo_root))

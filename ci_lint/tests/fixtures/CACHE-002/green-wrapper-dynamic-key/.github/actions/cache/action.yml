@@ -1,0 +1,11 @@
+name: cache
+description: Sanctioned actions/cache wrapper whose key comes from 'ci_lint cache key' via a prior step's output.
+runs:
+  using: composite
+  steps:
+    - id: build-key
+      run: python3 ${{ github.action_path }}/build_key.py
+    - uses: actions/cache@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.0.0
+      with:
+        path: ~/.cache/demo
+        key: ${{ steps.build-key.outputs.key }}
