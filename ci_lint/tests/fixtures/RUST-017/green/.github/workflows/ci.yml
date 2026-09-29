@@ -1,0 +1,9 @@
+name: ci
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: soldr cargo nextest run --workspace --locked --profile ci
+      - run: echo "--no-capture is local only"

@@ -1,0 +1,8 @@
+name: ci
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: soldr cargo test --locked -- --test-threads=1  # ci-lint: allow RUST-017 windows named-pipe tests share one pipe
