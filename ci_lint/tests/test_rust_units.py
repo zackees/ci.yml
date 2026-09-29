@@ -12,7 +12,7 @@ from pathlib import Path
 from ci_lint.cargo_scan import discover_workspace
 from ci_lint.rules.rust_units import check_rust_005, check_rust_011, check_rust_012
 from ci_lint.schema import load_ci_toml
-from ci_lint.tests.helpers import fixture
+from ci_lint.tests.helpers import fixture, requires_yaml_tooling
 
 
 class RustUnitsFixtureTest(unittest.TestCase):
@@ -50,6 +50,7 @@ class RustUnitsFixtureTest(unittest.TestCase):
         crates = discover_workspace(repo)
         self.assertNotIn("RUST-011", [f.rule for f in check_rust_011(ci, crates, repo)])
 
+    @requires_yaml_tooling  # the --features value is read from parsed workflow YAML
     def test_rust_011_features_default_on_empty_default_matches_empty_ship_set(self) -> None:
         """zackees/ci.yml#89: `--features default` names the empty graph when
         the public crate's default is empty/absent (GREEN), while a feature
