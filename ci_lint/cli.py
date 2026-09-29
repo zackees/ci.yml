@@ -11,10 +11,19 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from ci_lint.act_audit import audit as run_act_audit
+from ci_lint.act_audit import render as render_act_audit_text
+from ci_lint.act_audit import to_json_dict as act_audit_to_json_dict
 from ci_lint.cache.audit import AuditError, run_audit
 from ci_lint.cache.audit import render_text as render_cache_audit_text
 from ci_lint.cache.audit import to_json_dict as cache_audit_to_json_dict
 from ci_lint.cache.budget import run_budget as cache_run_budget
+from ci_lint.rules.cache_payload import (
+    PayloadManifestError,
+    check_cache_007_manifest,
+    load_manifest_paths,
+)
+from ci_lint.rules.cache_static import parse_size as cache_parse_size
 from ci_lint.cache.delta import (
     DeltaError,
     StaleBaseError,
@@ -785,6 +794,49 @@ def _cache_write_creds(command: str) -> tuple[str, str] | None:
     return token, repo_slug
 
 
+def _cmd_cache_payload_check(args: argparse.Namespace) -> int:
+    """CACHE-007 runtime half: classify a save's actual path manifest
+    (a JSON array of path strings) against `[cache].never`'s forbidden
+    content classes. Pure filesystem -- no ci.toml load needed, since the
+    `[cache].never` classes are fixed content patterns, not per-repo
+    config."""
+
+    try:
+        paths = load_manifest_paths(Path(args.manifest))
+    except PayloadManifestError as exc:
+        print(f"ci-lint cache payload-check: {exc}", file=sys.stderr)
+        return 2
+    findings = check_cache_007_manifest(paths, manifest_path=args.manifest)
+    if args.json:
+        payload = [
+            {"rule": f.rule, "status": f.status.value, "path": f.path, "line": f.line,
+             "message": f.message, "fix": f.fix}
+            for f in findings
+        ]
+        print(json.dumps(payload, indent=2))
+    else:
+        if not findings:
+            print(f"ci-lint cache payload-check: {args.manifest}: no forbidden content class found")
+        for f in findings:
+            print(f.render())
+    return 1 if findings else 0
+
+
+def _cmd_act_audit(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo).resolve()
+    ci = _load_ci_or_die(repo_root, "act audit")
+    if ci is None:
+        return 1
+    budget_bytes = cache_parse_size(ci.cache.budget)
+    if budget_bytes is None:
+        print(f"ci-lint act audit: ci.toml [cache].budget = {ci.cache.budget!r} does not parse", file=sys.stderr)
+        return 1
+    store_path = Path(args.store_dir).resolve()
+    result = run_act_audit(store_path, budget_bytes=budget_bytes, retired_families=ci.cache.retired)
+    print(json.dumps(act_audit_to_json_dict(result), indent=2) if args.json else render_act_audit_text(result))
+    return 1 if not result.ok else 0
+
+
 def _cmd_cache_audit(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo).resolve()
     ci = _load_ci_or_die(repo_root, "cache audit")
@@ -1236,6 +1288,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_cache_preprune.add_argument("--json", action="store_true")
     p_cache_preprune.set_defaults(func=_cmd_cache_preprune)
 
+    p_cache_payload_check = cache_sub.add_parser(
+        "payload-check",
+        help="CACHE-007 runtime: classify a save's actual path manifest against [cache].never",
+    )
+    p_cache_payload_check.add_argument(
+        "--manifest", required=True, help="a JSON array of path strings (e.g. from 'tar -tf' on the saved archive)"
+    )
+    p_cache_payload_check.add_argument("--json", action="store_true")
+    p_cache_payload_check.set_defaults(func=_cmd_cache_payload_check)
+
     p_cache_delta = cache_sub.add_parser("delta", help="PR delta mechanics: manifest, pack, apply (pure filesystem)")
     delta_sub = p_cache_delta.add_subparsers(dest="cache_delta_command", required=True)
 
@@ -1310,6 +1372,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_perf_compare.add_argument("--threshold-pct", type=float, default=None)
     p_perf_compare.add_argument("--json", action="store_true")
     p_perf_compare.set_defaults(func=_cmd_perf_compare)
+
+    p_act = sub.add_parser("act", help="local act cache-store checks")
+    act_sub = p_act.add_subparsers(dest="act_command", required=True)
+
+    p_act_audit = act_sub.add_parser(
+        "audit", help="ACT-001: audit a local act cache-server store against [cache].budget/[cache].retired"
+    )
+    p_act_audit.add_argument("--repo", default=".")
+    p_act_audit.add_argument("--store-dir", required=True, help="the act --cache-server-path directory")
+    p_act_audit.add_argument("--json", action="store_true")
+    p_act_audit.set_defaults(func=_cmd_act_audit)
 
     return parser
 

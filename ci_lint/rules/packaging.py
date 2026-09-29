@@ -334,8 +334,106 @@ def check_pkg_005(repo_root: Path) -> list[Finding]:
     return findings
 
 
+_WHEEL_SMOKE_RE = re.compile(r"wheel", re.IGNORECASE)
+_NPM_PACK_RE = re.compile(r"\bnpm\s+pack\b")
+_NPM_INSTALL_RE = re.compile(r"\bnpm\s+(ci|install)\b")
+
+
+def check_pkg_001(ci: CiToml) -> list[Finding]:
+    """A PyPI app's quick gate must build+install a Linux wheel and run a
+    clean-venv smoke test, not defer that to release only (issue #1/#2).
+    Static evidence: the flow that runs on every PR push ('pr', or the
+    first flow if none is named 'pr') must select a `required = true`
+    suite whose `run` command mentions wheel packaging (the canonical
+    example's `suites.smoke = { run = "ci/wheel.py smoke", required =
+    true }`) for at least one linux-group platform."""
+
+    if ci.python is None:
+        return []
+    flow = ci.flows.get("pr") or next(iter(ci.flows.values()), None)
+    if flow is None:
+        return [
+            Finding(
+                rule="PKG-001",
+                path="ci.toml#flow",
+                message="no '[flow.pr]' (or any flow) declared to check for a wheel install smoke",
+                fix='declare "[flow.pr]" with suites including one required suite whose run '
+                'command builds+installs a wheel and smoke-tests it (e.g. "ci/wheel.py smoke")',
+            )
+        ]
+    flow_suite_ids: set[str] = set()
+    seen: set[str] = set()
+    cur: object = flow
+    while cur is not None and cur.id not in seen:  # walk `extends` chain
+        seen.add(cur.id)
+        suites = cur.suites
+        if isinstance(suites, tuple):
+            flow_suite_ids.update(suites)
+        elif suites == "all":
+            flow_suite_ids.update(ci.suites)
+        cur = ci.flows.get(cur.extends) if cur.extends else None
+
+    smoke_ok = any(
+        sid in flow_suite_ids and ci.suites[sid].required and _WHEEL_SMOKE_RE.search(ci.suites[sid].run)
+        for sid in ci.suites
+    )
+    if smoke_ok:
+        return []
+    return [
+        Finding(
+            rule="PKG-001",
+            path=f"ci.toml#flow.{flow.id}",
+            message=f"flow '{flow.id}' has no required suite whose run command performs a wheel "
+            "install smoke test",
+            fix='add a suite (e.g. suites.smoke = { run = "ci/wheel.py smoke", required = true }) '
+            f"that builds the wheel, installs it into a clean venv, and smoke-tests it, and select "
+            f"it in flow.{flow.id}.suites",
+        )
+    ]
+
+
+def check_pkg_002(repo_root: Path) -> list[Finding]:
+    """An npm app's quick gate must `npm pack` the tarball and install+
+    smoke-test it (issue #1/#2). Applies only when package.json exists at
+    the repo root -- ci_lint has no npm packaging profile yet, so this is a
+    plain grep over every workflow's run: text for the repo root, not a
+    ci.toml-schema-driven check like PKG-001."""
+
+    if not (repo_root / "package.json").is_file():
+        return []
+    from ci_lint.workflow_scan import as_dict, jobs_of, load_workflows, steps_of  # local: avoid cycle
+    from ci_lint.yaml_io import LoadStatus
+
+    joined_parts: list[str] = []
+    for wf in load_workflows(repo_root):
+        if wf.status != LoadStatus.OK or wf.document is None:
+            continue
+        doc = as_dict(wf.document)
+        for job in jobs_of(doc).values():
+            for step in steps_of(job):
+                run = step.get("run")
+                if isinstance(run, str):
+                    joined_parts.append(run)
+    joined = "\n".join(joined_parts)
+    if _NPM_PACK_RE.search(joined) and _NPM_INSTALL_RE.search(joined):
+        return []
+    return [
+        Finding(
+            rule="PKG-002",
+            path="package.json",
+            message="package.json exists, but no workflow step runs both 'npm pack' and "
+            "'npm ci'/'npm install' (a clean tarball install smoke)",
+            fix="add a quick-gate step that runs 'npm pack', installs the produced tarball into a "
+            "clean directory ('npm ci'/'npm install <tarball>'), and smoke-tests the installed "
+            "package",
+        )
+    ]
+
+
 def check_group8(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings: list[Finding] = []
+    findings.extend(check_pkg_001(ci))
+    findings.extend(check_pkg_002(repo_root))
     findings.extend(check_pkg_004(repo_root))
     findings.extend(check_pkg_003(ci, repo_root))
     findings.extend(check_pkg_005(repo_root))

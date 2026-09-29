@@ -1,0 +1,9 @@
+name: ci
+on:
+  pull_request: {}
+jobs:
+  quick:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - run: npm run build
