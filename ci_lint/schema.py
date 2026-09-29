@@ -180,6 +180,14 @@ class CacheFamily:
     per: str | None = None
     min: str | None = None
     key: tuple[str, ...] | None = None
+    # zackees/ci.yml#23 §4.2: "lru" makes the family evictable -- the cache
+    # janitor LRU-evicts its entries down to its declared footprint
+    # (max x cardinality). None (the default) keeps the newest entry per key
+    # prefix instead (CACHE-006 superseded-entry cleanup).
+    evict: str | None = None
+
+
+CACHE_FAMILY_EVICT_VALUES: frozenset[str] = frozenset({"lru"})
 
 
 @dataclass(frozen=True)
@@ -527,9 +535,22 @@ def _parse_cache(root: Cursor) -> CacheConfig:
             )
         min_ = fsub.str_("min", required=False)
         key = fsub.list_str("key", required=False)
+        evict = fsub.str_("evict", required=False)
+        if evict is not None and evict not in CACHE_FAMILY_EVICT_VALUES:
+            root.findings.append(
+                Finding(
+                    rule="CT-002",
+                    path=root.source,
+                    message=f"'cache.family.{fam_id}.evict' = {evict!r} is not one of "
+                    f"{sorted(CACHE_FAMILY_EVICT_VALUES)}",
+                    fix=f"set 'cache.family.{fam_id}.evict' to \"lru\" (an evictable family the janitor "
+                    "LRU-trims to its budget) or omit it (keep the newest entry per key prefix)",
+                )
+            )
         fsub.finish()
         family[fam_id] = CacheFamily(
-            id=fam_id, via=via, max=max_, lockfile=bool(lockfile), per=per, min=min_, key=key or None
+            id=fam_id, via=via, max=max_, lockfile=bool(lockfile), per=per, min=min_, key=key or None,
+            evict=evict,
         )
     sub.finish()
     return CacheConfig(

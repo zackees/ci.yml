@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ci_lint.cache.families import resolve_prefix, resolve_retired_prefix
 from ci_lint.cargo_messages import JsonValue
@@ -100,6 +100,27 @@ DELTA_OUTER_RE = re.compile(
 # are never treated as superseding each other.
 _TRAILING_HASH_RE = re.compile(r"(?:-[0-9a-f]{6,40})+$")
 
+# zackees/ci.yml#23 §4.1/§5: a cache belongs to PR N when its KEY contains a
+# delimited `pr-<N>` component (any position; delimiters `-`, `_`, `.`, `/`,
+# `:` or the key's start/end, so `spr-12` or `pr-12a` never match), or when
+# it was saved on ref `refs/pull/<N>/merge`. The legacy delta form
+# `delta-v1-pr<N>-...` (no hyphen) is still recognized via DELTA_OUTER_RE.
+PR_KEY_COMPONENT_RE = re.compile(r"(?:^|[-_./:])pr-(?P<pr>\d+)(?=$|[-_./:])")
+PR_REF_RE = re.compile(r"^refs/pull/(?P<pr>\d+)/merge$")
+
+
+def pr_from_key(key: str) -> int | None:
+    m = PR_KEY_COMPONENT_RE.search(key)
+    if m is not None:
+        return int(m.group("pr"))
+    legacy = DELTA_OUTER_RE.match(key)
+    return int(legacy.group("pr")) if legacy is not None else None
+
+
+def pr_from_ref(ref: str) -> int | None:
+    m = PR_REF_RE.match(ref)
+    return int(m.group("pr")) if m is not None else None
+
 
 def _shape(key: str) -> str:
     stripped = _TRAILING_HASH_RE.sub("", key)
@@ -121,6 +142,11 @@ class ClassifiedEntry:
     is_delta: bool
     delta: DeltaIdentity | None
     is_retired: bool  # matches a [cache].retired prefix
+    # The PR this entry belongs to (#23 §4.1): from a delimited `pr-<N>` key
+    # component / legacy delta key (`pr_in_key`), else from a
+    # `refs/pull/<N>/merge` ref. None for main/nightly/branch entries.
+    pr: int | None = None
+    pr_in_key: bool = False
 
 
 @dataclass(frozen=True)
@@ -131,6 +157,10 @@ class AuditReport:
     budget_bytes: int | None
     budget_ratio: float | None
     warning: str | None = None
+    # Cache ids of every entry (any family, delta or not) that belongs to a
+    # PR the lookup confirmed closed or merged -- the janitor deletes these
+    # (#23 §4.1). A failed lookup leaves this empty (fail safe: keep).
+    closed_pr_ids: frozenset[int] = frozenset()
 
 
 def _split_family_platform(rest: str, ci: CiToml) -> tuple[str, str] | None:
@@ -146,7 +176,15 @@ def _split_family_platform(rest: str, ci: CiToml) -> tuple[str, str] | None:
 
 
 def classify(ci: CiToml, entries: list[CacheEntry]) -> tuple[ClassifiedEntry, ...]:
-    return tuple(_classify_one(ci, e) for e in entries)
+    return tuple(_with_pr(_classify_one(ci, e)) for e in entries)
+
+
+def _with_pr(c: ClassifiedEntry) -> ClassifiedEntry:
+    key_pr = c.delta.pr if c.delta is not None else pr_from_key(c.entry.key)
+    if key_pr is not None:
+        return replace(c, pr=key_pr, pr_in_key=True)
+    ref_pr = pr_from_ref(c.entry.ref)
+    return replace(c, pr=ref_pr) if ref_pr is not None else c
 
 
 def _classify_one(ci: CiToml, entry: CacheEntry) -> ClassifiedEntry:
@@ -205,8 +243,8 @@ def _check_cache_003(
     default_ref = f"refs/heads/{default_branch}"
     findings: list[Finding] = []
     for c in classified:
-        if c.family_id is None or c.is_delta or c.is_retired:
-            continue
+        if c.family_id is None or c.is_delta or c.is_retired or c.pr_in_key:
+            continue  # a pr-<N>-keyed entry is PR-scoped (#23 §5), deleted when its PR closes
         if c.entry.ref and c.entry.ref != default_ref:
             findings.append(
                 Finding(
@@ -249,14 +287,14 @@ def _check_cache_005(ci: CiToml, classified: tuple[ClassifiedEntry, ...]) -> lis
 
 
 def _check_cache_006(classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
-    groups: dict[tuple[str, str], list[ClassifiedEntry]] = {}
+    groups: dict[tuple[str, str, int | None], list[ClassifiedEntry]] = {}
     for c in classified:
         if c.family_id is None or c.is_delta or c.is_retired:
             continue
-        groups.setdefault((c.family_id, _shape(c.entry.key)), []).append(c)
+        groups.setdefault((c.family_id, _shape(c.entry.key), c.pr if c.pr_in_key else None), []).append(c)
 
     findings: list[Finding] = []
-    for (fam_id, _shape_key), members in groups.items():
+    for (fam_id, _shape_key, _pr), members in groups.items():
         if len(members) < 2:
             continue
         newest = max(members, key=lambda c: c.entry.last_accessed_at)
@@ -425,7 +463,7 @@ def _check_rust_004(
 def _current_base_entries(classified: tuple[ClassifiedEntry, ...]) -> dict[str, list[ClassifiedEntry]]:
     out: dict[str, list[ClassifiedEntry]] = {}
     for c in classified:
-        if c.family_id is not None and not c.is_delta and not c.is_retired:
+        if c.family_id is not None and not c.is_delta and not c.is_retired and not c.pr_in_key:
             out.setdefault(c.family_id, []).append(c)
     return out
 
@@ -436,40 +474,54 @@ def _check_cache_008(
     graphql: GraphQLFn | None,
     token: str,
     repo: str,
-) -> tuple[list[Finding], str | None]:
-    deltas = [c for c in classified if c.is_delta and c.delta is not None]
-    if not deltas:
-        return [], None
+) -> tuple[list[Finding], str | None, frozenset[int]]:
+    """Closed/merged-PR entries (every entry whose key carries `pr-<N>`,
+    a legacy `delta-v1-pr<N>-` key, or ref `refs/pull/<N>/merge` -- #23
+    section 4.1) plus stale-base PR deltas. ONE GraphQL query for every PR
+    number. Returns (findings, warning, ids of closed-PR entries)."""
+
+    pr_entries = [c for c in classified if c.pr is not None]
+    if not pr_entries:
+        return [], None, frozenset()
 
     warning: str | None = None
     pr_states: dict[int, PrState] = {}
     if graphql is not None:
-        pr_numbers = sorted({c.delta.pr for c in deltas if c.delta is not None})
+        pr_numbers = sorted({c.pr for c in pr_entries if c.pr is not None})
         try:
             owner, name = repo.split("/", 1)
             pr_states = fetch_pr_states(graphql, token, owner, name, pr_numbers)
         except CacheApiError as exc:
-            warning = f"CACHE-008 PR-state lookup: {exc}"
+            warning = f"CACHE-008 PR-state lookup: {exc} (fail safe: every PR's entries are kept)"
 
     base_entries = _current_base_entries(classified)
     findings: list[Finding] = []
-    for c in deltas:
-        d = c.delta
-        assert d is not None
-        state = pr_states.get(d.pr)
+    closed_ids: set[int] = set()
+    for c in pr_entries:
+        assert c.pr is not None
+        state = pr_states.get(c.pr)
         if state is not None and state.closed_or_merged:
+            closed_ids.add(c.entry.id)
+            if c.is_delta:
+                kind = "a PR delta"
+            elif c.pr_in_key:
+                kind = "a pr-<N>-keyed entry"
+            else:
+                kind = "an entry on its merge ref"
             findings.append(
                 Finding(
                     rule="CACHE-008",
                     path=f"cache:{c.entry.key}",
-                    message=f"cache id={c.entry.id} is a PR delta for #{d.pr}, which is "
-                    f"{state.state.lower()}",
-                    fix="delete it (ci-lint cache trim); the next precheck on this repo trims a "
-                    "closed/merged PR's delta automatically",
+                    message=f"cache id={c.entry.id} is {kind} for #{c.pr}, which is {state.state.lower()}",
+                    fix="delete it (ci-lint cache janitor or trim); the janitor deletes every entry of a "
+                    "closed/merged PR on its next sweep",
                 )
             )
             continue
 
+        d = c.delta
+        if d is None:
+            continue
         candidates = base_entries.get(d.family, [])
         matching = [b for b in candidates if d.platform in b.entry.key] or candidates
         if not matching:
@@ -486,7 +538,7 @@ def _check_cache_008(
                     "the current base and saves fresh",
                 )
             )
-    return findings, warning
+    return findings, warning, frozenset(closed_ids)
 
 
 def audit_classified(
@@ -516,7 +568,9 @@ def audit_classified(
     findings.extend(_check_cache_005(ci, classified))
     findings.extend(_check_cache_006(classified))
     findings.extend(_check_cache_009(classified))
-    cache008_findings, warning = _check_cache_008(classified, graphql=graphql, token=token, repo=repo)
+    cache008_findings, warning, closed_pr_ids = _check_cache_008(
+        classified, graphql=graphql, token=token, repo=repo
+    )
     findings.extend(cache008_findings)
 
     if fetch is not None:
@@ -549,6 +603,7 @@ def audit_classified(
         budget_bytes=budget_bytes,
         budget_ratio=ratio,
         warning=warning,
+        closed_pr_ids=closed_pr_ids,
     )
 
 

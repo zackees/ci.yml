@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   precheck:
-    uses: ./.github/workflows/ci-precheck.yml
+    uses: ./.github/workflows/ci-pre.yml
   # RUN-002 green: name states the build host, so the Checks tab shows the
   # target never compiles on itself.
   platform-build:

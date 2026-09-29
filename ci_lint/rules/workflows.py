@@ -497,6 +497,11 @@ def check_wf_002(workflows: list[ParsedYamlFile]) -> list[Finding]:
     for wf in workflows:
         if wf.status != LoadStatus.OK:
             continue
+        if Path(wf.path).name == "ci-pre.yml":
+            # zackees/ci.yml#23 §3: ci-pre.yml's concurrency is per job (only
+            # the cache-janitor job is serialized); a workflow-level group is
+            # GEN-015 there (ci_lint.rules.ci_pre), not a WF-002 requirement.
+            continue
         if "concurrency" not in as_dict(wf.document):
             findings.append(
                 Finding(

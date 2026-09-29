@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 
-from ci_lint.cache.audit import ClassifiedEntry, audit_classified, classify
+from ci_lint.cache.audit import ClassifiedEntry, _shape, audit_classified, classify
 from ci_lint.cache.github_cache import CacheApiError, delete_cache_by_id, delete_cache_by_key, list_caches
 from ci_lint.github_api import DeleteFn, FetchFn, GraphQLFn
 from ci_lint.rules.cache_static import cardinality, parse_size
@@ -22,6 +22,10 @@ from ci_lint.schema import CiToml
 
 JANITOR_RULES: frozenset[str] = frozenset({"CACHE-001", "CACHE-003", "CACHE-005", "CACHE-006", "CACHE-009"})
 DEFAULT_STALE_DAYS = 5
+# zackees/ci.yml#23 section 4.3: the janitor never deletes an entry younger
+# than this, so a sweep cannot race the producer that just saved it or the
+# consumers about to restore it.
+JANITOR_GRACE_SECONDS = 10 * 60
 
 
 @dataclass(frozen=True)
@@ -153,6 +157,50 @@ def _before_after_table(before: list[ClassifiedEntry], deleted_ids: set[int]) ->
     return "\n".join(lines)
 
 
+def _protected_ids(ci: CiToml, classified: list[ClassifiedEntry]) -> set[int]:
+    """#23 section 4.3: never delete the newest entry a required job
+    restores -- the newest (by last_accessed_at) base entry of each declared
+    family and key shape (not a PR entry, delta, or retired family); for an
+    `evict = "lru"` family, only its single newest entry."""
+
+    newest: dict[tuple[str, str], ClassifiedEntry] = {}
+    for c in classified:
+        if c.family_id is None or c.is_delta or c.is_retired or c.pr is not None:
+            continue
+        fam = ci.cache.family.get(c.family_id)
+        k = (c.family_id, "" if fam is not None and fam.evict == "lru" else _shape(c.entry.key))
+        cur = newest.get(k)
+        if cur is None or c.entry.last_accessed_at > cur.entry.last_accessed_at:
+            newest[k] = c
+    return {c.entry.id for c in newest.values()}
+
+
+def _lru_evictions(ci: CiToml, classified: list[ClassifiedEntry]) -> dict[int, str]:
+    """#23 section 4.2: an `evict = "lru"` family keeps its most recently
+    used entries up to its declared footprint (max x cardinality) and
+    evicts the rest, least recently used first."""
+
+    out: dict[int, str] = {}
+    for fam_id, fam in ci.cache.family.items():
+        if fam.evict != "lru":
+            continue
+        max_bytes = parse_size(fam.max)
+        if max_bytes is None:
+            continue
+        budget = max_bytes * max(cardinality(ci, fam.per), 1)
+        members = sorted(
+            (c for c in classified if c.family_id == fam_id and not c.is_retired),
+            key=lambda c: c.entry.last_accessed_at,
+            reverse=True,
+        )
+        used = 0
+        for c in members:
+            used += c.entry.size_in_bytes
+            if used > budget:
+                out[c.entry.id] = f"lru: family '{fam_id}' over its {budget}B footprint (evict = \"lru\")"
+    return out
+
+
 def janitor(
     ci: CiToml,
     *,
@@ -166,9 +214,16 @@ def janitor(
     stale_days: int = DEFAULT_STALE_DAYS,
     default_branch: str = "main",
     now: float | None = None,
+    grace_seconds: int = JANITOR_GRACE_SECONDS,
 ) -> tuple[OpsResult, str]:
-    """Delete CACHE-001/003/005/006/009 entries, plus any entry not
-    accessed in `stale_days` days. Returns `(result, before/after table)`."""
+    """zackees/ci.yml#23 section 4. Deletes: every entry of a closed/merged
+    PR (key `pr-<N>`/legacy delta, or ref `refs/pull/<N>/merge`; a failed
+    PR lookup keeps them); CACHE-001/003/005/006/009 entries (006 keeps the
+    newest entry per key prefix); `evict = "lru"` families down to their
+    footprint; entries not accessed in `stale_days` days. Never deletes an
+    entry created within `grace_seconds`, nor the newest base entry of a
+    family/key shape (except when it is poisoned, CACHE-005).
+    Returns `(result, before/after table)`."""
 
     try:
         entries = list_caches(fetch, token, repo)
@@ -178,11 +233,23 @@ def janitor(
     report = audit_classified(ci, classified, graphql=graphql, token=token, repo=repo, default_branch=default_branch)
     by_key = {c.entry.key: c for c in classified}
     plan = _findings_to_plan(report.findings, by_key, JANITOR_RULES)
+    for c in classified:
+        if c.entry.id in report.closed_pr_ids and c.entry.key not in plan:
+            plan[c.entry.key] = DeletePlanEntry(
+                id=c.entry.id, key=c.entry.key, size_in_bytes=c.entry.size_in_bytes,
+                reason=f"closed PR: #{c.pr} is closed or merged",
+            )
 
+    lru = _lru_evictions(ci, list(classified))
     now_ts = now if now is not None else time.time()
     cutoff = now_ts - stale_days * 86400
     for c in classified:
         if c.entry.key in plan:
+            continue
+        if c.entry.id in lru:
+            plan[c.entry.key] = DeletePlanEntry(
+                id=c.entry.id, key=c.entry.key, size_in_bytes=c.entry.size_in_bytes, reason=lru[c.entry.id]
+            )
             continue
         ts = _parse_iso8601(c.entry.last_accessed_at)
         if ts is not None and ts < cutoff:
@@ -192,6 +259,17 @@ def janitor(
                 size_in_bytes=c.entry.size_in_bytes,
                 reason=f"stale: not accessed in >= {stale_days} day(s) (last_accessed_at={c.entry.last_accessed_at})",
             )
+
+    # Safety (#23 section 4.3), applied last so no reason can bypass it.
+    protected = _protected_ids(ci, list(classified))
+    grace_cutoff = now_ts - grace_seconds
+    for key, entry in list(plan.items()):
+        c = by_key[key]
+        created = _parse_iso8601(c.entry.created_at)
+        if created is not None and created > grace_cutoff:
+            del plan[key]  # too young: may race its producer and consumers
+        elif entry.id in protected and not entry.reason.startswith(("CACHE-005", "CACHE-009", "closed PR")):
+            del plan[key]  # the newest entry a required job restores
 
     planned = list(plan.values())[:max_deletes]
     result = _apply(planned, delete=delete, token=token, repo=repo, dry_run=dry_run)

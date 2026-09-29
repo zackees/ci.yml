@@ -5,6 +5,7 @@ runs:
   steps:
     - uses: zackees/setup-soldr@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v1.0.0
       with:
+        cache-key-suffix: ${{ inputs.cache-key-suffix }}
         solo-toolchain-cache: "false"
         cook-delta: "false"
         save-cache: "auto"

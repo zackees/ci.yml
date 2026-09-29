@@ -1,0 +1,21 @@
+name: CI Pre
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  cache-janitor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    concurrency: 
+      group: cache-janitor-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - run: python3 -m ci_lint cache janitor --repo .
+  cache-budget:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - run: python3 -m ci_lint cache budget --repo .

@@ -45,6 +45,14 @@ class CacheSaveOutputTest(unittest.TestCase):
         out = _output_dict(_plan_github_output_lines(plan, None))
         self.assertEqual("true", out["cache_save"])
 
+    def test_cache_key_pr_output(self) -> None:
+        """#23 §5 / CACHE-013: 'pr-<N>' in PR context, empty elsewhere."""
+
+        plan = compute_plan(self.ci, event_name="pull_request", title="fix a bug")
+        self.assertEqual("pr-42", _output_dict(_plan_github_output_lines(plan, None, 42))["cache_key_pr"])
+        plan = compute_plan(self.ci, event_name="push", ref="refs/heads/main")
+        self.assertEqual("", _output_dict(_plan_github_output_lines(plan, None))["cache_key_pr"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,4 @@
-name: CI Precheck
+name: CI Pre
 on:
   workflow_call:
     outputs:
@@ -6,9 +6,6 @@ on:
         value: ${{ jobs.plan.outputs.platforms_json }}
 permissions:
   contents: read
-concurrency:
-  group: ci-precheck-${{ github.ref }}
-  cancel-in-progress: true
 jobs:
   plan:
     runs-on: ubuntu-24.04

@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   precheck:
-    uses: ./.github/workflows/ci-precheck.yml
+    uses: ./.github/workflows/ci-pre.yml
   build:
     needs: precheck
     runs-on: ubuntu-24.04
