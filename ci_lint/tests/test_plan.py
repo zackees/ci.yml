@@ -59,6 +59,19 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(set(), set(plan.suites))
         self.assertFalse(plan.mergeable)
 
+    def test_ci_perf_no_test_keeps_perf_suite(self) -> None:
+        # ci.yml#46: the perf loop must stay build+perf only -- [no-test]
+        # removes test-kind suites (unit/smoke/...) but never a
+        # `kind = "bench"` suite like perf, regardless of bracket order.
+        plan = compute_plan(self.ci, event_name="pull_request", title="[ci-perf][no-test] wip")
+        self.assertEqual({"perf"}, set(plan.suites))
+        self.assertFalse(plan.mergeable)
+
+    def test_no_test_ci_perf_order_independent(self) -> None:
+        plan = compute_plan(self.ci, event_name="pull_request", title="[no-test][ci-perf] wip")
+        self.assertEqual({"perf"}, set(plan.suites))
+        self.assertFalse(plan.mergeable)
+
     def test_release_with_no_test_is_an_error(self) -> None:
         with self.assertRaises(PlanError):
             compute_plan(self.ci, event_name="pull_request", title="[release][no-test] wip")
