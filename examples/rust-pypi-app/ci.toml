@@ -44,8 +44,8 @@ binaries = [
 # ── Lint lanes ───────────────────────────────────────────────────────────────
 [lint.dylint]
 targets = "all-platforms"           # one check-only pass per declared target, all on Linux
-shape   = "measure"                 # round 2 decides: "multi-target" | "sequential" | "per-target-jobs"
-budget  = { warm = "235s", cold = "480s" }
+shape   = "multi-target"            # "multi-target" | "sequential" | "per-target-jobs"; round 3B measured multi-target 23-37% faster than sequential
+budget  = { warm = "115s", cold = "235s" }  # template round-3B measurements
 
 # ── Suites ───────────────────────────────────────────────────────────────────
 # Each id generates [ci-test-<id>] and [no-test-<id>]. A skip inside a required suite is a failure.
@@ -100,14 +100,14 @@ retired  = ["solo-toolchain", "cook-delta-v2"]
 pr       = { mode = "delta", families = ["compile"], max-per-pr = "128MB", budget = "1GB", trim = "on-close" }
 
 [cache.family]
-registry   = { via = "setup-soldr:cargo-registry",  max = "100MB", lockfile = true }
-deps       = { via = "setup-soldr:cook",            max = "150MB", lockfile = true, per = "platform" }
+registry   = { via = "setup-soldr:cargo-registry",  max = "100MB", lockfile = true, per = "none" }
+deps       = { via = "setup-soldr:cook",            max = "150MB", lockfile = true, per = "none" }
 compile    = { via = "setup-soldr:build-cache",     max = "150MB", lockfile = true, per = "platform", min = "1MB" }
 sdk        = { via = "setup-soldr:cross-targets",   max = "500MB", per = "cross-platform" }
-dylint     = { via = "setup-soldr:dylint",          max = "750MB", min = "1MB" }               # tool/driver/foundation, one host (round-4A: the live template saves this today, undeclared)
-dylint-out = { via = "setup-soldr:dylint-output",   max = "150MB", lockfile = true, per = "platform", min = "1MB" }
-soldr-mini = { via = "setup-soldr:soldr-mini",      max = "30MB",  per = "platform", min = "1MB" }  # round-4A: ditto
-uv         = { via = "setup-uv", max = "100MB", per = "os" }   # round-4A amendment: astral-sh/setup-uv's own built-in cache; the template's setup-uv step must set its own save-cache input so it saves ONLY on writer flows (CACHE-003 applies to it on a PR ref exactly like a base layer)
+dylint     = { via = "setup-soldr:dylint",          max = "750MB", per = "none", min = "1MB" }               # tool/driver/foundation, one host (round-4A: the live template saves this today, undeclared)
+dylint-out = { via = "setup-soldr:dylint-output",   max = "150MB", lockfile = true, per = "none", min = "1MB" }  # one generation per lockfile, not per target (round-4B measured)
+soldr-mini = { via = "setup-soldr:soldr-mini",      max = "30MB",  per = "none", min = "1MB" }  # round-4A: ditto
+uv         = { via = "setup-uv", max = "100MB", per = "platform" }   # round-4A amendment: astral-sh/setup-uv's own built-in cache; the template's setup-uv step must set its own save-cache input so it saves ONLY on writer flows (CACHE-003 applies to it on a PR ref exactly like a base layer)
 
 # ── Local runs: bosn → act (§11) ─────────────────────────────────────────────
 [local]
@@ -118,7 +118,7 @@ cache  = "machine"
 # ── Allowlists ───────────────────────────────────────────────────────────────
 [allow]
 workflows         = { "ci.yml" = ["pull_request", "push:main", "schedule", "workflow_dispatch"], "ci-precheck.yml" = ["workflow_call"] }
-actions           = ["actions/checkout", "actions/upload-artifact", "actions/download-artifact", "zackees/setup-soldr", "astral-sh/setup-uv"]
+actions           = ["actions/checkout", "actions/upload-artifact", "actions/download-artifact", "actions/cache", "zackees/setup-soldr", "astral-sh/setup-uv"]
 # "plan" (round-4B): the wrapper's save-cache input must be an expression derived from the
 # precheck plan (needs.precheck.outputs.cache_save, passed through as inputs.save-cache), never a
 # literal -- saves only fire when plan.cache_mode == "write".
@@ -129,11 +129,12 @@ platform-selector = "crates/private/template-platform/src/lib.rs"   # the ONE fi
 platform-code     = ["crates/private/template-platform/src/platforms/**", "src/template_python_rust_cmd/platforms/**"]
 # Round-4B (SEC-002 refinement): top-level permissions are capped at contents:read + actions:read
 # (free on every job too); any wider per-job grant must be listed here by job id.
-permissions       = { "id-token: write" = ["publish"], "actions: write" = ["precheck", "cache-maint"] }
+permissions       = { "id-token: write" = ["publish"], "actions: write" = ["cache-maint", "precheck", "fast"] }
 # Round-4B (CACHE-001 refinement): actions/cache (and /save, /restore) may ONLY appear inside this
 # one SHA-pinned composite-action wrapper; its own key: input must be dynamic (CACHE-002), never a
-# literal -- see .github/actions/cache/action.yml.
-cache-actions     = { only-in = ".github/actions/cache" }
+# literal -- see .github/actions/cache/action.yml. The wrapper location defaults to
+# `.github/actions/cache`, so (like the reference template) the table is omitted; declare
+# `cache-actions = { only-in = "<dir>" }` only to move the wrapper elsewhere.
 # Round-4B: astral-sh/setup-uv's own save-cache input is checked the same way as setup-soldr's
 # above, on every use of the action (it has no single wrapper location).
 setup-uv          = { require = { save-cache = "plan" } }
