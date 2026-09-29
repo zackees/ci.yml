@@ -1,7 +1,7 @@
 """Group 2: workflow rules.
 
-GEN-001, GEN-002, GEN-008, TAG-003, SEC-003, SEC-004, RUN-001, WF-001,
-WF-002, WF-003, and CT-004 (the linter pin, verified against the actual
+GEN-001, GEN-002, GEN-008, TAG-003, SEC-003, SEC-004, RUN-001, RUN-002,
+WF-001, WF-002, WF-003, and CT-004 (the linter pin, verified against the actual
 checkout step here since CT-001..003/005 live in schema/exceptions). All of
 these need parsed workflow YAML; a file that fails to parse (no PyYAML, no
 `yq` on PATH) makes every rule that depends on it `needs_review` for that
@@ -51,6 +51,7 @@ WORKFLOW_FILE_RULES: tuple[str, ...] = (
     "SEC-003",
     "SEC-004",
     "RUN-001",
+    "RUN-002",
     "WF-001",
     "WF-002",
     "WF-003",
@@ -405,6 +406,72 @@ def check_run_001(ci: CiToml, workflows: list[ParsedYamlFile]) -> list[Finding]:
     return findings
 
 
+_BUILD_HOST_ANNOTATION_RE = re.compile(r"\(on\s+[\w.\-]+", re.IGNORECASE)
+_NATIVE_ANNOTATION_RE = re.compile(r"\(native\b", re.IGNORECASE)
+
+
+def check_run_002(workflows: list[ParsedYamlFile]) -> list[Finding]:
+    """RUN-002 (ci.yml#12): a cross-compiled job's display name must show
+    where it builds and where it runs. Detection reuses RUN-001's
+    platform-lanes matrix signal (`_matrix_platform_lane_key`) -- a job
+    whose `strategy.matrix` is built from the precheck plan's
+    `platform_lanes_json`/`platform_lanes_todo_json` output is one leg of a
+    cross-compile pipeline:
+
+    - a leg whose `runs-on` is a STATIC label (it always builds on that
+      host, regardless of the lane's target) must say so in its `name:`,
+      e.g. `... (on ubuntu-24.04, soldr) ...`, so a glance at the Checks
+      tab shows the build never happens on the target platform.
+    - a leg whose `runs-on` is the dynamic `${{ matrix.<key>.runs_on }}`
+      expression (it executes natively on the lane's own runner, with
+      compiling assumed impossible) must say so, e.g. `... (native) ...`.
+    """
+    findings: list[Finding] = []
+    for wf in workflows:
+        if wf.status != LoadStatus.OK:
+            continue
+        for job_id, job in jobs_of(as_dict(wf.document)).items():
+            lane_key = _matrix_platform_lane_key(job)
+            if lane_key is None:
+                continue
+            runs_on = job.get("runs-on")
+            name = job.get("name")
+            name_str = name if isinstance(name, str) else ""
+            is_dynamic_lane_runner = (
+                isinstance(runs_on, str) and f"matrix.{lane_key}.runs_on" in runs_on
+            )
+            if is_dynamic_lane_runner:
+                if _NATIVE_ANNOTATION_RE.search(name_str):
+                    continue
+                findings.append(
+                    Finding(
+                        rule="RUN-002",
+                        path=wf.path,
+                        message=f"jobs.{job_id} executes natively on its lane's own runner "
+                        f"(runs-on: {runs_on}) but its `name:` does not say so",
+                        fix=f"add a '(native)' (or '(native {{runner}})') annotation to "
+                        f"jobs.{job_id}.name so the Checks tab shows this job runs on the "
+                        "target platform and never compiles there",
+                    )
+                )
+            elif isinstance(runs_on, str) and "${{" not in runs_on:
+                if _BUILD_HOST_ANNOTATION_RE.search(name_str):
+                    continue
+                findings.append(
+                    Finding(
+                        rule="RUN-002",
+                        path=wf.path,
+                        message=f"jobs.{job_id} is one leg of a cross-compile matrix but always "
+                        f"builds on a fixed host (runs-on: {runs_on}); its `name:` does not "
+                        "say where it builds",
+                        fix=f"add a '(on {runs_on}, ...)' annotation to jobs.{job_id}.name "
+                        "(e.g. '(on ubuntu-24.04, soldr)') so the Checks tab shows the build "
+                        "host, not just the target",
+                    )
+                )
+    return findings
+
+
 def check_wf_001(workflows: list[ParsedYamlFile]) -> list[Finding]:
     findings: list[Finding] = []
     for wf in workflows:
@@ -595,6 +662,7 @@ def check_group2(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings.extend(check_sec_003(workflows))
     findings.extend(check_sec_004(ci, workflows, actions))
     findings.extend(check_run_001(ci, workflows))
+    findings.extend(check_run_002(workflows))
     findings.extend(check_wf_001(workflows))
     findings.extend(check_wf_002(workflows))
     findings.extend(check_wf_003(workflows, actions))

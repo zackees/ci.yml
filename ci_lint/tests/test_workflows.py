@@ -12,6 +12,7 @@ from ci_lint.rules.workflows import (
     check_gen_002,
     check_gen_008,
     check_run_001,
+    check_run_002,
     check_sec_003,
     check_sec_004,
     check_tag_003,
@@ -126,6 +127,26 @@ class WorkflowFixtureTest(unittest.TestCase):
             any("jobs.unresolvable.runs-on" in f.message for f in needs_review),
             msg=[f.message for f in findings],
         )
+
+    def test_run_002_cross_build_job_name_missing_build_host(self) -> None:
+        """ci.yml#12: a platform-lanes matrix leg that always builds on a
+        fixed runner (soldr cross-compile) must say so in its `name:`."""
+        wfs = load_workflows(fixture("RUN-002", "red"))
+        findings = check_run_002(wfs)
+        rules = rule_ids(findings)
+        self.assertIn("RUN-002", rules)
+        self.assertTrue(
+            any("jobs.platform-build" in f.message and "builds on a fixed host" in f.message
+                for f in findings),
+            msg=[f.message for f in findings],
+        )
+        self.assertTrue(
+            any("jobs.platform-run" in f.message and "executes natively" in f.message
+                for f in findings),
+            msg=[f.message for f in findings],
+        )
+        wfs = load_workflows(fixture("RUN-002", "green"))
+        self.assertNotIn("RUN-002", rule_ids(check_run_002(wfs)))
 
     def test_wf_001_missing_timeout(self) -> None:
         wfs = load_workflows(fixture("WF-001", "red"))
