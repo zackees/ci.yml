@@ -136,7 +136,7 @@ Required when `profile = "rust-pypi-app"`.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `targets` | string | `"all-platforms"` in round 1A (the only value the planner understands: dylint runs once per declared platform, all on Linux). |
-| `shape` | string | e.g. `"measure"`. Round-2 scope (multi-target vs. sequential vs. per-target-jobs); not enforced in round 1A. |
+| `shape` | string | `"multi-target"` \| `"sequential"` \| `"per-target-jobs"` (`"measure"` while undecided). The template measured multi-target faster than sequential in round 3B (template-python-rust-cmd#19); not enforced by precheck. |
 | `budget.warm` / `budget.cold` | string (duration) | Informational in round 1A. |
 
 ## `[suites.<id>]`
