@@ -9,6 +9,8 @@
 **Evidence collected:** 2026-09-27, including the earlier fleet audits and subsequent design validation. Historical observations are labeled below.
 **Design relationship:** this proposal consolidates and revises [design issue #3](https://github.com/zackees/ci.yml/issues/3). The user explicitly requested a new issue. Existing issues remain open; this document does not claim their implementation is complete.
 
+> **SUPERSEDED (2026-09-28, round 6A, [issue #6](https://github.com/zackees/ci.yml/issues/6)):** the `ci.toml` **contract and schema** this document proposes below — the `units → groups → events` vocabulary, `schema = 1`, `[units]`/`[groups]`/`[on.*]` — is superseded by **schema 3**, documented field-by-field in [docs/ci-toml.md](docs/ci-toml.md) and implemented by [`ci_lint`](ci_lint/) (`platforms`/`suites`/`flow`/`tags`, not `hosts`/`units`/`groups`/`on.*`). Do not implement against the schema examples in this document; implement against `docs/ci-toml.md` and [`examples/rust-pypi-app/ci.toml`](examples/rust-pypi-app/ci.toml). The **rest of this proposal is kept as background, not deleted**: its evidence inventory, its host/target model (musl vs. glibc 2.17, Windows GNU vs. MSVC, x64 vs. ARM64 — schema 3's `[platforms.<id>]` reuses this vocabulary), its release lifecycle (candidate SHA, staged-artifact proof before publication — schema 3's `ci-lint release verify`/`PKG-006` implements this), and its fbuild fixture all remain useful reference material. See the same note repeated at [§ "Proposal: the contract"](#proposal-the-contract) below, and policy-general.md/policy-rust.md for which of this document's proposed rules `ci_lint` actually enforces today.
+
 ## Executive summary
 
 ### Decision
@@ -117,6 +119,18 @@ The retained reports do not prove exhaustive fleet coverage, all historical runs
 ---
 
 ## Proposal: the contract
+
+> **SUPERSEDED by schema 3.** Everything in this section through the end of
+> "Performance workflows" below (`units`/`groups`/`on.*`, `schema = 1`)
+> describes the *original* contract design. [Issue #6](https://github.com/zackees/ci.yml/issues/6)
+> replaced it with `ci.toml` schema 3 — `[platforms]`/`[suites]`/`[flow.*]`/
+> `[tags.*]`/`[cache]`/`[allow]` — documented in [docs/ci-toml.md](docs/ci-toml.md)
+> and enforced by [`ci_lint`](ci_lint/). The vocabulary differs (e.g.
+> this section's `hosts` became schema 3's `[platforms.<id>].runs-on` +
+> `target`; this section's `[on.pr.tags.*]` became schema 3's `[tags.<id>]`
+> with set-algebra `add`/`remove`), and schema 3 is the one a real repository
+> should adopt. Kept below for its vocabulary and rationale, not as an
+> implementation target.
 
 ### Format and ownership
 
@@ -501,6 +515,20 @@ Required outcomes include 76 distinct board cases, both macOS architectures, ign
 ---
 
 ## Machine-checkable enforcement
+
+> **Note:** the command names below (`ci-lint validate`/`check`/`history`/
+> `sync-issues`) are this document's original proposal. The real `ci_lint`
+> package ([issue #6](https://github.com/zackees/ci.yml/issues/6),
+> [docs/ci-toml.md](docs/ci-toml.md)) implements the same intent through a
+> different, since-evolved command set: `ci-lint precheck` (static rules +
+> `plan.json`), `ci-lint plan`, `ci-lint units`/`tests size`/`wheel`/`gate`
+> (runtime), `ci-lint cache ...` (key/save-ok/audit/trim/janitor/heal/
+> preprune/delta), `ci-lint audit` (live settings/secrets — this document's
+> proposed `ci-lint check` folded into `precheck --live` and `audit`),
+> `ci-lint publish oidc-check`, `ci-lint release verify`, and `ci-lint perf
+> compare`. `ci-lint history` and `ci-lint sync-issues` (comparing declared
+> coverage against *observed* run history over time, and automated issue
+> filing) remain unimplemented future scope for either design.
 
 ### Standard linter interface
 

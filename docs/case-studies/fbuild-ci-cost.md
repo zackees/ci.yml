@@ -125,32 +125,39 @@ confirmed again on current data). The required-context list is narrower than
 what the tiered workflow computes: only `"Dylint"` is a required status
 check; `"CI selected coverage"` — the job `ci-minimal.yml` defines to assert
 the correct tier passed — is not in `required_status_checks.contexts`. This
-mirrors [clud's GEN-005 finding](clud-ci-cost.md#candidate-policy-rules-not-yet-adopted--pending-review)
-in category (a documented/intended gate that enforcement doesn't fully back)
-but is a distinct mechanism: clud has *no* protection at all and compensates
-with a hand-applied label; fbuild has *strict* protection *without a queue*,
-which is a specifically named GitHub anti-pattern — every merge to `main`
-forces every other open PR to restart its check set, and a queue is the
-platform's own answer to that, still not adopted here.
+mirrors [clud's `GEN-010` finding](clud-ci-cost.md#candidate-policy-rules--adopted-round-6a-zackeesciyml6)
+(renumbered from the `GEN-005` this case study originally referenced — see
+that case study for why) in category (a documented/intended gate that
+enforcement doesn't fully back) but is a distinct mechanism: clud has *no*
+protection at all and compensates with a hand-applied label; fbuild has
+*strict* protection *without a queue*, which is a specifically named GitHub
+anti-pattern — every merge to `main` forces every other open PR to restart
+its check set, and a queue is the platform's own answer to that, still not
+adopted here.
 
-## Candidate policy rules (not yet adopted — pending review)
+## Candidate policy rules — `GEN-006` adopted, `GEN-007` still pending (round 6A, zackees/ci.yml#6)
 
-These are drafted from this case study's evidence. Finding IDs are chosen to
-avoid colliding with the existing tables or with clud-ci-cost.md's
-`RUST-005`/`RUST-006`/`GEN-005`.
+These were drafted from this case study's evidence. Finding IDs were chosen
+to avoid colliding with the existing tables or with clud-ci-cost.md's
+`RUST-005`/`RUST-006`/`GEN-005` (since renumbered `GEN-010`, see that case
+study).
 
-| Candidate ID | Mechanical signal |
-| --- | --- |
-| `GEN-006` | `required_status_checks.strict` is `true` (or an equivalent ruleset "require branches up to date" rule) on a branch with no merge queue configured. Every merge forces every other open PR's required checks to re-run, multiplying CI cost by concurrent-PR count instead of batching it once per merge window. |
-| `GEN-007` | A CI trigger's `paths:` (or an equivalent common-paths list) is scoped broader than the actual blast radius of the changed code, so a large per-artifact/per-platform matrix (boards, targets, platforms) fans out on a shared-code edit that only a small representative subset can meaningfully validate. Prefer a core/representative subset for shared-code paths, full coverage for artifact-scoped paths, and a scheduled full sweep as the safety net — the shape fbuild converged on in two steps (Stage 1, then superseded by Stage 2's tier-label approach). |
+| Candidate ID | Mechanical signal | Status |
+| --- | --- | --- |
+| `GEN-006` | `required_status_checks.strict` is `true` (or an equivalent ruleset "require branches up to date" rule) on a branch with no merge queue configured. Every merge forces every other open PR's required checks to re-run, multiplying CI cost by concurrent-PR count instead of batching it once per merge window. | **Enforced by ci-lint** (live audit, `ci-lint audit` — see policy-general.md) |
+| `GEN-007` | A CI trigger's `paths:` (or an equivalent common-paths list) is scoped broader than the actual blast radius of the changed code, so a large per-artifact/per-platform matrix (boards, targets, platforms) fans out on a shared-code edit that only a small representative subset can meaningfully validate. Prefer a core/representative subset for shared-code paths, full coverage for artifact-scoped paths, and a scheduled full sweep as the safety net — the shape fbuild converged on in two steps (Stage 1, then superseded by Stage 2's tier-label approach). | Candidate — not yet implemented |
 
 `GEN-006` generalizes the Stage-0 serialization mechanism and the gap that
-remains today. `GEN-007` generalizes Stage 1's fix as an intermediate
+remains today; it is now written into [policy-general.md](../policy-general.md)'s
+rule table and checked live by `ci_lint audit` (`ci_lint/settings_audit.py`).
+`GEN-007` generalizes Stage 1's fix as an intermediate
 pattern — worth keeping as a documented option even though fbuild itself
 moved past it to full label-gating in Stage 2, because a repository whose
 board/target coverage can't tolerate zero default coverage (unlike fbuild,
 where `ci-minimal` accepts Linux-only) may prefer the Stage-1 shape instead
-of Stage 2's all-or-nothing label gate.
+of Stage 2's all-or-nothing label gate. It remains a candidate: no `ci_lint`
+rule yet compares a trigger's declared path scope against its actual
+per-artifact blast radius.
 
 ## Sources
 

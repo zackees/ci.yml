@@ -119,20 +119,29 @@ is tracking has grown in the interval, and the issue remains open.
 This is the honest answer to "how fast did we make it" for this axis: **not
 yet**. The structural fix (#1639) is designed but not implemented.
 
-## Candidate policy rules (not yet adopted — pending review)
+## Candidate policy rule — adopted (round 6A, zackees/ci.yml#6)
 
 [clud-ci-cost.md](clud-ci-cost.md) already proposes `RUST-005` (link-target
 fan-out vs. dependency-graph size) and `RUST-006` (linked test products in a
 persistent cache). This case study's Finding 1 is corroborating evidence for
 both — zccache's before/after numbers are the most precisely measured of the
-three repos surveyed. Finding 2 is a distinct axis and needs its own
+three repos surveyed. Finding 2 is a distinct axis and needed its own
 candidate, chosen to avoid colliding with existing tables (`RUST-005`/
-`RUST-006`/`GEN-005` proposed in clud-ci-cost.md; `RUST-007` proposed in
-soldr-ci-cost.md; `GEN-006`/`GEN-007` proposed in fbuild-ci-cost.md):
+`RUST-006`/`GEN-005` proposed in clud-ci-cost.md, since renumbered `GEN-010`;
+`RUST-007` proposed in soldr-ci-cost.md; `GEN-006`/`GEN-007` proposed in
+fbuild-ci-cost.md):
 
-| Candidate ID | Mechanical signal |
-| --- | --- |
-| `GEN-008` | More than one workflow file declares a `pull_request` trigger without a documented reason each must be independent (e.g. a hard `workflow_call` limitation), and no single entrypoint's job graph accounts for the full per-PR required-check surface. Contrast with `GEN-001` (missing entrypoint entirely) — this is the fragmented-entrypoint case, not the absent one. |
+| Candidate ID | Mechanical signal | Status |
+| --- | --- | --- |
+| `GEN-008` | More than one workflow file declares a `pull_request` trigger without a documented reason each must be independent (e.g. a hard `workflow_call` limitation), and no single entrypoint's job graph accounts for the full per-PR required-check surface. Contrast with `GEN-001` (missing entrypoint entirely) — this is the fragmented-entrypoint case, not the absent one. | **Enforced by ci-lint** (static precheck — see policy-general.md) |
+
+`GEN-008` is now written into [policy-general.md](../policy-general.md)'s
+rule table: `ci_lint` fails a repository with more than one workflow file
+declaring `pull_request`, or any workflow file/trigger not declared in
+`[allow].workflows` (`ci_lint/rules/workflows.py`). zccache's own #1639 (the
+33-59-checks/10-27-workflow fan-out this finding is built from) remains open
+upstream as of this writing — adopting the rule here does not imply zccache's
+`main` currently passes it.
 
 ## Sources
 

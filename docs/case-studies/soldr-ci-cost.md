@@ -116,16 +116,20 @@ by finding cost that had nothing to do with link count.
 
 **PR #3154** — `fix(admission): measure heavy Rust test links instead of naming them` (merged 2026-09-07T04:49:32Z) — a correctness fix with a Wave-1 tie-in worth recording as its own pattern: `SOLDR_HEAVY_TEST_LINKS` named `soldr_cli`/`soldr_daemon` for exclusive build-system admission, but after #2934's consolidation the workspace's heaviest links became the 8 category binaries (`broker`, `cache_gc`, …) — **none of which was in the name list**, so exactly the binaries that produced the original 3.3 GB archive had lost their exclusive-admission protection. Fixed by measuring summed `--extern` rlib bytes (threshold calibrated from a 6,876-record compile journal: **147–231 MB** for a full-graph `--test` link vs a few MB for a trivial one) instead of naming targets by name.
 
-## Candidate policy rules (not yet adopted — pending review)
+## Candidate policy rules
 
 `RUST-005` and `RUST-006`, proposed in
 [clud-ci-cost.md](clud-ci-cost.md), directly generalize this case study's
-Wave 1 (link-target fan-out and linked-test-product cache admission). One
-additional pattern from Wave 2 is not yet covered by an existing candidate:
+Wave 1 (link-target fan-out and linked-test-product cache admission); both
+are now written into [policy-rust.md](../policy-rust.md) (round 6A,
+zackees/ci.yml#6) — `RUST-005` enforced today in a narrower declared-budget
+form, `RUST-006` declared but not yet fully enforced (pending candidate
+`CACHE-007`). One additional pattern from Wave 2 is not yet covered by an
+existing candidate:
 
-| Candidate ID | Mechanical signal |
-| --- | --- |
-| `RUST-007` | An admission list, exception table, or allowlist that grants a build/test target special handling (exclusive resource access, a cache exemption, a timeout override) is keyed on a **name** rather than a **measured property** (size, link weight, duration). A rename or refactor — such as consolidating test targets — silently drops matching members back to default (frequently unsafe) handling with no error. |
+| Candidate ID | Mechanical signal | Status |
+| --- | --- | --- |
+| `RUST-007` | An admission list, exception table, or allowlist that grants a build/test target special handling (exclusive resource access, a cache exemption, a timeout override) is keyed on a **name** rather than a **measured property** (size, link weight, duration). A rename or refactor — such as consolidating test targets — silently drops matching members back to default (frequently unsafe) handling with no error. | Candidate — not yet implemented; see policy-rust.md |
 
 ## Sources
 
