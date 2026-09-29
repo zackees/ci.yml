@@ -388,6 +388,165 @@ def _verify_smoke(smoke_dir: Path, wheels: list[StagedWheel]) -> list[Finding]:
     return findings
 
 
+def verify_readback(dist_dir: Path, readback_dir: Path, artifacts: tuple[ArtifactRecord, ...]) -> list[Finding]:
+    """REL-003 (zackees/ci.yml#8/#74): a dry run must exercise the mock
+    publisher's destination *read* path, not just its write path -- the
+    mimalloc-pprof draft-release 404 (only the paged list endpoint includes
+    drafts) was a read-path bug a write-only dry run could never catch.
+
+    Mechanical proof: for every staged artifact, `--readback <dir>` must
+    contain a `<artifact-name>.json` record written by reading the mock
+    publisher's own staged destination back (not by copying the staged
+    file) -- `{"path": ..., "sha256": ..., "read_back": true}` -- whose
+    sha256 matches the artifact ci-lint itself hashed from --dist. A missing
+    directory, a missing per-artifact record, or a mismatched digest all
+    mean the dry run's read path was never proven and REL-003 fails.
+    """
+
+    findings: list[Finding] = []
+    if not artifacts:
+        return findings
+    if not readback_dir.is_dir():
+        return [
+            Finding(
+                rule="REL-003",
+                path=str(readback_dir),
+                message=f"--readback {readback_dir} is not a directory -- the dry run produced no evidence "
+                "that it read the staged destination back",
+                fix="have the dry-run release script read every published artifact back from the mock "
+                "publisher's own destination (not copy the staged file) and write one "
+                "readback/<artifact>.json record per artifact ({'path', 'sha256', 'read_back': true})",
+            )
+        ]
+    for artifact in artifacts:
+        record_path = readback_dir / f"{artifact.path}.json"
+        if not record_path.is_file():
+            findings.append(
+                Finding(
+                    rule="REL-003",
+                    path=artifact.path,
+                    message=f"no readback record for '{artifact.path}' in {readback_dir} -- the dry run "
+                    "never read this artifact back from the mock publisher's destination",
+                    fix=f"write {record_path} from an actual read of the mock publisher's staged "
+                    f"destination for '{artifact.path}', not from the local staged file",
+                )
+            )
+            continue
+        try:
+            raw = json.loads(record_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            findings.append(
+                Finding(
+                    rule="REL-003",
+                    path=artifact.path,
+                    message=f"{record_path} is not readable/valid JSON: {exc}",
+                    fix="write a well-formed {'path', 'sha256', 'read_back': true} readback record",
+                )
+            )
+            continue
+        if not isinstance(raw, dict) or raw.get("read_back") is not True:
+            findings.append(
+                Finding(
+                    rule="REL-003",
+                    path=artifact.path,
+                    message=f"{record_path} does not assert 'read_back': true",
+                    fix="the readback record must come from an actual GET/read against the mock "
+                    "publisher's staged destination, and must say so with 'read_back': true",
+                )
+            )
+            continue
+        seen_sha = raw.get("sha256")
+        if seen_sha != artifact.sha256:
+            findings.append(
+                Finding(
+                    rule="REL-003",
+                    path=artifact.path,
+                    message=f"readback digest for '{artifact.path}' is {seen_sha!r}, staged artifact hashes "
+                    f"to {artifact.sha256!r} -- the mock publisher's destination does not contain (or "
+                    "does not return) the exact staged bytes",
+                    fix="fix the mock publisher's write or read path so a readback returns exactly the "
+                    "staged artifact bytes",
+                )
+            )
+    return findings
+
+
+def verify_resume(
+    dist_dir: Path, prior_manifest_path: Path, artifacts: tuple[ArtifactRecord, ...]
+) -> list[Finding]:
+    """REL-004 (zackees/ci.yml#8/#74): a resume must reuse the exact frozen
+    artifact bytes a prior `release verify` hashed into release-manifest.json,
+    never rebuild -- mimalloc-pprof#564/#565: archives are not
+    byte-reproducible, so a resume that rebuilds can never match its own
+    frozen `info_sha256`.
+
+    Mechanical proof: every artifact path recorded in the prior manifest
+    must still be present in --dist with the IDENTICAL sha256. A changed
+    digest for the same path means the bytes were rebuilt, not reused, and
+    REL-004 fails; a path missing entirely from the current staged set is
+    also a resume failure (nothing to reuse).
+    """
+
+    findings: list[Finding] = []
+    try:
+        prior_raw = json.loads(prior_manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [
+            Finding(
+                rule="REL-004",
+                path=str(prior_manifest_path),
+                message=f"cannot read frozen manifest {prior_manifest_path}: {exc}",
+                fix="point --resume at the release-manifest.json written by the prior (frozen) "
+                "'release verify' run",
+            )
+        ]
+    prior_artifacts = prior_raw.get("artifacts") if isinstance(prior_raw, dict) else None
+    if not isinstance(prior_artifacts, list):
+        return [
+            Finding(
+                rule="REL-004",
+                path=str(prior_manifest_path),
+                message=f"{prior_manifest_path} has no 'artifacts' list -- not a release-manifest.json",
+                fix="point --resume at a real release-manifest.json written by a prior 'release verify' run",
+            )
+        ]
+    prior_by_path: dict[str, str] = {}
+    for entry in prior_artifacts:
+        if isinstance(entry, dict) and isinstance(entry.get("path"), str) and isinstance(entry.get("sha256"), str):
+            prior_by_path[entry["path"]] = entry["sha256"]
+
+    current_by_path: dict[str, str] = {a.path: a.sha256 for a in artifacts}
+
+    for path, frozen_sha in prior_by_path.items():
+        current_sha = current_by_path.get(path)
+        if current_sha is None:
+            findings.append(
+                Finding(
+                    rule="REL-004",
+                    path=path,
+                    message=f"'{path}' was frozen in {prior_manifest_path.name} (sha256 {frozen_sha[:16]}...) "
+                    "but is not present in the current --dist -- a resume must reuse it, not skip it",
+                    fix="restore the exact frozen artifact bytes for this path into --dist (e.g. from the "
+                    "retained preflight artifact whose info.json hashes to the frozen info_sha256) before "
+                    "resuming",
+                )
+            )
+        elif current_sha != frozen_sha:
+            findings.append(
+                Finding(
+                    rule="REL-004",
+                    path=path,
+                    message=f"'{path}' is frozen at sha256 {frozen_sha[:16]}... in {prior_manifest_path.name} "
+                    f"but the staged --dist copy hashes to {current_sha[:16]}... -- this resume rebuilt the "
+                    "artifact instead of reusing the frozen bytes, and a rebuild is not guaranteed "
+                    "byte-reproducible",
+                    fix="a resume must restore the exact frozen bytes (e.g. from the retained "
+                    "release-preflight-<sha> artifact) and republish those, never rebuild",
+                )
+            )
+    return findings
+
+
 def write_release_manifest(report: ReleaseVerifyReport, dist_dir: Path) -> Path:
     payload = {
         "schema_version": RELEASE_MANIFEST_SCHEMA_VERSION,

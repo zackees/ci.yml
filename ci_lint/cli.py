@@ -90,6 +90,8 @@ from ci_lint.publish_oidc import render as render_oidc_check
 from ci_lint.publish_oidc import to_json_dict as oidc_check_to_json_dict
 from ci_lint.release import (
     ReleaseVerifyError,
+    verify_readback,
+    verify_resume,
     verify_staged_artifacts,
     write_release_manifest,
 )
@@ -695,6 +697,13 @@ def _cmd_release_verify(args: argparse.Namespace) -> int:
     except ReleaseVerifyError as exc:
         print(f"ci-lint release verify: {exc}", file=sys.stderr)
         return 2
+    extra_findings: list[Finding] = []
+    if args.readback:
+        extra_findings.extend(verify_readback(Path(args.dist), Path(args.readback), report.artifacts))
+    if args.resume:
+        extra_findings.extend(verify_resume(Path(args.dist), Path(args.resume), report.artifacts))
+    if extra_findings:
+        report = replace(report, findings=report.findings + tuple(extra_findings))
     manifest_path = write_release_manifest(report, Path(args.dist))
     print(json.dumps(release_verify_to_json_dict(report), indent=2) if args.json else render_release_verify_text(report))
     print(f"ci-lint release verify: wrote {manifest_path}", file=sys.stderr)
@@ -1409,6 +1418,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_release_verify.add_argument("--sha", required=True, help="the candidate's exact 40-hex commit SHA")
     p_release_verify.add_argument(
         "--smoke", default=None, help="a directory of smoke-results/*.json (platform-run's own output)"
+    )
+    p_release_verify.add_argument(
+        "--readback",
+        default=None,
+        help="REL-003: a directory of readback/<artifact>.json records proving the dry run read the mock "
+        "publisher's staged destination back (zackees/ci.yml#8/#74)",
+    )
+    p_release_verify.add_argument(
+        "--resume",
+        default=None,
+        help="REL-004: the prior (frozen) release-manifest.json a resume must reuse byte-identical "
+        "artifacts from -- fails if the current --dist rebuilt them (zackees/ci.yml#8/#74)",
     )
     p_release_verify.add_argument("--json", action="store_true")
     p_release_verify.set_defaults(func=_cmd_release_verify)

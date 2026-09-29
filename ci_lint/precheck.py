@@ -101,7 +101,7 @@ GROUP_LABELS: dict[int, str] = {
     8: "packaging (PKG-001/002/003/004/005)",
     9: "cache static (CACHE-001/002/003/004/007)",
     10: "lint pin (CT-004, checked inside group 2)",
-    11: "release gate (REL-001/002)",
+    11: "release gate (REL-001/002/005)",
     12: "ci-pre.yml shape + PR cache keys (GEN-014..018, CACHE-013)",
     15: "paths blast radius + platform check-only coverage + cook safety (GEN-007, RUST-008/010)",
 }

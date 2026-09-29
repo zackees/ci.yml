@@ -14,6 +14,8 @@ from pathlib import Path
 from ci_lint.release import (
     ReleaseVerifyError,
     expected_wheel_tag_pattern,
+    verify_readback,
+    verify_resume,
     verify_staged_artifacts,
     write_release_manifest,
 )
@@ -239,3 +241,101 @@ class ReleaseVerifyTest(unittest.TestCase):
         )
         pkg006 = [f for f in report.findings if f.rule == "PKG-006"]
         self.assertEqual([], pkg006, [f.render() for f in pkg006])
+
+
+class ReleaseReadbackTest(unittest.TestCase):
+    """REL-003 (zackees/ci.yml#8/#74): the dry run must read the mock
+    publisher's staged destination back, not just write to it."""
+
+    def setUp(self) -> None:
+        ci, findings = load_ci_toml(REPO)
+        assert ci is not None, findings
+        self.ci = ci
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dist = Path(self._tmp.name)
+        _build_wheel(self.dist, platform_tag="manylinux_2_17_x86_64")
+        _build_wheel(self.dist, platform_tag="win_amd64", cli_bytes=PE_X64)
+        _write_sdist(self.dist)
+        report = verify_staged_artifacts(self.ci, self.dist, candidate_sha=CANDIDATE_SHA, ci_toml_digest="deadbeef")
+        self.artifacts = report.artifacts
+
+    def test_missing_readback_dir_is_rel_003(self) -> None:
+        findings = verify_readback(self.dist, self.dist / "no-such-readback-dir", self.artifacts)
+        self.assertTrue(any(f.rule == "REL-003" for f in findings))
+
+    def test_missing_record_is_rel_003(self) -> None:
+        readback_dir = self.dist / "readback"
+        readback_dir.mkdir()
+        findings = verify_readback(self.dist, readback_dir, self.artifacts)
+        self.assertTrue(any(f.rule == "REL-003" for f in findings))
+
+    def test_copied_not_read_back_is_rel_003(self) -> None:
+        # A record that just echoes the staged sha256 without asserting
+        # 'read_back': true proves nothing about the destination's read path.
+        readback_dir = self.dist / "readback"
+        readback_dir.mkdir()
+        for a in self.artifacts:
+            (readback_dir / f"{a.path}.json").write_text(
+                json.dumps({"path": a.path, "sha256": a.sha256}), encoding="utf-8"
+            )
+        findings = verify_readback(self.dist, readback_dir, self.artifacts)
+        self.assertTrue(any(f.rule == "REL-003" for f in findings))
+
+    def test_mismatched_digest_is_rel_003(self) -> None:
+        readback_dir = self.dist / "readback"
+        readback_dir.mkdir()
+        for a in self.artifacts:
+            (readback_dir / f"{a.path}.json").write_text(
+                json.dumps({"path": a.path, "sha256": "0" * 64, "read_back": True}), encoding="utf-8"
+            )
+        findings = verify_readback(self.dist, readback_dir, self.artifacts)
+        self.assertTrue(any(f.rule == "REL-003" and "digest" in f.message for f in findings))
+
+    def test_real_readback_is_clean(self) -> None:
+        readback_dir = self.dist / "readback"
+        readback_dir.mkdir()
+        for a in self.artifacts:
+            (readback_dir / f"{a.path}.json").write_text(
+                json.dumps({"path": a.path, "sha256": a.sha256, "read_back": True}), encoding="utf-8"
+            )
+        findings = verify_readback(self.dist, readback_dir, self.artifacts)
+        self.assertEqual([], findings, [f.render() for f in findings])
+
+
+class ReleaseResumeTest(unittest.TestCase):
+    """REL-004 (zackees/ci.yml#8/#74): a resume must reuse the exact frozen
+    bytes a prior release-manifest.json hashed, never rebuild."""
+
+    def setUp(self) -> None:
+        ci, findings = load_ci_toml(REPO)
+        assert ci is not None, findings
+        self.ci = ci
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dist = Path(self._tmp.name)
+        _build_wheel(self.dist, platform_tag="manylinux_2_17_x86_64")
+        _build_wheel(self.dist, platform_tag="win_amd64", cli_bytes=PE_X64)
+        _write_sdist(self.dist)
+        report = verify_staged_artifacts(self.ci, self.dist, candidate_sha=CANDIDATE_SHA, ci_toml_digest="deadbeef")
+        self.frozen_manifest = write_release_manifest(report, self.dist)
+
+    def test_identical_bytes_resume_is_clean(self) -> None:
+        report = verify_staged_artifacts(self.ci, self.dist, candidate_sha=CANDIDATE_SHA, ci_toml_digest="deadbeef")
+        findings = verify_resume(self.dist, self.frozen_manifest, report.artifacts)
+        self.assertEqual([], findings, [f.render() for f in findings])
+
+    def test_rebuilt_bytes_are_rel_004(self) -> None:
+        # Re-build the same wheel filename with different content -- simulates
+        # a non-reproducible rebuild producing non-identical bytes.
+        _build_wheel(self.dist, platform_tag="manylinux_2_17_x86_64", cli_bytes=b"\x7fELF" + b"different")
+        report = verify_staged_artifacts(self.ci, self.dist, candidate_sha=CANDIDATE_SHA, ci_toml_digest="deadbeef")
+        findings = verify_resume(self.dist, self.frozen_manifest, report.artifacts)
+        self.assertTrue(any(f.rule == "REL-004" and "rebuilt" in f.message for f in findings))
+
+    def test_missing_frozen_artifact_is_rel_004(self) -> None:
+        wheel = next(self.dist.glob("*manylinux*.whl"))
+        wheel.unlink()
+        report = verify_staged_artifacts(self.ci, self.dist, candidate_sha=CANDIDATE_SHA, ci_toml_digest="deadbeef")
+        findings = verify_resume(self.dist, self.frozen_manifest, report.artifacts)
+        self.assertTrue(any(f.rule == "REL-004" for f in findings))
