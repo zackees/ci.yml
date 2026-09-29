@@ -17,6 +17,9 @@ Static signals (run: lines, one level into a referenced ci/*.py script):
   running-process shape: an env-var opt-in) -- ci-lint cannot see whether
   the opt-in is on in CI.
 
+Not a finding (ci.yml#136): `cargo test <name> -- --exact|--ignored
+--test-threads=1`, a single named test, where one thread costs nothing.
+
 A same-line `# ci-lint: allow RUST-017 <reason>` (e.g. a Windows-only
 serialization with a documented cause) excuses that line.
 """
@@ -58,11 +61,58 @@ def _serializing_flag(args: tuple[str, ...]) -> str | None:
     return None
 
 
+# cargo flags that consume the next token, so that token is not a test-name filter.
+_CARGO_VALUE_FLAGS: frozenset[str] = frozenset(
+    {
+        "-p", "--package", "-F", "--features", "--test", "--bin", "--example", "--bench",
+        "--target", "--target-dir", "--manifest-path", "--profile", "-j", "--jobs", "--color",
+        "--message-format", "--exclude", "--config", "-Z", "--lockfile-path",
+    }
+)  # fmt: skip
+# libtest flags after `--` that consume the next token.
+_LIBTEST_VALUE_FLAGS: frozenset[str] = frozenset(
+    {"--test-threads", "--skip", "--format", "--color", "--logfile", "-Z", "--shuffle-seed"}
+)
+
+
+def _positionals(tokens: tuple[str, ...], value_flags: frozenset[str]) -> list[str]:
+    out: list[str] = []
+    skip = False
+    for tok in tokens:
+        if skip:
+            skip = False
+            continue
+        if tok.startswith("-"):
+            skip = tok in value_flags
+            continue
+        out.append(tok)
+    return out
+
+
+def _selects_single_test(args: tuple[str, ...]) -> bool:
+    """ci.yml#136: a test-name filter together with `--exact` or `--ignored`
+    after `--` runs one named test, so `--test-threads=1` serializes
+    nothing. A bare substring filter, or `--ignored` with no filter, can
+    still select many tests and stays a violation."""
+
+    if "--" in args:
+        cut = args.index("--")
+        before, after = args[:cut], args[cut + 1 :]
+    else:
+        before, after = args, ()
+    has_filter = bool(_positionals(before, _CARGO_VALUE_FLAGS)) or bool(
+        _positionals(after, _LIBTEST_VALUE_FLAGS)
+    )
+    return has_filter and ("--exact" in after or "--ignored" in after)
+
+
 def check_rust_017(repo_root: Path) -> list[Finding]:
     findings: list[Finding] = []
     for inv in iter_test_invocations(repo_root):
         flag = _serializing_flag(inv.args)
         if flag is None or allowed(inv.site.raw, RULE):
+            continue
+        if flag not in NOCAPTURE_FLAGS and inv.kind == "cargo-test" and _selects_single_test(inv.args):
             continue
         what = "cargo nextest run" if inv.kind == "nextest" else "cargo test"
         findings.append(

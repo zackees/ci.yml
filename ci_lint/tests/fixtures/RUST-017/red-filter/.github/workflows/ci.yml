@@ -1,0 +1,11 @@
+name: ci
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # A substring filter with neither --exact nor --ignored can match many tests.
+      - run: soldr cargo test --locked --features gpu gpu -- --test-threads=1
+      # --ignored with no name filter runs every ignored test.
+      - run: soldr cargo test --locked -- --ignored --test-threads=1

@@ -17,6 +17,15 @@ class Rust017Test(unittest.TestCase):
     def test_green_same_line_allow_comment(self) -> None:
         self.assertEqual([], check_rust_017(fixture("RUST-017", "green-allow")))
 
+    def test_green_single_named_test(self) -> None:
+        # ci.yml#136: a name filter plus --ignored/--exact selects one test.
+        self.assertEqual([], check_rust_017(fixture("RUST-017", "green-single-test")))
+
+    def test_red_filter_without_exact_or_ignored(self) -> None:
+        findings = check_rust_017(fixture("RUST-017", "red-filter"))
+        self.assertEqual(["RUST-017", "RUST-017"], [f.rule for f in findings])
+        self.assertTrue(all(f.status == Status.VIOLATION for f in findings))
+
     def test_red_run_lines(self) -> None:
         findings = check_rust_017(fixture("RUST-017", "red"))
         self.assertEqual(["RUST-017", "RUST-017"], [f.rule for f in findings])
