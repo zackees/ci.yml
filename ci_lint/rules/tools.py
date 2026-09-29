@@ -3,7 +3,10 @@
 TOOL-001 (no bare cargo/rustc/rustup/maturin/... -- use soldr/uv), TOOL-002
 (a dep-resolving cargo subcommand needs --locked), CACHE-009
 (zackees/setup-soldr may only be called from its one wrapper action, with
-its required inputs, and never enabling a retired cache family), and
+its required inputs, and never enabling a retired cache family), RUST-002
+(Dylint bypasses soldr, is invoked from more than one job or a non-Linux
+job, builds cargo-dylint/dylint-link from source per run, or passes
+--workspace without --all -- round-2B's cargo-dylint no-op footgun), and
 GEN-004 (when the repo has Python sources, the `fast` job must run Ruff
 check + format --check + Pylint, directly or via a `ci/*.py` script it
 calls one level deep; standalone Black/isort is GEN-004 too).
@@ -48,6 +51,10 @@ LOCKED_SUBCOMMANDS: frozenset[str] = frozenset(
     {"build", "test", "check", "clippy", "doc", "run", "nextest"}
 )
 ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+# A root-level `*.py` or anything under `ci/` -- shared by GEN-004's "follow
+# one level into a ci/*.py script" and RUST-002's identical convention.
+CI_SCRIPT_RE = re.compile(r"^ci/.*\.py$")
 
 
 def _is_bare_banned(cmd: str) -> bool:
@@ -375,9 +382,228 @@ def check_cache_009(ci: CiToml, repo_root: Path) -> list[Finding]:
     return findings
 
 
+# ── RUST-002: Dylint bypasses Soldr / duplicates across jobs / footguns ────
+#
+# zackees/ci.yml#1's acceptance criteria (round-6E brief): Dylint invoked in
+# more than one job; Dylint in any job whose runs-on is not Linux; bare
+# `cargo dylint`/`cargo-dylint`/`dylint-link` (not `soldr dylint`/`soldr
+# cargo dylint`) in a run: line or a ci/*.py script's argv, followed one
+# level deep exactly like GEN-004; `cargo install cargo-dylint`/`dylint-link`
+# anywhere (a per-run tool build, never soldr's own catalogued prebuilt);
+# and `--workspace` without `--all` -- round-2B's evidence that cargo-dylint
+# prints "Nothing to do. Did you forget --all?" and silently lints nothing.
+
+DYLINT_BARE_TOOL_NAMES: frozenset[str] = frozenset({"cargo-dylint", "dylint-link"})
+
+
+def _is_bare_dylint_cargo_subcommand(tokens: list[str]) -> bool:
+    return len(tokens) > 1 and tokens[0] == "cargo" and tokens[1] == "dylint"
+
+
+def _is_bare_dylint_tool(tokens: list[str]) -> bool:
+    return bool(tokens) and (tokens[0] in DYLINT_BARE_TOOL_NAMES or _is_bare_dylint_cargo_subcommand(tokens))
+
+
+def _is_soldr_dylint_invocation(tokens: list[str]) -> bool:
+    """The two accepted indirections: `soldr dylint ...` (soldr's own
+    subcommand) and `soldr cargo dylint ...` (soldr's cargo passthrough)."""
+
+    if not tokens or tokens[0] != "soldr":
+        return False
+    if len(tokens) > 1 and tokens[1] == "dylint":
+        return True
+    return len(tokens) > 2 and tokens[1] == "cargo" and tokens[2] == "dylint"
+
+
+def _is_dylint_related(tokens: list[str]) -> bool:
+    return _is_bare_dylint_tool(tokens) or _is_soldr_dylint_invocation(tokens)
+
+
+def _is_cargo_install_dylint_tool(tokens: list[str]) -> bool:
+    if len(tokens) < 3 or tokens[0] != "cargo" or tokens[1] != "install":
+        return False
+    return any(arg.split("@", 1)[0] in DYLINT_BARE_TOOL_NAMES for arg in tokens[2:])
+
+
+def _rust_002_findings_for_command(tokens: list[str], path: str | None, loc: str) -> list[Finding]:
+    findings: list[Finding] = []
+    rendered = " ".join(tokens)
+    if _is_bare_dylint_tool(tokens):
+        findings.append(
+            Finding(
+                rule="RUST-002",
+                path=path,
+                message=f"{loc}: '{rendered}' invokes cargo-dylint directly, bypassing soldr",
+                fix="use 'soldr dylint --all -- <cargo-dylint args>' (or 'soldr cargo dylint ...') so "
+                "the prebuilt driver/rust-std and Dylint's own cache are used instead of a per-run "
+                "cargo-dylint resolved from PATH",
+            )
+        )
+    if _is_cargo_install_dylint_tool(tokens):
+        findings.append(
+            Finding(
+                rule="RUST-002",
+                path=path,
+                message=f"{loc}: '{rendered}' builds a Dylint tool from source on every run",
+                fix="drop the 'cargo install'; soldr resolves cargo-dylint/dylint-link from its own "
+                "catalogued prebuilts ('soldr dylint prepare --target T' / setup-soldr's "
+                "dylint-toolchain input), never compiled per run",
+            )
+        )
+    if _is_dylint_related(tokens) and "--workspace" in tokens and "--all" not in tokens:
+        findings.append(
+            Finding(
+                rule="RUST-002",
+                path=path,
+                message=f"{loc}: '{rendered}' passes --workspace without --all -- cargo-dylint prints "
+                '"Nothing to do. Did you forget --all?" and lints nothing',
+                fix="add '--all' (soldr dylint's own flag, before the '--' separator: 'soldr dylint "
+                "--all -- --workspace --all-targets ...') -- round-2B's no-op footgun",
+            )
+        )
+    return findings
+
+
+def _follow_ci_scripts(commands: list[list[str]], repo_root: Path) -> list[list[str]]:
+    """Every literal command, PLUS (one level only -- GEN-004's own "follow
+    one level into ci/*.py" convention, reused here) the subprocess argv
+    literals of any `ci/*.py` script named in one of those commands'
+    tokens."""
+
+    out = list(commands)
+    for tokens in commands:
+        for candidate in tokens:
+            if not CI_SCRIPT_RE.match(candidate):
+                continue
+            script_path = repo_root / candidate
+            if not script_path.is_file():
+                continue
+            for sub_tokens, _lineno in _extract_ast_commands(script_path):
+                i = 0
+                while i < len(sub_tokens) and ENV_ASSIGN_RE.match(sub_tokens[i]):
+                    i += 1
+                remaining = sub_tokens[i:]
+                if remaining:
+                    out.append(remaining)
+    return out
+
+
+def _iter_workflow_jobs(repo_root: Path) -> list[tuple[str, str, dict[str, YamlValue]]]:
+    out: list[tuple[str, str, dict[str, YamlValue]]] = []
+    for wf in load_workflows(repo_root):
+        if wf.status != LoadStatus.OK:
+            continue
+        for job_id, job in jobs_of(as_dict(wf.document)).items():
+            out.append((wf.path, job_id, job))
+    return out
+
+
+def _job_has_dylint_setup(job: dict[str, YamlValue]) -> bool:
+    for step in steps_of(job):
+        uses = step.get("uses")
+        if isinstance(uses, str) and "setup-soldr" in uses:
+            with_ = step.get("with")
+            if isinstance(with_, dict) and _truthy(with_.get("dylint")):
+                return True
+    return False
+
+
+def _job_effective_commands(job: dict[str, YamlValue], repo_root: Path) -> list[list[str]]:
+    run_texts = [s["run"] for s in steps_of(job) if isinstance(s.get("run"), str)]
+    commands: list[list[str]] = []
+    for text in run_texts:
+        commands.extend(find_commands(text))
+    return _follow_ci_scripts(commands, repo_root)
+
+
+def _runs_on_is_linux(runs_on: YamlValue) -> bool | None:
+    """`True`/`False` for a literal runner label (or list of them);
+    `None` -- not statically confirmable -- for a matrix/expression value
+    (e.g. `${{ matrix.os }}`) or a self-hosted-labels array ci-lint cannot
+    resolve without live context."""
+
+    if isinstance(runs_on, str):
+        return runs_on.strip().lower().startswith("ubuntu")
+    if isinstance(runs_on, list) and runs_on and all(isinstance(x, str) for x in runs_on):
+        return all(x.strip().lower().startswith("ubuntu") for x in runs_on)
+    return None
+
+
+def check_rust_002(repo_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    dylint_jobs: list[tuple[str, str, dict[str, YamlValue]]] = []
+
+    for path, job_id, job in _iter_workflow_jobs(repo_root):
+        commands = _job_effective_commands(job, repo_root)
+        for tokens in commands:
+            findings.extend(_rust_002_findings_for_command(tokens, path, f"jobs.{job_id}"))
+        if _job_has_dylint_setup(job) or any(_is_dylint_related(c) for c in commands):
+            dylint_jobs.append((path, job_id, job))
+
+    # Also scan every root/ci/*.py file directly (not only scripts reached
+    # via a job's run: line) -- matches check_tool_rules_python's blanket
+    # scope, so a Dylint invocation buried in a helper script no workflow
+    # calls (yet) is still caught before it is wired up wrong.
+    for py_path in _discover_python_command_files(repo_root):
+        rel = py_path.relative_to(repo_root).as_posix()
+        for tokens, lineno in _extract_ast_commands(py_path):
+            i = 0
+            while i < len(tokens) and ENV_ASSIGN_RE.match(tokens[i]):
+                i += 1
+            remaining = tokens[i:]
+            if not remaining:
+                continue
+            for f in _rust_002_findings_for_command(remaining, rel, f"line {lineno}"):
+                findings.append(Finding(rule=f.rule, path=f.path, line=lineno, message=f.message, fix=f.fix))
+
+    if len(dylint_jobs) > 1:
+        names = ", ".join(f"{path}:{job_id}" for path, job_id, _ in dylint_jobs)
+        for path, job_id, _job in dylint_jobs:
+            findings.append(
+                Finding(
+                    rule="RUST-002",
+                    path=path,
+                    message=f"jobs.{job_id} invokes Dylint, but so does at least one other job ({names}) "
+                    "-- Dylint must run from exactly ONE Linux job that checks every declared platform",
+                    fix="consolidate every declared platform's Dylint check into a single Linux 'dylint' "
+                    "job (one 'soldr dylint prepare --target T' per cross target, then one multi-target "
+                    f"'soldr dylint --all -- --workspace --all-targets [--target T ...]' pass); remove "
+                    f"the Dylint step(s) from the other job(s) ({names})",
+                )
+            )
+
+    for path, job_id, job in dylint_jobs:
+        runs_on = job.get("runs-on")
+        verdict = _runs_on_is_linux(runs_on)
+        if verdict is False:
+            findings.append(
+                Finding(
+                    rule="RUST-002",
+                    path=path,
+                    message=f"jobs.{job_id} invokes Dylint but runs-on = {runs_on!r}, not a Linux runner",
+                    fix="move this job's Dylint check to a 'ubuntu-*' runner -- one Linux host checks "
+                    "every declared platform via 'soldr dylint prepare --target T' plus a multi-target "
+                    "invocation, never a native macOS/Windows job",
+                )
+            )
+        elif verdict is None:
+            findings.append(
+                Finding(
+                    rule="RUST-002",
+                    path=path,
+                    status=Status.NEEDS_REVIEW,
+                    message=f"jobs.{job_id} invokes Dylint but runs-on = {runs_on!r} is not a literal "
+                    "runner label; cannot confirm it resolves to Linux",
+                    fix="pin runs-on to a literal 'ubuntu-*' label for the Dylint job, or resolve the "
+                    "matrix/expression so ci-lint can confirm it targets Linux",
+                )
+            )
+
+    return findings
+
+
 # ── GEN-004: Python quick checks (Ruff + Pylint, no standalone Black/isort) ──
 
-CI_SCRIPT_RE = re.compile(r"^ci/.*\.py$")
 _LINT_KIND_LABEL: dict[str, str] = {
     "ruff-check": "'ruff check'",
     "ruff-format-check": "'ruff format --check'",
@@ -586,5 +812,6 @@ def check_group4(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings.extend(check_tool_rules_workflows(repo_root))
     findings.extend(check_tool_rules_python(repo_root))
     findings.extend(check_cache_009(ci, repo_root))
+    findings.extend(check_rust_002(repo_root))
     findings.extend(check_gen_004(repo_root))
     return findings

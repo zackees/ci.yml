@@ -1,0 +1,9 @@
+{
+  "_note": "synthetic (round-6E, RUST-004): the run's jobs, shaped like GET /repos/{repo}/actions/runs/{id}/jobs -- one 'dylint [...]' job, conclusion=success, started_at is the timestamp _check_rust_004 correlates live cache entries' created_at against.",
+  "total_count": 3,
+  "jobs": [
+    {"name": "precheck / precheck", "conclusion": "success", "started_at": "2026-09-29T01:51:50Z"},
+    {"name": "dylint [309e89b739f0]", "conclusion": "success", "started_at": "2026-09-29T01:51:58Z"},
+    {"name": "fast [467f2fa434a8]", "conclusion": "success", "started_at": "2026-09-29T01:51:59Z"}
+  ]
+}

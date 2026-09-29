@@ -1,0 +1,28 @@
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	﻿2026-09-29T01:52:21.3098965Z ##[group]Run python3 ci/dylint.py --shape multi-target --results-out /home/runner/work/_temp/dylint-results.json
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:21.4348042Z + soldr dylint prepare --target aarch64-unknown-linux-gnu
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:21.7861206Z soldr: dylint ready on channel nightly-2026-05-28-x86_64-unknown-linux-gnu — the next `soldr cargo dylint` run starts warm
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:21.7873016Z prepare --target aarch64-unknown-linux-gnu: 0.4s rc=0
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:21.7874278Z + soldr dylint prepare --target aarch64-apple-darwin
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.1097683Z soldr: dylint ready on channel nightly-2026-05-28-x86_64-unknown-linux-gnu — the next `soldr cargo dylint` run starts warm
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.1108013Z prepare --target aarch64-apple-darwin: 0.3s rc=0
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.1108683Z + soldr dylint prepare --target x86_64-apple-darwin
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.4301467Z soldr: dylint ready on channel nightly-2026-05-28-x86_64-unknown-linux-gnu — the next `soldr cargo dylint` run starts warm
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.4312249Z prepare --target x86_64-apple-darwin: 0.3s rc=0
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.4312979Z + soldr dylint prepare --target aarch64-pc-windows-msvc
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.7593685Z soldr: dylint ready on channel nightly-2026-05-28-x86_64-unknown-linux-gnu — the next `soldr cargo dylint` run starts warm
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.7604068Z prepare --target aarch64-pc-windows-msvc: 0.3s rc=0
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.7604785Z + soldr dylint prepare --target x86_64-pc-windows-msvc
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:23.0814609Z soldr: dylint ready on channel nightly-2026-05-28-x86_64-unknown-linux-gnu — the next `soldr cargo dylint` run starts warm
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:23.0824403Z prepare --target x86_64-pc-windows-msvc: 0.3s rc=0
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:23.0825775Z + soldr dylint --all -- --workspace --all-targets --target aarch64-unknown-linux-gnu --target aarch64-apple-darwin --target x86_64-apple-darwin --target aarch64-pc-windows-msvc --target x86_64-pc-windows-msvc
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:23.0852695Z soldr broker endpoint: ci=github_actions executable=/home/runner/.soldr/broker/soldr-broker logical=/home/runner/.soldr/broker/soldr-broker.sock bind=/home/runner/.soldr/broker/soldr-broker.sock log=/home/runner/.soldr/broker/broker-spawn.log
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:27.2958864Z     1.67 Building workspace metadata entry `platform_boundary`
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:28.3319821Z     2.70     0.11 ^[[1m^[[92m   Compiling^[[0m platform_boundary v0.1.0 (/home/runner/work/template-python-rust-cmd/template-python-rust-cmd/dylints/platform_boundary)
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:28.4815680Z     2.85     0.26 ^[[1m^[[92m    Finished^[[0m `release` profile [unoptimized] target(s) in 0.25s
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:28.6838953Z     3.06 Checking with toolchain `nightly-2026-05-28-x86_64-unknown-linux-gnu`
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:28.7414789Z     3.11 info: downloading component rust-std
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:46.3617613Z    20.73     6.24 soldr[cache] pyo3 ^[[33m[MISS]^[[0m
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:47.4642157Z    21.84     7.34 soldr[cache] template_json ^[[33m[MISS]^[[0m
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:48.8595441Z    23.23     8.74 ^[[1m^[[92m    Finished^[[0m `dev` profile [unoptimized + debuginfo] target(s) in 8.73s
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:49.1997921Z soldr: cache ^[[32m2 HIT^[[0m, ^[[33m40 MISS^[[0m (5% hit rate, saved 1.0s)
+dylint [309e89b739f0]	Dylint -- host + every declared cross target	2026-09-29T01:52:49.2029542Z dylint lane: 1 pass(es), 26.1s total

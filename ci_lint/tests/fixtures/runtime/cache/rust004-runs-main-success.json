@@ -1,0 +1,14 @@
+{
+  "_note": "synthetic (round-6E, RUST-004): one successful push run on 'main', shaped like GET /repos/{repo}/actions/runs?branch=main&event=push&status=success -- id/html_url are the only fields ci_lint.cache.audit._find_default_branch_dylint_run reads.",
+  "total_count": 1,
+  "workflow_runs": [
+    {
+      "id": 36509863041,
+      "html_url": "https://github.com/zackees/template-python-rust-cmd/actions/runs/36509863041",
+      "head_branch": "main",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
+}
