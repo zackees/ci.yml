@@ -162,11 +162,10 @@ The Dylint lane went from 153 s to 125 s to 49 s:
   included `source_revision: githubSha` (setup-soldr#540). The fix was
   setup-soldr#541, released as **v0.9.82** and ingested in PR #25. It keys on the
   real inputs, with a `restore-keys` fallback that drops only `Cargo.lock`.
-- The source labels the 153 s figure inconsistently. setup-soldr#540 and PR #22
-  label 153 s as the template's own pre-fix warm run. The PR #26 comment calls
-  it "clud's host-only Dylint lane". Issue #6's Dylint comment measured clud's
-  host-only lane at **235 s** (run 36418266760). This log uses the
-  setup-soldr#540 attribution.
+- **Resolved (round 7B):** the 153 s figure is the template's own pre-fix
+  warm Dylint run 36495222596, as setup-soldr#540 and PR #22 state. The PR #26
+  comment's "clud's host-only Dylint lane" label is wrong; clud's host-only
+  lane measured **235 s** (run 36418266760, issue #6 Dylint comment).
 - The multi-target shape (D6) beat sequential by 23–37 %. On one commit, both
   cold: 55.5 s vs 88.8 s of check time, and 114 s vs 148 s job total (PR #19).
   `[lint.dylint].shape = "multi-target"` was adopted.
@@ -364,15 +363,28 @@ change.
 The result is 0 policy drifts and 11 repo-specific differences: sizes, the
 `linter` pin, and suite `run` commands.
 
+## Round 7B: remaining scenario evidence
+
+Every run below was checked with `gh run view` / `gh run view --log`.
+
+| Scenario | Run | Evidence (log lines) |
+|---|---|---|
+| D1 warm `main` push | 36509045219 | `fast`: exact HIT on `buildcache`, `cargoregistry`, `cook-base`, `soldr-mini`; `dylint`: exact HIT on all 4 layers; both jobs `layers_saved=0/2 uploaded=0B`. Only setup-uv saved: `Sent 43786800 of 43786800` (43.8 MB). |
+| D3 one-line `template-core` edit | 36509424818 (PR #29) | restore layers all HIT (build-cache 18.3 MB, registry 5.8 MB, cook-base 25.7 MB, soldr-mini); the chain `template-core` → `template-json` → `template` → `template-cli` recompiled (`0 HIT, 4 MISS`); `fast` 1m15s, `dylint` 49 s. |
+| D4 `Cargo.lock`-only libc bump | 36509863041 | cache-maint: `lockfile-changed: True`; preprune forecast = steady 4,948,230,144 + lockfile peak 957,349,888 + PR budget 1,073,741,824 = **6,979,321,856 B** < budget **9,663,676,416 B**, `under budget: nothing to preprune`, `deleted 0`. 5 new entries: dylint build-cache (80.0 MB) + cargo-registry (27.8 MB) + dylint-output (id 8242135235); fast cargo-registry (5.8 MB) + cook-cache-base (27.3 MB). |
+| D5 poison and heal | local `ci-lint cache heal` | `setup-soldr-cargoregistry-v1-linux-x64-a87d2454829c34f1-b72e0ca860d92638` (id 8237268308, `CACHE-006`) deleted, 22 → 21 entries. Verified afterwards: id 8237268308 is gone; the key was re-saved as id 8242093340 (2026-09-29T01:51:20Z) by a later run. |
+| init job | 36509118845 (PR #27) | `init` job 109217234549 succeeded in 1m32s. |
+| platform-run fix | 36508656115 (PR #24) | `platform-build` + `platform-run` succeeded for `windows-x64` (1m38s / 30 s) and `windows-arm64` (2m0s / 58 s); artifacts `platform-windows-x64`, `platform-windows-arm64`. |
+
 ## Scenario status (issue #6 Dylint comment, D1–D8)
 
 | # | Status | Evidence |
 |---|---|---|
-| D1 cold `main` saves every layer | partial: Dylint layers shown saved; the other layers are not itemized in these sources | 36501247176 (both Dylint caches saved, with byte counts) |
+| D1 warm `main` saves nothing redundant | done | 36509045219 (only setup-uv saved); cold Dylint save 36501247176 |
 | D2 warm docs-only PR | done | 36507439579: exact hit, 49 s |
-| D3 one private-crate edit | done | PR #29 baseline; PR #33/#34 mtime replay; PR #25 run 36504625315 |
-| D4 lockfile change | run IDs **not in any PR body** (PR #28 defers to the worker report) | unverified here |
-| D5 poison and heal | no run evidence in these sources | open |
+| D3 one private-crate edit | done | 36509424818; PR #33/#34 mtime replay; run 36504625315 |
+| D4 lockfile change | done | 36509863041 |
+| D5 poison and heal | done (local heal) | id 8237268308 deleted |
 | D6 invocation shape | done: multi-target | PR #19 |
 | D7 local act | done for `fast` | PR #20, PR #24 |
 | D8 dylint-driver through zccache | not reported in these sources | unknown |
@@ -386,7 +398,7 @@ The result is 0 policy drifts and 11 repo-specific differences: sizes, the
   - soldr#3444: `bundle-bins` fails on the from-sdist build.
   - soldr-toolchain#191: the 1.95 bucket has no Dylint driver.
 - setup-soldr `v0` has not been moved to v0.9.81/v0.9.82.
-- D4, D5 and D8 evidence is missing from the published sources (table above).
+- D8 evidence is missing from the published sources (table above).
 - `ci.sh` is still an approved exception (template issue #15).
 - The owner's janitor, PR-key and `pr-<N>` decisions still need to reach
   `ci_lint` and the template.
