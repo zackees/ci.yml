@@ -34,3 +34,7 @@ jobs:
       - run: uv run --no-project ruff check .
       - run: uv run --no-project ruff format --check .
       - run: uv run --no-project pylint src
+      - run: soldr cargo check --locked --target x86_64-unknown-linux-gnu
+      - run: soldr cargo check --locked --target x86_64-unknown-linux-musl
+      - run: soldr cargo check --locked --target x86_64-pc-windows-msvc
+      - run: soldr cargo check --locked --target aarch64-pc-windows-msvc
