@@ -205,6 +205,26 @@ class JanitorIssue23Test(unittest.TestCase):
         self.assertEqual({1}, {p.id for p in result.planned})
         self.assertIn("closed PR", result.planned[0].reason)
 
+    def test_same_key_on_two_refs_targets_the_closed_pr_entry_by_id(self) -> None:
+        """ci.yml#137 (kernal-api #360): one key lives on refs/heads/main
+        AND on a closed PR's merge ref. Only the PR-ref id is deleted -- the
+        main entry with the identical key is never planned."""
+
+        old = _iso(-3600)
+        key = "setup-soldr-buildcache-v2-linux-x64-dddddddddddddddd"
+        entries = [
+            _entry(20, key, "refs/pull/7/merge", 5 * MB, old, old),
+            _entry(21, key, "refs/heads/main", 5 * MB, old, old),
+        ]
+        graphql = _graphql_from(_load("pr-states.json"))
+        result = self._run(entries, graphql)
+        self.assertEqual({20}, {p.id for p in result.planned})
+        trimmed = trim(
+            self.ci, fetch=_fetch_from({"actions_caches": entries}), graphql=graphql, delete=None,
+            token=TOKEN, repo=REPO_SLUG, dry_run=True,
+        )
+        self.assertNotIn(21, {p.id for p in trimmed.planned})
+
     def test_failed_pr_lookup_keeps_everything(self) -> None:
         def graphql(query: str, token: str):
             raise GitHubApiError("boom")

@@ -248,6 +248,7 @@ def _check_cache_001(classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
             Finding(
                 rule="CACHE-001",
                 path=f"cache:{c.entry.key}",
+                cache_id=c.entry.id,
                 message=f"{kind} undeclared family: id={c.entry.id} key {c.entry.key!r} matches no "
                 f"declared [cache.family] prefix",
                 fix="declare a [cache.family.<id>] entry whose 'via' resolves to this key's prefix "
@@ -271,6 +272,7 @@ def _check_cache_003(
                 Finding(
                     rule="CACHE-003",
                     path=f"cache:{c.entry.key}",
+                    cache_id=c.entry.id,
                     message=f"base-layer family '{c.family_id}' cache id={c.entry.id} was saved on "
                     f"ref {c.entry.ref!r}, not the default branch ({default_ref!r})",
                     fix="base cache layers may only be written by a declared writer flow on the "
@@ -299,6 +301,7 @@ def _check_cache_005(ci: CiToml, classified: tuple[ClassifiedEntry, ...]) -> lis
                 Finding(
                     rule="CACHE-005",
                     path=f"cache:{entry.key}",
+                    cache_id=entry.id,
                     message=f"cache id={entry.id} key {entry.key!r} looks poisoned: {reason}",
                     fix="delete the exact key (ci-lint cache heal --key <key>) so the next writer run "
                     "repopulates it with a real payload",
@@ -326,6 +329,7 @@ def _check_cache_006(classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
                 Finding(
                     rule="CACHE-006",
                     path=f"cache:{c.entry.key}",
+                    cache_id=c.entry.id,
                     message=f"cache id={c.entry.id} is a superseded '{fam_id}' entry "
                     f"(last_accessed_at={c.entry.last_accessed_at!r}; kept newest "
                     f"id={newest.entry.id} last_accessed_at={newest.entry.last_accessed_at!r})",
@@ -380,6 +384,7 @@ def _check_cache_009(classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
                 Finding(
                     rule="CACHE-009",
                     path=f"cache:{c.entry.key}",
+                    cache_id=c.entry.id,
                     message=f"cache id={c.entry.id} key {c.entry.key!r} matches a retired family "
                     "([cache].retired)",
                     fix="delete it (ci-lint cache janitor); a retired family must never be written -- "
@@ -568,6 +573,7 @@ def _check_cache_008(
                 Finding(
                     rule="CACHE-008",
                     path=f"cache:{c.entry.key}",
+                    cache_id=c.entry.id,
                     message=f"cache id={c.entry.id} is {kind} for #{c.pr}, which is {state.state.lower()}",
                     fix="delete it (ci-lint cache janitor or trim); the janitor deletes every entry of a "
                     "closed/merged PR on its next sweep",
@@ -588,6 +594,7 @@ def _check_cache_008(
                 Finding(
                     rule="CACHE-008",
                     path=f"cache:{c.entry.key}",
+                    cache_id=c.entry.id,
                     message=f"cache id={c.entry.id} is a PR #{d.pr} delta for family '{d.family}' "
                     f"whose base hash b{d.base8} matches none of the live base entries' current keys",
                     fix="delete it (ci-lint cache trim); the next PR push rebuilds the delta against "
