@@ -1,15 +1,21 @@
 """Group 4: tool rules.
 
 TOOL-001 (no bare cargo/rustc/rustup/maturin/... -- use soldr/uv), TOOL-002
-(a dep-resolving cargo subcommand needs --locked), CACHE-009
-(zackees/setup-soldr may only be called from its one wrapper action, with
-its required inputs, and never enabling a retired cache family), RUST-002
-(Dylint bypasses soldr, is invoked from more than one job or a non-Linux
-job, builds cargo-dylint/dylint-link from source per run, or passes
---workspace without --all -- round-2B's cargo-dylint no-op footgun), and
-GEN-004 (when the repo has Python sources, the `fast` job must run Ruff
-check + format --check + Pylint, directly or via a `ci/*.py` script it
-calls one level deep; standalone Black/isort is GEN-004 too).
+(a dep-resolving cargo subcommand needs --locked), TOOL-003 (in a Rust
+repo -- a `pyproject.toml` with `[build-system]` or a `Cargo.toml` with
+`[workspace]` -- plain `uv run`/`uv sync` is banned in `run:` lines,
+composite-action steps, `ci/**/*.py` subprocess argv, and `uv run`
+shebangs, because a plain `uv run`/`uv sync` first syncs the project,
+which means a hidden PEP 517 rebuild of the Rust package inside that
+step; ci.yml#16/#50), CACHE-009 (zackees/setup-soldr may only be called
+from its one wrapper action, with its required inputs, and never enabling
+a retired cache family), RUST-002 (Dylint bypasses soldr, is invoked from
+more than one job or a non-Linux job, builds cargo-dylint/dylint-link
+from source per run, or passes --workspace without --all -- round-2B's
+cargo-dylint no-op footgun), and GEN-004 (when the repo has Python
+sources, the `fast` job must run Ruff check + format --check + Pylint,
+directly or via a `ci/*.py` script it calls one level deep; standalone
+Black/isort is GEN-004 too).
 """
 
 from __future__ import annotations
@@ -17,6 +23,7 @@ from __future__ import annotations
 import ast
 import re
 import shlex
+import tomllib
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
@@ -807,10 +814,181 @@ def check_gen_004(repo_root: Path) -> list[Finding]:
     return findings
 
 
+# ── TOOL-003: plain `uv run`/`uv sync` in a Rust repo ───────────────────────
+#
+# ci.yml#50 (closes #16): a plain `uv run`/`uv sync` first syncs the
+# project, which means a hidden PEP 517 build of the Rust package inside
+# whatever step invokes it -- zackees/python-rust-build-chain#9's zccache
+# session errors and wrong-arch wheels came from exactly this. Scoped to a
+# repo that actually builds Rust: a `pyproject.toml` with a `[build-system]`
+# table, or a `Cargo.toml` with a `[workspace]` table.
+
+ACCEPTED_UV_FLAGS: frozenset[str] = frozenset({"--no-project", "--no-sync", "--script"})
+UV_SHEBANG_RE = re.compile(r"^#!\s*/usr/bin/env\s+-S\s+uv\s+(run|sync)\b(.*)$")
+
+
+def _toml_table_present(path: Path, table: str) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        with path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except (tomllib.TOMLDecodeError, OSError, UnicodeDecodeError):
+        return False
+    return table in data
+
+
+def _repo_builds_rust(repo_root: Path) -> bool:
+    """A `pyproject.toml` with `[build-system]` (soldr/maturin/setuptools-rust/
+    ...), or a `Cargo.toml` with `[workspace]` -- either means this repo
+    builds Rust, so TOOL-003 applies."""
+
+    return _toml_table_present(repo_root / "pyproject.toml", "build-system") or _toml_table_present(
+        repo_root / "Cargo.toml", "workspace"
+    )
+
+
+def _uv_run_or_sync_kind(tokens: list[str]) -> str | None:
+    if len(tokens) >= 2 and tokens[0] == "uv" and tokens[1] in ("run", "sync"):
+        return tokens[1]
+    return None
+
+
+def _has_accepted_uv_flag(tokens: list[str]) -> bool:
+    return bool(ACCEPTED_UV_FLAGS & set(tokens))
+
+
+def _tool_003_finding(kind: str, path: str | None, line: int | None, loc: str) -> Finding:
+    return Finding(
+        rule="TOOL-003",
+        path=path,
+        line=line,
+        message=f"{loc}: bare 'uv {kind}' syncs the project first -- in a Rust repo that is a hidden "
+        "PEP 517 rebuild of the Rust package running inside this step (ci.yml#16/#50)",
+        fix=f"add '--no-project' (pure tooling, no project sync), '--no-sync' (venv already synced by "
+        f"an earlier step), or '--script' to this 'uv {kind}' at {loc}; or set job-level "
+        "'env: UV_NO_SYNC: \"1\"' so every step's uv invocation skips the sync",
+    )
+
+
+def _tool_003_findings_for_run(run_text: str, path: str, loc: str, *, skip: bool) -> list[Finding]:
+    if skip:
+        return []
+    findings: list[Finding] = []
+    for tokens in find_commands(run_text):
+        kind = _uv_run_or_sync_kind(tokens)
+        if kind is not None and not _has_accepted_uv_flag(tokens):
+            findings.append(_tool_003_finding(kind, path, None, loc))
+    return findings
+
+
+def _env_no_sync(value: YamlValue) -> bool:
+    return isinstance(value, dict) and _truthy(value.get("UV_NO_SYNC"))
+
+
+def check_tool_003_workflows(repo_root: Path) -> list[Finding]:
+    if not _repo_builds_rust(repo_root):
+        return []
+
+    findings: list[Finding] = []
+
+    for wf in load_workflows(repo_root):
+        if wf.status != LoadStatus.OK:
+            continue
+        doc = as_dict(wf.document)
+        for job_id, job in jobs_of(doc).items():
+            job_no_sync = _env_no_sync(job.get("env"))
+            for i, step in enumerate(steps_of(job)):
+                run_text = step.get("run")
+                if not isinstance(run_text, str):
+                    continue
+                skip = job_no_sync or _env_no_sync(step.get("env"))
+                findings.extend(
+                    _tool_003_findings_for_run(run_text, wf.path, f"jobs.{job_id}.steps[{i}]", skip=skip)
+                )
+
+    for act in load_composite_actions(repo_root):
+        if act.status != LoadStatus.OK:
+            continue
+        runs = as_dict(act.document).get("runs")
+        if not isinstance(runs, dict):
+            continue
+        composite_no_sync = _env_no_sync(runs.get("env"))
+        for i, step in enumerate(as_list(runs.get("steps"))):
+            if not isinstance(step, dict):
+                continue
+            run_text = step.get("run")
+            if not isinstance(run_text, str):
+                continue
+            skip = composite_no_sync or _env_no_sync(step.get("env"))
+            findings.extend(_tool_003_findings_for_run(run_text, act.path, f"runs.steps[{i}]", skip=skip))
+
+    return findings
+
+
+def check_tool_003_python(repo_root: Path) -> list[Finding]:
+    if not _repo_builds_rust(repo_root):
+        return []
+
+    findings: list[Finding] = []
+    for path in _discover_python_command_files(repo_root):
+        rel = path.relative_to(repo_root).as_posix()
+        for tokens, lineno in _extract_ast_commands(path):
+            kind = _uv_run_or_sync_kind(tokens)
+            if kind is not None and not _has_accepted_uv_flag(tokens):
+                findings.append(_tool_003_finding(kind, rel, lineno, f"line {lineno}"))
+    return findings
+
+
+def check_tool_003_shebangs(repo_root: Path) -> list[Finding]:
+    if not _repo_builds_rust(repo_root):
+        return []
+
+    findings: list[Finding] = []
+    for rel in list_repo_files(repo_root):
+        path = repo_root / rel
+        try:
+            with path.open("r", encoding="utf-8", errors="ignore") as fh:
+                first_line = fh.readline()
+        except OSError:
+            continue
+        match = UV_SHEBANG_RE.match(first_line.rstrip("\n"))
+        if match is None:
+            continue
+        kind = match.group(1)
+        try:
+            rest_tokens = shlex.split(match.group(2))
+        except ValueError:
+            rest_tokens = []
+        if ACCEPTED_UV_FLAGS & set(rest_tokens):
+            continue
+        findings.append(
+            Finding(
+                rule="TOOL-003",
+                path=rel,
+                line=1,
+                message=f"{rel}:1: shebang '#!/usr/bin/env -S uv {kind}' syncs the project first -- in "
+                "a Rust repo that is a hidden PEP 517 rebuild of the Rust package (ci.yml#16/#50)",
+                fix=f"add '--no-project', '--no-sync', or '--script' to the shebang's 'uv {kind}' in "
+                f"{rel}",
+            )
+        )
+    return findings
+
+
+def check_tool_003(repo_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    findings.extend(check_tool_003_workflows(repo_root))
+    findings.extend(check_tool_003_python(repo_root))
+    findings.extend(check_tool_003_shebangs(repo_root))
+    return findings
+
+
 def check_group4(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(check_tool_rules_workflows(repo_root))
     findings.extend(check_tool_rules_python(repo_root))
+    findings.extend(check_tool_003(repo_root))
     findings.extend(check_cache_009(ci, repo_root))
     findings.extend(check_rust_002(repo_root))
     findings.extend(check_gen_004(repo_root))

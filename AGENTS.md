@@ -24,7 +24,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 | `GEN` | 001–011 | `GEN-012` | 001, 002, 004, 005, 006, 008, 011 (003, 007, 009, 010 candidates) |
 | `SEC` | 001–007 | `SEC-008` | all |
 | `RUN` | 001 | `RUN-002` | 001 |
-| `TOOL` | 001–002 | `TOOL-003` | all |
+| `TOOL` | 001–003 | `TOOL-004` | all |
 | `LAYOUT` | 001 | `LAYOUT-002` | 001 |
 | `RUST` | 001–012 | `RUST-013` | 002, 003, 004, 005, 011, 012 (006 partial/declared-only; 001, 007–010 candidates -- 008–010 owned by issue #5) |
 | `PKG` | 001–006 | `PKG-007` | 003, 004, 005, 006 (001, 002 candidates) |

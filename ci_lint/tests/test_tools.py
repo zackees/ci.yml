@@ -1,4 +1,4 @@
-"""TOOL-001, TOOL-002, CACHE-009, GEN-004 -- ci_lint/rules/tools.py."""
+"""TOOL-001, TOOL-002, TOOL-003, CACHE-009, GEN-004 -- ci_lint/rules/tools.py."""
 
 from __future__ import annotations
 
@@ -11,6 +11,10 @@ from ci_lint.finding import Status
 from ci_lint.rules.tools import (
     check_cache_009,
     check_gen_004,
+    check_tool_003,
+    check_tool_003_python,
+    check_tool_003_shebangs,
+    check_tool_003_workflows,
     check_tool_rules_python,
     check_tool_rules_workflows,
     find_commands,
@@ -32,6 +36,40 @@ class ToolFixtureTest(unittest.TestCase):
         self.assertIn("TOOL-002", rules)
         rules = [f.rule for f in check_tool_rules_workflows(fixture("TOOL-002", "green"))]
         self.assertNotIn("TOOL-002", rules)
+
+    def test_tool_003_bare_uv_run_in_run_line(self) -> None:
+        rules = [f.rule for f in check_tool_003_workflows(fixture("TOOL-003", "red"))]
+        self.assertIn("TOOL-003", rules)
+        rules = [f.rule for f in check_tool_003_workflows(fixture("TOOL-003", "green"))]
+        self.assertNotIn("TOOL-003", rules)
+
+    def test_tool_003_not_flagged_without_build_system_or_workspace(self) -> None:
+        findings = check_tool_003_workflows(fixture("TOOL-003", "green-no-build-system"))
+        self.assertEqual([], findings)
+
+    def test_tool_003_job_level_uv_no_sync_env_is_accepted(self) -> None:
+        findings = check_tool_003_workflows(fixture("TOOL-003", "green-env-no-sync"))
+        self.assertEqual([], findings)
+
+    def test_tool_003_python_argv(self) -> None:
+        rules = [f.rule for f in check_tool_003_python(fixture("TOOL-003", "red-python"))]
+        self.assertIn("TOOL-003", rules)
+        rules = [f.rule for f in check_tool_003_python(fixture("TOOL-003", "green-python"))]
+        self.assertNotIn("TOOL-003", rules)
+
+    def test_tool_003_shebang(self) -> None:
+        rules = [f.rule for f in check_tool_003_shebangs(fixture("TOOL-003", "red-shebang"))]
+        self.assertIn("TOOL-003", rules)
+        rules = [f.rule for f in check_tool_003_shebangs(fixture("TOOL-003", "green-shebang"))]
+        self.assertNotIn("TOOL-003", rules)
+
+    def test_tool_003_aggregate_covers_all_forms(self) -> None:
+        self.assertIn("TOOL-003", [f.rule for f in check_tool_003(fixture("TOOL-003", "red"))])
+        self.assertIn("TOOL-003", [f.rule for f in check_tool_003(fixture("TOOL-003", "red-python"))])
+        self.assertIn("TOOL-003", [f.rule for f in check_tool_003(fixture("TOOL-003", "red-shebang"))])
+        self.assertEqual([], check_tool_003(fixture("TOOL-003", "green")))
+        self.assertEqual([], check_tool_003(fixture("TOOL-003", "green-python")))
+        self.assertEqual([], check_tool_003(fixture("TOOL-003", "green-shebang")))
 
     def test_cache_009_wrapper_misconfigured(self) -> None:
         repo = fixture("CACHE-009", "red")
