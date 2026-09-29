@@ -1,0 +1,12 @@
+name: ci
+on: [push]
+env:
+  CARGO_TARGET_DIR: /tmp/dylint-target
+jobs:
+  dylint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: soldr dylint --all -- --workspace --all-targets
+      - working-directory: lints/foo
+        run: soldr cargo test --locked

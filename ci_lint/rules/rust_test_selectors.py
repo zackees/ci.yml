@@ -22,6 +22,7 @@ A same-line `# ci-lint: allow RUST-015 <reason>` excuses one line.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from ci_lint.finding import Finding
@@ -50,6 +51,10 @@ VALUE_OPTIONS: frozenset[str] = frozenset(
 )
 
 
+# A shell redirection ends the argv (`2>&1`, `> log`, `2>/dev/null`).
+_REDIRECT_RE = re.compile(r"^\d*[<>]")
+
+
 def _classify(args: tuple[str, ...]) -> tuple[bool, str | None, bool]:
     """(has_features, filter_description, has_selector)."""
 
@@ -59,7 +64,7 @@ def _classify(args: tuple[str, ...]) -> tuple[bool, str | None, bool]:
     i = 0
     while i < len(args):
         arg = args[i]
-        if arg == "--":
+        if arg == "--" or _REDIRECT_RE.match(arg):
             break
         name = arg.split("=", 1)[0] if arg.startswith("--") else arg
         if name in FEATURE_FLAGS or (arg.startswith("-F") and len(arg) > 2):
@@ -72,7 +77,7 @@ def _classify(args: tuple[str, ...]) -> tuple[bool, str | None, bool]:
         if arg in VALUE_OPTIONS and "=" not in arg:
             i += 2
             continue
-        if not arg.startswith("-") and filt is None:
+        if not arg.startswith("-") and "$" not in arg and filt is None:
             filt = f"name filter '{arg}'"
         i += 1
     return has_features, filt, has_selector

@@ -30,5 +30,24 @@ class Rust015Test(unittest.TestCase):
         self.assertEqual(("ci/test.py", 3), (findings[0].path, findings[0].line))
 
 
+class Rust015ClassifyTest(unittest.TestCase):
+    """False positives found running M2-40 against fleet repos."""
+
+    def test_actions_expression_and_shell_vars_are_not_name_filters(self) -> None:
+        from ci_lint.rules.rust_test_selectors import _classify
+        from ci_lint.rules.test_invocations import find_test_invocation, split_commands
+
+        for line in (
+            "soldr cargo nextest run --features ${{ inputs.features }} --locked",
+            'soldr cargo test --features x "${target_args[@]}"',
+            "soldr cargo nextest run --features x --locked 2>&1",
+            "soldr cargo nextest run --features x --locked > log.txt",
+        ):
+            with self.subTest(line=line):
+                found = find_test_invocation(tuple(split_commands(line)[0]))
+                assert found is not None
+                self.assertIsNone(_classify(found[1])[1], found)
+
+
 if __name__ == "__main__":
     unittest.main()
