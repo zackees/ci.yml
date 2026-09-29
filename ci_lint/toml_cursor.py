@@ -173,6 +173,36 @@ class Cursor:
             return {}
         return dict(value)  # type: ignore[arg-type]
 
+    def dict_str_list_str(
+        self, key: str, *, required: bool = True
+    ) -> dict[str, tuple[str, ...]]:
+        """A table whose values are each an array of strings, e.g.
+        `[allow].permissions`: `{ "actions: write" = ["precheck"] }` (round-4B)."""
+
+        if key not in self._remaining:
+            if required:
+                self._missing(key, "a table of string -> array of strings")
+            return {}
+        value = self._remaining.pop(key)
+        if not isinstance(value, dict):
+            self._ct002(key, "a table of string -> array of strings", value)
+            return {}
+        out: dict[str, tuple[str, ...]] = {}
+        for sub_key, sub_val in value.items():
+            if not isinstance(sub_val, list) or not all(isinstance(v, str) for v in sub_val):
+                self.findings.append(
+                    Finding(
+                        rule="CT-002",
+                        path=self.source,
+                        message=f"'{self.key_path(key)}.{sub_key}' must be an array of strings, got "
+                        f"{_type_name(sub_val)}",
+                        fix=f"set '{self.key_path(key)}.{sub_key}' to an array of strings in {self.source}",
+                    )
+                )
+                continue
+            out[sub_key] = tuple(sub_val)
+        return out
+
     def table_(self, key: str, *, required: bool = True) -> dict[str, TomlValue] | None:
         """Pop a subtable and return its raw dict for a nested Cursor."""
 

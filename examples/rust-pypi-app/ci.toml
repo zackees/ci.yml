@@ -119,11 +119,24 @@ cache  = "machine"
 [allow]
 workflows         = { "ci.yml" = ["pull_request", "push:main", "schedule", "workflow_dispatch"], "ci-precheck.yml" = ["workflow_call"] }
 actions           = ["actions/checkout", "actions/upload-artifact", "actions/download-artifact", "zackees/setup-soldr", "astral-sh/setup-uv"]
-setup-soldr       = { only-in = ".github/actions/soldr", require = { solo-toolchain-cache = "false", cook-delta = "false", save-cache = "auto" } }
+# "plan" (round-4B): the wrapper's save-cache input must be an expression derived from the
+# precheck plan (needs.precheck.outputs.cache_save, passed through as inputs.save-cache), never a
+# literal -- saves only fire when plan.cache_mode == "write".
+setup-soldr       = { only-in = ".github/actions/soldr", require = { solo-toolchain-cache = "false", cook-delta = "false", save-cache = "plan" } }
 tools             = ["soldr", "uv", "python3", "yq", "git"]
 secrets           = []
 platform-selector = "crates/private/template-platform/src/lib.rs"   # the ONE file allowed to select on host
 platform-code     = ["crates/private/template-platform/src/platforms/**", "src/template_python_rust_cmd/platforms/**"]
+# Round-4B (SEC-002 refinement): top-level permissions are capped at contents:read + actions:read
+# (free on every job too); any wider per-job grant must be listed here by job id.
+permissions       = { "id-token: write" = ["publish"], "actions: write" = ["cache-janitor"] }
+# Round-4B (CACHE-001 refinement): actions/cache (and /save, /restore) may ONLY appear inside this
+# one SHA-pinned composite-action wrapper; its own key: input must be dynamic (CACHE-002), never a
+# literal -- see .github/actions/cache/action.yml.
+cache-actions     = { only-in = ".github/actions/cache" }
+# Round-4B: astral-sh/setup-uv's own save-cache input is checked the same way as setup-soldr's
+# above, on every use of the action (it has no single wrapper location).
+setup-uv          = { require = { save-cache = "plan" } }
 
 [publish]
 pypi = { auth = "oidc", environment = "pypi", mode = "mock" }

@@ -1,0 +1,12 @@
+name: other
+description: A composite action that is NOT the sanctioned cache wrapper directory.
+inputs:
+  key:
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.0.0
+      with:
+        path: ~/.cache/demo
+        key: ${{ inputs.key }}

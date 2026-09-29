@@ -1,0 +1,13 @@
+name: soldr
+description: Wrapper around zackees/setup-soldr; save-cache passes through a composite input, set by the caller from the precheck plan.
+inputs:
+  save-cache:
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: zackees/setup-soldr@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v1.0.0
+      with:
+        solo-toolchain-cache: "false"
+        cook-delta: "false"
+        save-cache: ${{ inputs.save-cache }}

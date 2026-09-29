@@ -145,6 +145,12 @@ def _plan_github_output_lines(plan: Plan, reuse_result: ReuseResult | None) -> l
     platform_lanes_json = json.dumps([pl.to_json_dict() for pl in plan.platform_lanes], separators=(",", ":"))
     fast_suites_json = json.dumps(list(plan.fast_suites), separators=(",", ":"))
     lane_digests_json = json.dumps(dict(plan.lane_digests), separators=(",", ":"))
+    # Round-4B: derived straight from cache_mode so a writer flow's steps
+    # (setup-soldr's/astral-sh/setup-uv's 'save-cache' inputs) can pass this
+    # straight through as their plan-driven expression -- see
+    # ci_lint.rules.tools._is_plan_expr / ci_lint.rules.cache_static
+    # .check_cache_003_setup_uv.
+    cache_save = "true" if plan.cache_mode == "write" else "false"
 
     lines = [
         f"plan={compact}",
@@ -158,6 +164,8 @@ def _plan_github_output_lines(plan: Plan, reuse_result: ReuseResult | None) -> l
         f"platform_lanes_json={platform_lanes_json}",
         f"fast_suites_json={fast_suites_json}",
         f"lane_digests_json={lane_digests_json}",
+        # Round-4B.
+        f"cache_save={cache_save}",
     ]
 
     if reuse_result is not None:

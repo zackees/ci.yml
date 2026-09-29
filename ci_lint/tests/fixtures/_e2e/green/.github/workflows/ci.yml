@@ -19,7 +19,7 @@ concurrency:
 jobs:
   precheck:
     uses: ./.github/workflows/ci-precheck.yml
-  build:
+  fast:
     needs: precheck
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -31,3 +31,6 @@ jobs:
           ref: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           path: ci.yml
       - run: python3 ci/build.py
+      - run: uv run --no-project ruff check .
+      - run: uv run --no-project ruff format --check .
+      - run: uv run --no-project pylint src

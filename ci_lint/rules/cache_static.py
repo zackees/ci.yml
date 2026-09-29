@@ -1,10 +1,21 @@
-"""Group 9: static cache rules (CACHE-001, CACHE-002, CACHE-004).
+"""Group 9: static cache rules (CACHE-001, CACHE-002, CACHE-003, CACHE-004).
 
-No workflow may call `actions/cache` directly (setup-soldr owns cache
-identity); no cache key may embed a per-run volatile value; and the total
-declared cache footprint (steady state + one lockfile-change peak + the PR
-delta budget) must fit under `[cache].budget`, which itself may not exceed
-GitHub's 10GB default repository cap.
+`actions/cache` (and its `/save`/`/restore` sub-actions) may only appear
+inside the one sanctioned wrapper directory `[allow].cache-actions.only-in`
+(default `.github/actions/cache`, still SHA-pinned per SEC-004) -- anywhere
+else is CACHE-001. Inside that wrapper, a `key:` input must itself be an
+expression that reads a prior step's output or a passed-through input
+(keys come from `ci_lint cache key`), never a literal -- CACHE-002.
+CACHE-002 also still flags a volatile component (`github.sha`, ...) in any
+`key:`/`cache-key-suffix:` anywhere. CACHE-003's static half:
+`astral-sh/setup-uv`'s `save-cache` input, when `[allow].setup-uv.require`
+says it must be `"plan"`-derived, must not be missing or a literal `"true"`
+(round-4B; both are exactly the "saves on every PR push" failure mode
+documented under "astral-sh/setup-uv's own cache" in docs/ci-toml.md).
+Finally, the total declared cache footprint (steady state + one
+lockfile-change peak + the PR delta budget) must fit under `[cache].budget`,
+which itself may not exceed GitHub's 10GB default repository cap
+(CACHE-004).
 """
 
 from __future__ import annotations
@@ -17,7 +28,7 @@ from ci_lint.resolve import resolve_flow
 from ci_lint.schema import CiToml
 from ci_lint.workflow_scan import as_dict, load_composite_actions, load_workflows
 from ci_lint.yaml_io import LoadStatus, YamlValue
-from ci_lint.rules.tools import _iter_uses_with
+from ci_lint.rules.tools import _iter_uses_with, _is_plan_expr
 
 SIZE_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)$", re.IGNORECASE)
 SIZE_UNITS: dict[str, int] = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3}
@@ -25,6 +36,7 @@ TEN_GB = 10 * 1024**3
 
 VOLATILE_TOKENS: tuple[str, ...] = ("github.sha", "github.run_id", "github.run_number")
 KEY_FIELD_NAMES: frozenset[str] = frozenset({"key", "cache-key-suffix"})
+CACHE_ACTION_SLUGS_PREFIX = "actions/cache"
 
 
 def parse_size(text: str) -> int | None:
@@ -36,25 +48,41 @@ def parse_size(text: str) -> int | None:
     return int(value * SIZE_UNITS[unit])
 
 
-def check_cache_001(repo_root: Path) -> list[Finding]:
-    findings: list[Finding] = []
+def _is_cache_action_slug(slug: str) -> bool:
+    return slug == "actions/cache" or slug.startswith(f"{CACHE_ACTION_SLUGS_PREFIX}/")
+
+
+def _loaded_files(repo_root: Path) -> list[tuple[str, bool, dict[str, YamlValue]]]:
     files = [(w.path, False, as_dict(w.document)) for w in load_workflows(repo_root) if w.status == LoadStatus.OK]
     files += [
         (a.path, True, as_dict(a.document)) for a in load_composite_actions(repo_root) if a.status == LoadStatus.OK
     ]
-    for path, is_composite, doc in files:
+    return files
+
+
+def check_cache_001(ci: CiToml, repo_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    only_in = ci.allow.cache_actions.only_in.strip("/")
+    for path, is_composite, doc in _loaded_files(repo_root):
+        file_dir = Path(path).parent.as_posix()
         for uses, loc, _with in _iter_uses_with(doc, is_composite=is_composite):
             slug = uses.split("@", 1)[0]
-            if slug == "actions/cache" or slug.startswith("actions/cache/"):
-                findings.append(
-                    Finding(
-                        rule="CACHE-001",
-                        path=path,
-                        message=f"{loc}: raw '{slug}' is used directly",
-                        fix=f"remove {loc}; caching goes through zackees/setup-soldr's declared "
-                        "families (or the ci-lint 'uv' family), never a raw actions/cache call",
-                    )
+            if not _is_cache_action_slug(slug):
+                continue
+            if file_dir == only_in:
+                continue  # the one sanctioned wrapper (still SHA-pinned per SEC-004)
+            findings.append(
+                Finding(
+                    rule="CACHE-001",
+                    path=path,
+                    message=f"{loc}: raw '{slug}' is used directly outside the sanctioned wrapper "
+                    f"'{only_in}' (found in '{file_dir}')",
+                    fix=f"move this call into the composite-action wrapper at {only_in}/action.yml "
+                    f"(SHA-pinned per SEC-004) and call that wrapper from {path} instead; caching "
+                    "otherwise goes through zackees/setup-soldr's declared families (or the ci-lint "
+                    "'uv' family), never a direct actions/cache call",
                 )
+            )
     return findings
 
 
@@ -76,16 +104,41 @@ def _check_key_value(value: YamlValue, path: str, loc: str) -> list[Finding]:
     return out
 
 
+def _check_wrapper_key_is_dynamic(value: YamlValue, path: str, loc: str) -> list[Finding]:
+    """Inside the sanctioned `actions/cache*` wrapper, `key:` must be an
+    expression that reads a prior step's output or a passed-through input
+    (round-4B: keys are built by `ci_lint cache key`, never hand-written) --
+    a literal string, even one with no volatile token, is CACHE-002 here."""
+
+    if not isinstance(value, str):
+        return []
+    if _is_plan_expr(value) or re.search(r"steps\.[\w-]+\.outputs\.", value):
+        return []
+    return [
+        Finding(
+            rule="CACHE-002",
+            path=path,
+            message=f"{loc} is a literal cache key inside the sanctioned wrapper: {value!r}",
+            fix=f"build {loc} from 'ci_lint cache key' (e.g. a prior step's "
+            "'${{ steps.<id>.outputs.key }}') or pass it through as '${{ inputs.key }}' -- never "
+            "hardcode a literal key inside the wrapper",
+        )
+    ]
+
+
 def check_cache_002(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings: list[Finding] = []
-    files = [(w.path, False, as_dict(w.document)) for w in load_workflows(repo_root) if w.status == LoadStatus.OK]
-    files += [
-        (a.path, True, as_dict(a.document)) for a in load_composite_actions(repo_root) if a.status == LoadStatus.OK
-    ]
-    for path, is_composite, doc in files:
+    only_in = ci.allow.cache_actions.only_in.strip("/")
+    for path, is_composite, doc in _loaded_files(repo_root):
+        file_dir = Path(path).parent.as_posix()
         for uses, loc, with_ in _iter_uses_with(doc, is_composite=is_composite):
             for field_name in KEY_FIELD_NAMES:
                 findings.extend(_check_key_value(with_.get(field_name), path, f"{loc}.with.{field_name}"))
+            slug = uses.split("@", 1)[0]
+            if _is_cache_action_slug(slug) and file_dir == only_in and "key" in with_:
+                findings.extend(
+                    _check_wrapper_key_is_dynamic(with_.get("key"), path, f"{loc}.with.key")
+                )
     for fam_id, fam in ci.cache.family.items():
         if fam.key is None:
             continue
@@ -93,6 +146,64 @@ def check_cache_002(ci: CiToml, repo_root: Path) -> list[Finding]:
             findings.extend(
                 _check_key_value(component, "ci.toml", f"[cache.family.{fam_id}].key")
             )
+    return findings
+
+
+def _setup_uv_save_cache_violation(actual: YamlValue) -> str | None:
+    """`None` if OK; else the reason `astral-sh/setup-uv`'s `save-cache`
+    input fails the plan-driven requirement. Mirrors the two failure modes
+    docs/ci-toml.md's "astral-sh/setup-uv's own cache" section documents as
+    actually saving on every ordinary PR push: a missing input (falls back
+    to the action's own `"auto"` default) and a literal `"true"` (forces a
+    save regardless of ref). An explicit `"false"`, or any other value,
+    is not this rule's concern."""
+
+    if actual is None:
+        return "is missing (falls back to the action's 'auto' default, which still saves on every PR push)"
+    if isinstance(actual, str) and actual.strip().lower() == "true":
+        return f"= {actual!r} is a literal 'true' (saves unconditionally, on every ref including PRs)"
+    return None
+
+
+def check_cache_003_setup_uv(ci: CiToml, repo_root: Path) -> list[Finding]:
+    """Round-4B: every `astral-sh/setup-uv` use (no single wrapper location
+    -- unlike setup-soldr, this action is meant to be called directly), for
+    each `[allow].setup-uv.require` entry whose expected value is the
+    special string `"plan"`."""
+
+    findings: list[Finding] = []
+    require = ci.allow.setup_uv.require
+    if not require:
+        return findings
+    for path, is_composite, doc in _loaded_files(repo_root):
+        for uses, loc, with_ in _iter_uses_with(doc, is_composite=is_composite):
+            if uses.split("@", 1)[0] != "astral-sh/setup-uv":
+                continue
+            for key, expected in require.items():
+                actual = with_.get(key)
+                if expected == "plan":
+                    reason = _setup_uv_save_cache_violation(actual)
+                    if reason is not None:
+                        findings.append(
+                            Finding(
+                                rule="CACHE-003",
+                                path=path,
+                                message=f"{loc}: astral-sh/setup-uv input '{key}' {reason}",
+                                fix=f"set '{key}' to an expression derived from the precheck plan "
+                                f"(e.g. '${{{{ needs.precheck.outputs.cache_save }}}}' in the caller, "
+                                f"or '${{{{ inputs.{key} }}}}' inside a composite wrapper) at {loc}",
+                            )
+                        )
+                elif actual is None or str(actual).lower() != expected.lower():
+                    findings.append(
+                        Finding(
+                            rule="CACHE-003",
+                            path=path,
+                            message=f"{loc}: astral-sh/setup-uv input '{key}' = {actual!r}, expected "
+                            f"'{expected}'",
+                            fix=f'set \'{key}: "{expected}"\' at {loc}',
+                        )
+                    )
     return findings
 
 
@@ -239,8 +350,9 @@ def check_cache_004(ci: CiToml) -> tuple[list[Finding], str]:
 
 def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     findings: list[Finding] = []
-    findings.extend(check_cache_001(repo_root))
+    findings.extend(check_cache_001(ci, repo_root))
     findings.extend(check_cache_002(ci, repo_root))
+    findings.extend(check_cache_003_setup_uv(ci, repo_root))
     cache_004_findings, arithmetic = check_cache_004(ci)
     findings.extend(cache_004_findings)
     return findings, arithmetic

@@ -1,9 +1,12 @@
 """Group 4: tool rules.
 
 TOOL-001 (no bare cargo/rustc/rustup/maturin/... -- use soldr/uv), TOOL-002
-(a dep-resolving cargo subcommand needs --locked), and CACHE-009
+(a dep-resolving cargo subcommand needs --locked), CACHE-009
 (zackees/setup-soldr may only be called from its one wrapper action, with
-its required inputs, and never enabling a retired cache family).
+its required inputs, and never enabling a retired cache family), and
+GEN-004 (when the repo has Python sources, the `fast` job must run Ruff
+check + format --check + Pylint, directly or via a `ci/*.py` script it
+calls one level deep; standalone Black/isort is GEN-004 too).
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ import re
 import shlex
 from pathlib import Path
 
-from ci_lint.finding import Finding
+from ci_lint.finding import Finding, Status
 from ci_lint.repo_files import list_repo_files
 from ci_lint.schema import CiToml
 from ci_lint.workflow_scan import (
@@ -272,6 +275,17 @@ def _iter_uses_with(
     return out
 
 
+def _is_plan_expr(value: object) -> bool:
+    """Round-4B: an `[allow].setup-soldr.require`/`[allow].setup-uv.require`
+    value of the special string `"plan"` means the actual input must be an
+    expression DERIVED from the precheck plan -- `needs.precheck.outputs.*`
+    in a workflow job, or an `inputs.*` passthrough inside a composite
+    action wrapper (whose own caller supplies that input from the plan) --
+    never a literal."""
+
+    return isinstance(value, str) and ("needs.precheck.outputs." in value or "inputs." in value)
+
+
 def check_cache_009(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings: list[Finding] = []
     only_in = ci.allow.setup_soldr.only_in.strip("/")
@@ -310,9 +324,30 @@ def check_cache_009(ci: CiToml, repo_root: Path) -> list[Finding]:
                             rule="CACHE-009",
                             path=path,
                             message=f"{loc}: setup-soldr wrapper is missing required input '{key}'",
-                            fix=f'add \'{key}: "{expected}"\' to {loc}\'s with: block',
+                            fix=(
+                                f"add '{key}: \"{expected}\"' to {loc}'s with: block"
+                                if expected != "plan"
+                                else f"add '{key}: ${{{{ inputs.{key} }}}}' to {loc}'s with: block, "
+                                f"passed through from an '{key}' composite input the caller sets to "
+                                "'${{ needs.precheck.outputs.cache_save }}'"
+                            ),
                         )
                     )
+                elif expected == "plan":
+                    if not _is_plan_expr(actual):
+                        findings.append(
+                            Finding(
+                                rule="CACHE-009",
+                                path=path,
+                                message=f"{loc}: setup-soldr input '{key}' = {actual!r} must be an "
+                                "expression derived from the precheck plan (contains "
+                                "'needs.precheck.outputs.' or passes through an 'inputs.*' value), "
+                                "not a literal",
+                                fix=f"set '{key}' to '${{{{ needs.precheck.outputs.cache_save }}}}' "
+                                f"(in the calling workflow) or '${{{{ inputs.{key} }}}}' (inside the "
+                                f"wrapper composite, passed through from its caller) at {loc}",
+                            )
+                        )
                 elif str(actual).lower() != expected.lower():
                     findings.append(
                         Finding(
@@ -340,9 +375,216 @@ def check_cache_009(ci: CiToml, repo_root: Path) -> list[Finding]:
     return findings
 
 
+# ── GEN-004: Python quick checks (Ruff + Pylint, no standalone Black/isort) ──
+
+CI_SCRIPT_RE = re.compile(r"^ci/.*\.py$")
+_LINT_KIND_LABEL: dict[str, str] = {
+    "ruff-check": "'ruff check'",
+    "ruff-format-check": "'ruff format --check'",
+    "pylint": "'pylint'",
+}
+
+
+def _classify_lint_tokens(tokens: list[str]) -> str | None:
+    """`None`, or one of `"ruff-check"`/`"ruff-format-check"`/`"pylint"`/
+    `"black"`/`"isort"` -- recognizes a bare invocation, a `python3 -m
+    <tool>` invocation, or a `uv run [flags...] <tool> ...` invocation (the
+    two forms AGENTS.md's `run:` convention allows -- see the worker
+    contract's engineering rules)."""
+
+    if not tokens:
+        return None
+    t = list(tokens)
+    if t[0] in ("python3", "python", "python3.11", "python3.12", "python3.13") and len(t) > 2 and t[1] == "-m":
+        t = t[2:]
+    elif t[0] == "uv" and "run" in t[1:]:
+        idx = next((i for i, tok in enumerate(t) if tok in ("ruff", "pylint", "black", "isort")), None)
+        t = t[idx:] if idx is not None else []
+    if not t:
+        return None
+    if t[0] == "ruff":
+        rest = t[1:]
+        if "format" in rest and "--check" in rest:
+            return "ruff-format-check"
+        if "check" in rest:
+            return "ruff-check"
+        return None
+    if t[0] in ("pylint", "black", "isort"):
+        return t[0]
+    return None
+
+
+def _scan_commands_for_gen_004(
+    commands: list[list[str]],
+    repo_root: Path,
+    *,
+    found: set[str],
+    black_isort_hits: list[tuple[str, str]],
+    unresolved: list[str],
+    loc: str,
+    follow_scripts: bool,
+) -> None:
+    for tokens in commands:
+        kind = _classify_lint_tokens(tokens)
+        if kind in ("ruff-check", "ruff-format-check", "pylint"):
+            found.add(kind)
+        elif kind in ("black", "isort"):
+            black_isort_hits.append((kind, loc))
+
+        if not follow_scripts:
+            continue
+        for candidate in tokens:
+            if not CI_SCRIPT_RE.match(candidate):
+                continue
+            script_path = repo_root / candidate
+            if not script_path.is_file():
+                unresolved.append(f"{candidate} (referenced by {loc}, but not found in the repo)")
+                continue
+            try:
+                source = script_path.read_text(encoding="utf-8")
+                ast.parse(source, filename=str(script_path))
+            except (SyntaxError, UnicodeDecodeError, OSError):
+                unresolved.append(f"{candidate} (referenced by {loc}, but fails to parse)")
+                continue
+            sub_commands: list[list[str]] = []
+            for sub_tokens, _lineno in _extract_ast_commands(script_path):
+                i = 0
+                while i < len(sub_tokens) and ENV_ASSIGN_RE.match(sub_tokens[i]):
+                    i += 1
+                remaining = sub_tokens[i:]
+                if remaining:
+                    sub_commands.append(remaining)
+            # "Follow one level": the script's own subprocess calls are
+            # scanned, but a further ci/*.py reference found inside THAT
+            # script is not resolved again.
+            _scan_commands_for_gen_004(
+                sub_commands,
+                repo_root,
+                found=found,
+                black_isort_hits=black_isort_hits,
+                unresolved=unresolved,
+                loc=f"{candidate} (called from {loc})",
+                follow_scripts=False,
+            )
+
+
+def check_gen_004(repo_root: Path) -> list[Finding]:
+    if not any(f.endswith(".py") for f in list_repo_files(repo_root)):
+        return []  # GEN-004 only applies when the repo has Python sources
+
+    workflows = load_workflows(repo_root)
+    ci_yml = next((w for w in workflows if w.path == ".github/workflows/ci.yml"), None)
+    if ci_yml is not None and ci_yml.status == LoadStatus.NEEDS_REVIEW:
+        return [
+            Finding(
+                rule="GEN-004",
+                path=ci_yml.path,
+                status=Status.NEEDS_REVIEW,
+                message=f"cannot evaluate GEN-004 for {ci_yml.path}: {ci_yml.reason}",
+                fix="make PyYAML importable or `yq` available on PATH so ci-lint can parse "
+                f"{ci_yml.path}, then re-run precheck",
+            )
+        ]
+
+    fast_job: dict[str, YamlValue] | None = None
+    fast_path: str | None = None
+    for wf in workflows:
+        if wf.status != LoadStatus.OK:
+            continue
+        jobs = jobs_of(as_dict(wf.document))
+        if "fast" in jobs:
+            fast_job = jobs["fast"]
+            fast_path = wf.path
+            break
+
+    if fast_job is None:
+        return [
+            Finding(
+                rule="GEN-004",
+                message="repository has Python sources but no job id 'fast' exists in any workflow",
+                fix="add a job id 'fast' that runs 'ruff check', 'ruff format --check', and "
+                "'pylint' over the Python sources (directly, or via a 'ci/*.py' script it calls)",
+            )
+        ]
+
+    if "uses" in fast_job:
+        return [
+            Finding(
+                rule="GEN-004",
+                path=fast_path,
+                status=Status.NEEDS_REVIEW,
+                message="jobs.fast calls a reusable workflow ('uses:'); cannot statically verify its "
+                "Ruff/Pylint coverage from this file",
+                fix="re-run GEN-004 against the called reusable workflow file directly, or inline "
+                "jobs.fast's steps",
+            )
+        ]
+
+    run_texts = [s["run"] for s in steps_of(fast_job) if isinstance(s.get("run"), str)]
+    commands: list[list[str]] = []
+    for text in run_texts:
+        commands.extend(find_commands(text))
+
+    found: set[str] = set()
+    black_isort_hits: list[tuple[str, str]] = []
+    unresolved: list[str] = []
+    _scan_commands_for_gen_004(
+        commands,
+        repo_root,
+        found=found,
+        black_isort_hits=black_isort_hits,
+        unresolved=unresolved,
+        loc=f"jobs.fast.steps[*] in {fast_path}",
+        follow_scripts=True,
+    )
+
+    findings: list[Finding] = []
+    for kind, loc in sorted(set(black_isort_hits)):
+        findings.append(
+            Finding(
+                rule="GEN-004",
+                path=fast_path,
+                message=f"{loc} invokes standalone '{kind}'; policy-general.md's GEN-004 forbids "
+                f"Black/isort once Ruff covers the same checks",
+                fix=f"remove the '{kind}' invocation ({loc}); Ruff's 'check' (import sorting "
+                "included, rule set 'I') and 'format --check' replace it",
+            )
+        )
+
+    missing = {"ruff-check", "ruff-format-check", "pylint"} - found
+    if missing:
+        missing_desc = ", ".join(_LINT_KIND_LABEL[m] for m in sorted(missing))
+        if unresolved:
+            findings.append(
+                Finding(
+                    rule="GEN-004",
+                    path=fast_path,
+                    status=Status.NEEDS_REVIEW,
+                    message=f"jobs.fast may be missing {missing_desc}; it also invokes "
+                    f"{'; '.join(sorted(set(unresolved)))}, which could not be resolved to confirm "
+                    "coverage",
+                    fix="make the fast job's Ruff/Pylint invocations directly inspectable: a literal "
+                    "'ruff check'/'ruff format --check'/'pylint' in a run: line, or a tracked "
+                    "'ci/*.py' script that calls them via a literal subprocess argv",
+                )
+            )
+        else:
+            findings.append(
+                Finding(
+                    rule="GEN-004",
+                    path=fast_path,
+                    message=f"jobs.fast does not invoke {missing_desc}",
+                    fix=f"add {missing_desc} to jobs.fast's run: steps (directly, or via a 'ci/*.py' "
+                    f"script it calls) in {fast_path}",
+                )
+            )
+    return findings
+
+
 def check_group4(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(check_tool_rules_workflows(repo_root))
     findings.extend(check_tool_rules_python(repo_root))
     findings.extend(check_cache_009(ci, repo_root))
+    findings.extend(check_gen_004(repo_root))
     return findings

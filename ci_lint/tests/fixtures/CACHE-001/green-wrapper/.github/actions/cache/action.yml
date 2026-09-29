@@ -1,0 +1,16 @@
+name: cache
+description: Sanctioned actions/cache wrapper -- the only place a raw actions/cache call may appear.
+inputs:
+  key:
+    required: true
+outputs:
+  cache-hit:
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - id: restore
+      uses: actions/cache@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.0.0
+      with:
+        path: ~/.cache/demo
+        key: ${{ inputs.key }}
