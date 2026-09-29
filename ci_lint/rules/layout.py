@@ -16,6 +16,7 @@ from ci_lint.finding import Finding
 from ci_lint.globs import matches_any
 from ci_lint.py_lexer import strip_comments_and_strings as py_strip
 from ci_lint.repo_files import list_repo_files
+from ci_lint.rust_lexer import find_attribute_and_macro_spans
 from ci_lint.rust_lexer import strip_comments_and_strings as rust_strip
 from ci_lint.schema import CiToml
 
@@ -39,24 +40,36 @@ PY_SCAN_PREFIXES: tuple[str, ...] = ("src/", "tests/", "ci/")
 
 
 def _check_rust_file(repo_root: Path, rel: str) -> list[Finding]:
+    """Round-6B: host selectors inside `#[cfg(...)]` / `#[cfg_attr(...)]` /
+    `cfg!(...)` / `cfg_select! {...}` are matched over the whole
+    (bracket-matched, whitespace-normalized) attribute/macro span -- not
+    line by line -- so a form split across lines, e.g.
+    `#[cfg(\n    windows\n)]`, is still caught. `std::os::`/`libc::`/
+    `windows_sys::` path references stay a per-line substring scan; they
+    are not attribute/macro syntax and are not expected to split across
+    lines."""
+
     findings: list[Finding] = []
     try:
         text = (repo_root / rel).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
-    lines = rust_strip(text).splitlines()
-    for i, line in enumerate(lines, start=1):
-        if RUST_CFG_RE.search(line) and any(sel in line for sel in RUST_SELECTORS):
+    code = rust_strip(text)
+
+    for span in find_attribute_and_macro_spans(code):
+        if RUST_CFG_RE.search(span.text) and any(sel in span.text for sel in RUST_SELECTORS):
             findings.append(
                 Finding(
                     rule="LAYOUT-001",
                     path=rel,
-                    line=i,
-                    message=f"host selector outside the platform facade: {line.strip()}",
+                    line=span.line,
+                    message=f"host selector outside the platform facade: {span.text}",
                     fix="move this platform-specific code into an [allow].platform-code path, or "
                     "into the one file named by [allow].platform-selector",
                 )
             )
+
+    for i, line in enumerate(code.splitlines(), start=1):
         for hp in RUST_HOST_PATHS:
             if hp in line:
                 findings.append(

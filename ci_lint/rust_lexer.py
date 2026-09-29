@@ -1,4 +1,5 @@
-"""A small Rust lexer that blanks comments and string-literal content.
+"""A small Rust lexer that blanks comments and string-literal content, and
+finds attribute/macro spans across line breaks.
 
 Round-2A brief, defect 2: `ci_lint.rules.layout`'s LAYOUT-001 scan and
 `ci_lint.cargo_scan.has_cfg_feature` (RUST-011) matched on raw source
@@ -13,9 +14,20 @@ string literals, into blanks -- preserving every newline so line numbers of
 the surviving code are unchanged, and leaving single-quoted lifetimes
 (`'a`, `'static`) alone rather than misreading them as unterminated char
 literals.
+
+Round-6B, defect (template-python-rust-cmd, round 2F): LAYOUT-001 and
+RUST-011's `cfg(feature` check both scanned line by line too, so an
+attribute or macro call split across lines -- `#[cfg(\n    windows\n)]` --
+evaded both. `find_attribute_and_macro_spans` matches bracket nesting to
+find whole `#[...]` / `#![...]` attributes, `cfg!(...)` macro calls, and
+`cfg_select! { ... }` blocks regardless of internal line breaks, returning
+each as one whitespace-normalized span anchored at the line it starts on.
 """
 
 from __future__ import annotations
+
+import re
+from dataclasses import dataclass
 
 
 def _is_blank(ch: str) -> str:
@@ -155,3 +167,89 @@ def strip_comments_and_strings(source: str) -> str:
         i += 1
 
     return "".join(out)
+
+
+@dataclass(frozen=True)
+class AttrSpan:
+    """One `#[...]` / `#![...]` attribute, `cfg!(...)` macro call, or
+    `cfg_select! { ... }` block, found by matching bracket depth rather
+    than scanning line by line -- so a form split across source lines,
+    e.g. `#[cfg(\n    windows\n)]` or
+    `#[cfg_attr(\n    unix,\n    derive(Debug)\n)]`, is returned as ONE
+    span. `text` is the span's source with internal whitespace/newlines
+    collapsed to single spaces; `line` is the 1-based source line the span
+    STARTS on, for reporting."""
+
+    line: int
+    text: str
+
+
+_ATTR_START_RE = re.compile(r"#!?\[")
+_CFG_MACRO_START_RE = re.compile(r"\bcfg!\s*\(")
+_CFG_SELECT_START_RE = re.compile(r"\bcfg_select!\s*\{")
+
+
+def _line_at(code: str, index: int) -> int:
+    return code.count("\n", 0, index) + 1
+
+
+def _normalize_whitespace(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _match_bracket(code: str, open_index: int, open_ch: str, close_ch: str) -> int | None:
+    """`code[open_index] == open_ch`; return the index of the `close_ch`
+    that closes it. Depth is tracked only for `open_ch`/`close_ch`
+    themselves -- well-formed Rust code nests each bracket kind (`(`/`)`,
+    `[`/`]`, `{`/`}`) independently of the others, so this is enough
+    without a full tokenizer, and it is immune to a different bracket kind
+    appearing inside (e.g. the `(...)` groups inside a `#[...]`
+    attribute)."""
+
+    depth = 0
+    i = open_index
+    n = len(code)
+    while i < n:
+        c = code[i]
+        if c == open_ch:
+            depth += 1
+        elif c == close_ch:
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def _iter_bracket_spans(
+    code: str, start_re: re.Pattern[str], open_ch: str, close_ch: str
+) -> list[AttrSpan]:
+    spans: list[AttrSpan] = []
+    for m in start_re.finditer(code):
+        open_index = m.end() - 1
+        if open_index < 0 or code[open_index] != open_ch:
+            continue
+        close_index = _match_bracket(code, open_index, open_ch, close_ch)
+        if close_index is None:
+            continue
+        raw = code[m.start() : close_index + 1]
+        spans.append(AttrSpan(line=_line_at(code, m.start()), text=_normalize_whitespace(raw)))
+    return spans
+
+
+def find_attribute_and_macro_spans(code: str) -> list[AttrSpan]:
+    """Scan *code* -- already passed through `strip_comments_and_strings`
+    -- for `#[...]` / `#![...]` attributes, `cfg!(...)` macro calls, and
+    `cfg_select! { ... }` blocks, matching nested brackets so a form split
+    across lines comes back as one normalized span anchored at its
+    opening line. Callers (LAYOUT-001's host-selector scan,
+    `cargo_scan.has_cfg_feature`'s RUST-011 `cfg(feature` scan) search
+    each span's `.text` instead of scanning raw source lines, so a
+    multi-line attribute or macro call is seen whole."""
+
+    spans: list[AttrSpan] = []
+    spans.extend(_iter_bracket_spans(code, _ATTR_START_RE, "[", "]"))
+    spans.extend(_iter_bracket_spans(code, _CFG_MACRO_START_RE, "(", ")"))
+    spans.extend(_iter_bracket_spans(code, _CFG_SELECT_START_RE, "{", "}"))
+    spans.sort(key=lambda s: s.line)
+    return spans

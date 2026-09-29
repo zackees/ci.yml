@@ -87,5 +87,90 @@ class LayoutFixtureTest(unittest.TestCase):
         self.assertEqual([], findings)
 
 
+def _write(root: Path, rel: str, content: str) -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+class LayoutMultilineAttributeTest(unittest.TestCase):
+    """Round-6B regression (found on zackees/template-python-rust-cmd,
+    round 2F): LAYOUT-001's Rust scan matched `#[cfg(...)]` / `cfg!(...)`
+    / `cfg_select! {...}` only when the whole form sat on one source
+    line, so splitting it across lines evaded the cheap precheck scan
+    entirely (Dylint's `platform_boundary` lint still caught it in the
+    template -- defense in depth -- but the always-on precheck must too;
+    see zackees/soldr#3284 for why). Each case reuses the LAYOUT-001
+    green fixture's `ci.toml` against a throwaway source tree, the same
+    pattern the round-2A regression tests above use."""
+
+    def _findings(self, content: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root, "crates/demo/src/other.rs", content)
+            repo = fixture("LAYOUT-001", "green")
+            ci, _ = load_ci_toml(repo)
+            findings = check_group6(ci, root)
+        return [f.rule for f in findings]
+
+    def test_exact_defect_snippet_from_round_2f(self) -> None:
+        """The literal snippet from the round-2F defect report."""
+        findings = self._findings("#[cfg(\n    windows\n)]\nfn f() {}\n")
+        self.assertIn("LAYOUT-001", findings)
+
+    def test_multiline_cfg_any(self) -> None:
+        findings = self._findings(
+            '#[cfg(any(\n    windows,\n    target_os = "macos"\n))]\nfn f() {}\n'
+        )
+        self.assertIn("LAYOUT-001", findings)
+
+    def test_multiline_cfg_attr(self) -> None:
+        findings = self._findings("#[cfg_attr(\n    unix,\n    derive(Debug)\n)]\nstruct S;\n")
+        self.assertIn("LAYOUT-001", findings)
+
+    def test_multiline_cfg_macro(self) -> None:
+        findings = self._findings("fn f() -> bool {\n    cfg!(\n        windows\n    )\n}\n")
+        self.assertIn("LAYOUT-001", findings)
+
+    def test_multiline_cfg_select(self) -> None:
+        findings = self._findings(
+            "cfg_select! {\n"
+            "    unix => {\n"
+            "        fn f() -> u8 { 1 }\n"
+            "    },\n"
+            "    windows => {\n"
+            "        fn f() -> u8 { 2 }\n"
+            "    },\n"
+            "}\n"
+        )
+        self.assertIn("LAYOUT-001", findings)
+
+    def test_multiline_cfg_feature_is_not_a_host_selector(self) -> None:
+        """`feature` is not in RUST_SELECTORS; a multi-line
+        `#[cfg(feature = ...)]` is RUST-011's concern, not LAYOUT-001's,
+        and must stay green here."""
+        findings = self._findings('#[cfg(\n    feature = "json"\n)]\npub fn add() {}\n')
+        self.assertEqual([], findings)
+
+    def test_multiline_block_comment_mentioning_selector(self) -> None:
+        findings = self._findings(
+            '/* platform selection:\n   #[cfg(target_os = "linux")]\n*/\nfn f() {}\n'
+        )
+        self.assertEqual([], findings)
+
+    def test_multiline_raw_string_mentioning_selector(self) -> None:
+        """A raw string spanning multiple lines, embedded as an attribute
+        value, whose content merely mentions `#[cfg(...)]` and even
+        contains literal `[`/`]`/`(`/`)` characters must not confuse
+        bracket matching or be treated as real code."""
+        findings = self._findings(
+            '#[doc = r#"\n'
+            '    supports #[cfg(target_os = "linux")] per platform\n'
+            '"#]\n'
+            "fn real() {}\n"
+        )
+        self.assertEqual([], findings)
+
+
 if __name__ == "__main__":
     unittest.main()
