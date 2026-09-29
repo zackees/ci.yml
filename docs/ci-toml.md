@@ -31,12 +31,27 @@ round-2A) checks a real build's output against. It documents what
   the special string `"plan"`, and the planner's `cache_save` `--github-
   output` key); and the static `GEN-004` implementation (Ruff + Pylint in
   the `fast` job, no standalone Black/isort).
+- round-5: `ci_lint audit` (`python3 -m ci_lint audit`) -- a live,
+  read-only settings/secrets audit (`SEC-005`/`006`/`007`, `GEN-006`,
+  `GEN-011`; see "Settings audit (round-5)" below) -- replaces the stub
+  that previously exited 2. `ci_lint publish oidc-check` (`ci_lint.
+  publish_oidc`) -- issue #6 §7's mock publisher: mints and asserts the
+  claims of the OIDC token, never prints it, and stops before upload.
+  `ci_lint release verify` (`ci_lint.release`) -- issue #6 §3/ci.yml#4's
+  release-candidate gate: the staged wheel+sdist set must exactly match
+  `[platforms]`, share one version, each pass the existing `wheel check`,
+  and (optionally) have a passing `--smoke` result; writes `release-
+  manifest.json` (`PKG-006`). `ci_lint perf compare` (`ci_lint.perf`) --
+  a baseline/current benchmark comparison, non-gating unless `[suites.
+  perf].gating = true` and `--threshold-pct` is given.
 
-`ci_lint audit` (the fleet-inventory/settings audit compared against
-observed GitHub runs, proposal.md's "ci-lint history") is still a later
-round; `python3 -m ci_lint audit ...` still exits 2 with "not implemented
-yet" (see `ci_lint/runtime_stub.py`). This is unrelated to `ci_lint cache
-audit`, which round-4A did implement -- see below.
+`ci_lint audit` (round-5) is a live, read-only **settings/secrets** audit
+-- `SEC-005`/`006`/`007`, `GEN-006`, `GEN-011` -- see "Settings audit
+(round-5)" below. It is unrelated to `ci_lint cache audit` (round-4A,
+below), which classifies GitHub Actions cache entries. proposal.md's
+broader "ci-lint history" idea (comparing declared coverage against
+*observed* GitHub run history over time) is still future scope; round-5
+only covers the settings/secrets slice the round-5 brief named.
 
 The canonical example is [`examples/rust-pypi-app/ci.toml`](../examples/rust-pypi-app/ci.toml),
 copied verbatim from the design draft in
@@ -542,6 +557,12 @@ when neither PyYAML nor `yq` is available).
 | `CACHE-005` | (round-4A, live) A cache entry is poisoned: <= 1KB regardless of family, or below its family's declared `min`. | Delete the exact key (`ci-lint cache heal --key <key>`) so the next writer run repopulates it. |
 | `CACHE-006` | (round-4A, live) >= 2 entries of the same declared family whose keys differ only in a trailing lockfile/version hash -- the family is superseded, not per-platform-distinct. | Delete the superseded (non-newest) entry (`ci-lint cache janitor`); disambiguate with `[cache.family.<id>].per` if more than one entry is legitimate. |
 | `CACHE-008` | (round-4A, live) A `delta-v1-pr<N>-...` entry whose PR is closed/merged, or whose base hash matches none of that family's live base entries. | Delete it (`ci-lint cache trim`); the next PR push (if still open) rebuilds and saves fresh. |
+| `SEC-005` | (round-5, live, `ci-lint audit`) Any repository or `[publish].pypi.environment` environment Actions secret exists; a 403 (needs an admin token) is `needs_review`, never a pass. | This profile is OIDC-only (issue #6 §7): delete the stored secret(s). |
+| `SEC-006` | (round-5, live, `ci-lint audit`) `[publish].pypi.environment` is missing, or its deployment branch policy doesn't restrict deploys to the default branch. | Create/restrict the environment's deployment branch policy to exactly the default branch. |
+| `SEC-007` | (round-5, live, `ci-lint audit`) The repository's default Actions workflow permissions (`GET .../actions/permissions/workflow`) are not `"read"`. | Set "Read repository contents permission" (never "Read and write") in repo Settings -> Actions -> General. |
+| `GEN-006` | (round-5, live, `ci-lint audit`) `required_status_checks.strict = true` on the default branch with no active merge-queue ruleset covering it (docs/case-studies/fbuild-ci-cost.md's candidate rule). | Configure a merge queue, or set `strict = false`. |
+| `GEN-011` | (round-5, live, `ci-lint audit`) The default branch's required status checks don't include the gate check name (`--gate-check-name`, default `"CI OK"`); `needs_review` (not a violation) when branch protection is absent entirely -- a policy decision, not a code defect. | Add the gate check name to the branch's required status checks. |
+| `PKG-006` | (round-5, `ci-lint release verify`) The staged release artifact set is missing/duplicates/has an extra wheel for a declared platform, is missing/duplicates the sdist, disagrees on version across artifacts, or (with `--smoke`) is missing/has a failing native-install smoke result for a staged wheel. | Stage exactly one wheel per declared platform plus one sdist, all at the same version, each passing its native install smoke. |
 
 ## The planner
 
@@ -711,3 +732,154 @@ Every command above is stdlib-only (`zipfile`, `tarfile`, `subprocess`,
 A `[tags.<id>]` entry with `flow` set switches the base flow itself (e.g.
 `[release]` on a PR runs the `release` flow as a rehearsal, with
 `publish = "rehearsal"`).
+
+## Settings audit (round-5)
+
+`ci-lint audit --repo . [--default-branch main] [--gate-check-name "CI OK"]
+[--json]` -- live, read-only, `GITHUB_TOKEN` + `GITHUB_REPOSITORY`
+(`ci_lint.settings_audit`, injectable `FetchStatusFn` --
+`ci_lint.github_api.default_fetch_status`, which returns `(status_code,
+body)` instead of raising, so a 403 ("needs an admin token") and a 404
+("legitimately doesn't exist") are never collapsed into one generic
+error). Distinct from `ci_lint cache audit` (which classifies GitHub
+Actions cache entries) -- this module never touches the cache API.
+
+| Rule | Checks | On 403 | On 404 |
+| --- | --- | --- | --- |
+| `SEC-005` | Any repository Actions secret (`GET .../actions/secrets`) or `[publish].pypi.environment`'s environment secret (`GET .../environments/<name>/secrets`) exists. | `needs_review` ("requires an admin token") -- **never** a pass. | not applicable (no secrets to report). |
+| `SEC-006` | `[publish].pypi.environment` is missing (`GET .../environments/<name>`), or its `deployment_branch_policy` doesn't restrict deploys to `--default-branch` (`protected_branches`, or a `custom_branch_policies` pattern list equal to exactly `[--default-branch]`, checked via `GET .../environments/<name>/deployment-branch-policies`). | `needs_review`. | violation ("does not exist"). |
+| `SEC-007` | `GET .../actions/permissions/workflow`'s `default_workflow_permissions` is not `"read"`. | `needs_review`. | n/a (this endpoint always exists for a real repo). |
+| `GEN-006` | Classic branch protection's `required_status_checks.strict` is `true` with no **active** `merge_queue` ruleset (`GET .../rulesets` + per-id `GET .../rulesets/<id>`) covering `--default-branch` (best-effort `conditions.ref_name.include` match: `~ALL`/`~DEFAULT_BRANCH`/the literal `refs/heads/<branch>`). docs/case-studies/fbuild-ci-cost.md's candidate rule. | `needs_review`. | **treated as none** -- no branch protection means nothing for GEN-006 to flag (GEN-011 covers the "no protection at all" case). |
+| `GEN-011` | The default branch's required status checks (`required_status_checks.contexts` + the newer `.checks[].context`) don't include `--gate-check-name` (default `"CI OK"`). | `needs_review`. | `needs_review` ("a policy decision, not a code defect") -- **not** a violation. |
+
+Every check is independent (one missing/forbidden endpoint never blocks
+another). A transport failure (DNS, timeout -- `GitHubApiError`) on any
+single call degrades that one check to `needs_review`, never a crash and
+never a silent pass. Prints a per-rule summary table, then every finding;
+exits 1 if any finding is `violation` (not on `needs_review` alone --
+matching the rest of ci_lint's convention that only a `--live`
+network-dependent check downgrades an inconclusive result rather than
+failing on it).
+
+## Publish (round-5)
+
+`ci-lint publish oidc-check --repo . --audience <aud> [--expect-ref
+refs/heads/main] [--expect-event workflow_dispatch] [--json]` --
+`ci_lint.publish_oidc`, issue #6 §7's mock publisher. Refuses to run at all
+(**exit 2**, before any network call) unless `ci.toml`'s
+`[publish].pypi.mode == "mock"`.
+
+Needs `ACTIONS_ID_TOKEN_REQUEST_URL` + `ACTIONS_ID_TOKEN_REQUEST_TOKEN`
+(set only when the job has `permissions: id-token: write`) and
+`GITHUB_REPOSITORY`. Requests the token from `ACTIONS_ID_TOKEN_REQUEST_URL
++ "&audience=" + <aud>`, authenticating with
+`ACTIONS_ID_TOKEN_REQUEST_TOKEN` (`ci_lint.publish_oidc
+.request_oidc_token`, through the same injectable `FetchFn` as everywhere
+else in this package). Decodes **only** the JWT's middle (payload)
+segment, base64url, in memory (`decode_payload` -- the header and
+signature segments are never read; this module does not and cannot verify
+the signature itself, matching how `actions/toolkit`'s own
+`core.getIDToken` trusts the Actions runtime's authenticated channel).
+
+Asserts exactly these claims (`assert_claims`):
+
+| Claim | Expected |
+| --- | --- |
+| `repository` | `GITHUB_REPOSITORY` |
+| `ref` | `--expect-ref` |
+| `environment` | `ci.toml`'s `[publish].pypi.environment` |
+| `event_name` | `--expect-event` |
+| `workflow_ref` | `"<repository>/.github/workflows/ci.yml@<expect-ref>"` -- asserting the **full** shape (not just a suffix) is what proves the workflow is a top-level, non-reusable one, per PyPI's trusted-publishing requirement (warehouse#11096). |
+| `aud` | `--audience` |
+
+Prints only the claim **name** and PASS/FAIL for every assertion; the
+**value** is additionally printed only for the five claims above named
+`repository`/`ref`/`environment`/`event_name`/`workflow_ref` (never `aud`,
+and never anything else) -- `ci_lint.publish_oidc.PRINTABLE_CLAIMS`. The
+raw token, its `jti`, and its signature segment are **never** printed,
+logged, or included in `--json` output, by construction: the token string
+is returned exactly once (from `request_oidc_token` to its one caller) and
+never touches a print/log/exception-message call anywhere in this module
+or the CLI layer (`ci_lint/tests/test_publish_oidc.py`'s
+`NeverPrintsTokenTest` asserts this, including one test that drives the
+actual CLI command end-to-end with a fake token and greps its captured
+stdout+stderr). Then prints `mock publish: stopping before upload` and
+exits 0 if every assertion passed, else 1.
+
+## Release verify (round-5)
+
+`ci-lint release verify --repo . --dist <dir> --sha <candidate sha>
+[--smoke <dir>] [--json]` -- `ci_lint.release`, issue #6 §3/ci.yml#4's
+release-candidate gate. Pure filesystem (stdlib `zipfile`/`tarfile`/
+`hashlib`, via the reused `ci_lint.runtime.wheel.parse_wheel_filename`/
+`check_wheel`) -- no network, no subprocess.
+
+For every `[platforms.<id>]` entry, `expected_wheel_tag_pattern` derives
+the wheel `platform_tag` regex its wheel must match, from the platform's
+`group` and its `target` triple's CPU architecture:
+
+| `[platforms.<id>].group` | Expected `platform_tag` |
+| --- | --- |
+| `linux` | `<[platforms.<id>].wheel or "manylinux_2_17">_<x86_64\|aarch64>` |
+| `windows` | `win_amd64` (x86_64) / `win_arm64` (aarch64) |
+| `macos` | `macosx_*_arm64` (aarch64) / `macosx_*_x86_64` (x86_64) -- the macOS deployment-target prefix is a wildcard |
+
+`--dist` must contain exactly one wheel matching each declared platform's
+pattern, plus exactly one sdist (`{name}-{version}.tar.gz`), every staged
+artifact (wheel or sdist) agreeing on the same `{version}`, and abi3
+`cp310` per `[python].abi3` (checked by the reused `wheel check`, not
+re-implemented). `PKG-006` covers: a platform with zero matching wheels
+(missing), more than one (duplicate), a wheel matching no declared
+platform (extra), an unparseable `.whl`/`.tar.gz` filename, a missing or
+duplicated sdist, and a version disagreement across the staged set.
+`check_wheel`'s own `PKG-003`/`004`/`005` findings are folded straight
+into the report (reused, not duplicated) -- the sdist backend check
+(`PKG-004`) runs once, paired with the first staged wheel.
+
+`--smoke <dir>` (optional) consumes an already-written
+`smoke-results/*.json` directory (each file `{"platform": ..., "wheel":
+"<the staged wheel's exact filename>", "passed": bool, "detail":
+"..."}`) -- the per-wheel **native install smoke** itself runs elsewhere
+(the platform-run job, on that platform's own native runner); this command
+only requires a passing result per staged wheel (`PKG-006`: missing or
+failing).
+
+Always writes `<dist>/release-manifest.json` (schema-versioned): the
+candidate SHA, `ci.toml`'s own sha256 digest, the resolved version, and
+one `{path, kind, platform, version, sha256}` record per staged artifact
+(`sha256` computed from the artifact's own bytes, streamed, never trusted
+from a filename or a build log). Exits 1 if any finding is `violation`
+(any rule, not just `PKG-006`), else 0; exits 2 on bad input (`--dist` not
+a directory, `--sha` not a 40-hex commit SHA).
+
+## Perf compare (round-5)
+
+`ci-lint perf compare --repo . --baseline <b.json> --current <c.json>
+[--threshold-pct N] [--json]` -- `ci_lint.perf`. AGENTS.md's typed-
+benchmark rule applies directly: `BenchmarkRecord` (`name`, `unit`,
+`samples: tuple[float, ...]`, `median`) and `BenchmarkFile`
+(`schema_version`, `benchmarks`) are frozen dataclasses; `load_benchmark_
+file` is the one place the JSON wire boundary (typed as `JsonRecord =
+dict[str, JsonScalar | list[float]]`, never `dict[str, Any]`) is read,
+validated field-by-field, and converted -- nothing past that function ever
+sees a raw dict again. The file format:
+
+```json
+{
+  "schema_version": 1,
+  "benchmarks": [
+    {"name": "build_time", "unit": "s", "samples": [1.21, 1.19, 1.25], "median": 1.21}
+  ]
+}
+```
+
+`compare` reports every benchmark present in either file: a `delta_pct`
+(`None` for a benchmark new in `--current`, removed since `--baseline`, or
+whose baseline median is exactly `0`), and `regression` (only ever `true`
+when `--threshold-pct` is given **and** `delta_pct` exceeds it). **Non-
+gating unless BOTH** `ci.toml`'s `[suites.perf].gating = true` **and**
+`--threshold-pct` is supplied (`is_gating`) -- every delta is always
+printed either way; the command only exits 1 (instead of 0) when gating is
+active and at least one benchmark regressed past the threshold. The
+printed/`--json` report itself carries a `schema_version` field
+(`PERF_SCHEMA_VERSION`).

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -31,7 +32,17 @@ from ci_lint.cache.save_ok import SaveOkInputError, SaveOkRequest, evaluate_save
 from ci_lint.cargo_messages import JsonValue, load_artifacts_file
 from ci_lint.cargo_scan import discover_workspace
 from ci_lint.finding import Finding, Status
-from ci_lint.github_api import default_delete, default_fetch, default_graphql
+from ci_lint.github_api import default_delete, default_fetch, default_fetch_status, default_graphql
+from ci_lint.perf import (
+    PERF_SCHEMA_VERSION,
+    PerfCompareError,
+    PerfCompareReport,
+    compare as perf_compare,
+    is_gating as perf_is_gating,
+    load_benchmark_file,
+)
+from ci_lint.perf import render_text as render_perf_text
+from ci_lint.perf import to_json_dict as perf_to_json_dict
 from ci_lint.plan import Plan, PlanError, build_act_event, compute_plan
 from ci_lint.precheck import (
     has_violations,
@@ -40,6 +51,21 @@ from ci_lint.precheck import (
     run_precheck,
     write_step_summary,
 )
+from ci_lint.publish_oidc import (
+    OidcCheckError,
+    assert_claims,
+    decode_payload,
+    request_oidc_token,
+)
+from ci_lint.publish_oidc import render as render_oidc_check
+from ci_lint.publish_oidc import to_json_dict as oidc_check_to_json_dict
+from ci_lint.release import (
+    ReleaseVerifyError,
+    verify_staged_artifacts,
+    write_release_manifest,
+)
+from ci_lint.release import render_text as render_release_verify_text
+from ci_lint.release import to_json_dict as release_verify_to_json_dict
 from ci_lint.reuse import ReuseResult, compute_reuse, empty_result
 from ci_lint.rules.contract import extract_bracket_tokens
 from ci_lint.runtime.gate import compute_gate
@@ -54,9 +80,12 @@ from ci_lint.runtime.units import to_json_dict as units_to_json_dict
 from ci_lint.runtime.wheel import check_installed, check_wheel
 from ci_lint.runtime.wheel import installed_check_to_json_dict, wheel_check_to_json_dict
 from ci_lint.runtime.wheel import render_installed_check, render_wheel_check
-from ci_lint.runtime_stub import run_stub
 from ci_lint.schema import CiToml, load_ci_toml
 from ci_lint.selftest import run_selftest
+from ci_lint.settings_audit import DEFAULT_GATE_CHECK_NAME
+from ci_lint.settings_audit import render_text as render_settings_audit_text
+from ci_lint.settings_audit import run_audit as run_settings_audit
+from ci_lint.settings_audit import to_json_dict as settings_audit_to_json_dict
 
 
 def _load_event(path: str | None) -> dict[str, object]:
@@ -457,6 +486,139 @@ def _cmd_gate(args: argparse.Namespace) -> int:
 
 def _cmd_selftest(_args: argparse.Namespace) -> int:
     return run_selftest()
+
+
+# ── `ci-lint audit` (round-5: SEC-005/006/007, GEN-006/011) ────────────────
+
+
+def _cmd_audit(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo).resolve()
+    ci = _load_ci_or_die(repo_root, "audit")
+    if ci is None:
+        return 1
+    creds = _cache_write_creds("audit")  # same env contract: GITHUB_TOKEN + GITHUB_REPOSITORY
+    if creds is None:
+        return 1
+    token, repo_slug = creds
+    report = run_settings_audit(
+        ci,
+        fetch_status=default_fetch_status,
+        token=token,
+        repo=repo_slug,
+        default_branch=args.default_branch,
+        gate_check_name=args.gate_check_name,
+    )
+    print(json.dumps(settings_audit_to_json_dict(report), indent=2) if args.json else render_settings_audit_text(report))
+    return 1 if any(f.status == Status.VIOLATION for f in report.findings) else 0
+
+
+# ── `ci-lint publish oidc-check` (round-5) ──────────────────────────────────
+
+
+def _cmd_publish_oidc_check(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo).resolve()
+    ci = _load_ci_or_die(repo_root, "publish oidc-check")
+    if ci is None:
+        return 1
+    if ci.publish.pypi is None or ci.publish.pypi.mode != "mock":
+        print(
+            "ci-lint publish oidc-check: refusing to run -- ci.toml [publish].pypi.mode must be "
+            f"\"mock\" (got {ci.publish.pypi.mode if ci.publish.pypi else None!r})",
+            file=sys.stderr,
+        )
+        return 2
+
+    request_url = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL")
+    request_token = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+    repository = os.environ.get("GITHUB_REPOSITORY")
+    if not request_url or not request_token:
+        print(
+            "ci-lint publish oidc-check: ACTIONS_ID_TOKEN_REQUEST_URL/_TOKEN not set -- the job needs "
+            "'permissions: id-token: write'",
+            file=sys.stderr,
+        )
+        return 2
+    if not repository:
+        print("ci-lint publish oidc-check: GITHUB_REPOSITORY not set", file=sys.stderr)
+        return 2
+
+    try:
+        raw_token = request_oidc_token(
+            default_fetch, request_url=request_url, request_token=request_token, audience=args.audience
+        )
+        payload = decode_payload(raw_token)
+    except OidcCheckError as exc:
+        print(f"ci-lint publish oidc-check: {exc}", file=sys.stderr)
+        return 1
+    del raw_token  # never referenced again -- nothing below this line may print it
+
+    result = assert_claims(
+        payload,
+        repository=repository,
+        expect_ref=args.expect_ref,
+        expect_event=args.expect_event,
+        environment=ci.publish.pypi.environment,
+        audience=args.audience,
+    )
+    print(json.dumps(oidc_check_to_json_dict(result), indent=2) if args.json else render_oidc_check(result))
+    return 0 if result.ok else 1
+
+
+# ── `ci-lint release verify` (round-5) ──────────────────────────────────────
+
+
+def _cmd_release_verify(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo).resolve()
+    ci = _load_ci_or_die(repo_root, "release verify")
+    if ci is None:
+        return 1
+    ci_toml_path = repo_root / "ci.toml"
+    try:
+        ci_toml_digest = hashlib.sha256(ci_toml_path.read_bytes()).hexdigest()
+    except OSError as exc:
+        print(f"ci-lint release verify: cannot read {ci_toml_path}: {exc}", file=sys.stderr)
+        return 2
+    smoke_dir = Path(args.smoke) if args.smoke else None
+    try:
+        report = verify_staged_artifacts(
+            ci,
+            Path(args.dist),
+            candidate_sha=args.sha,
+            ci_toml_digest=ci_toml_digest,
+            smoke_dir=smoke_dir,
+        )
+    except ReleaseVerifyError as exc:
+        print(f"ci-lint release verify: {exc}", file=sys.stderr)
+        return 2
+    manifest_path = write_release_manifest(report, Path(args.dist))
+    print(json.dumps(release_verify_to_json_dict(report), indent=2) if args.json else render_release_verify_text(report))
+    print(f"ci-lint release verify: wrote {manifest_path}", file=sys.stderr)
+    return 1 if any(f.status == Status.VIOLATION for f in report.findings) else 0
+
+
+# ── `ci-lint perf compare` (round-5) ────────────────────────────────────────
+
+
+def _cmd_perf_compare(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo).resolve()
+    ci = _load_ci_or_die(repo_root, "perf compare")
+    if ci is None:
+        return 1
+    try:
+        baseline = load_benchmark_file(Path(args.baseline))
+        current = load_benchmark_file(Path(args.current))
+    except PerfCompareError as exc:
+        print(f"ci-lint perf compare: {exc}", file=sys.stderr)
+        return 2
+    deltas = perf_compare(baseline, current, args.threshold_pct)
+    gating = perf_is_gating(ci, args.threshold_pct)
+    report = PerfCompareReport(
+        schema_version=PERF_SCHEMA_VERSION, deltas=deltas, gating=gating, threshold_pct=args.threshold_pct
+    )
+    print(json.dumps(perf_to_json_dict(report), indent=2) if args.json else render_perf_text(report))
+    if gating and any(d.regression for d in deltas):
+        return 1
+    return 0
 
 
 # ── `ci-lint cache ...` (round-4A) ──────────────────────────────────────────
@@ -888,9 +1050,57 @@ def build_parser() -> argparse.ArgumentParser:
     p_delta_apply.add_argument("--base-manifest", required=True)
     p_delta_apply.set_defaults(func=_cmd_cache_delta_apply)
 
-    p_audit_stub = sub.add_parser("audit", help="(audit: not implemented yet -- see docs/ci-toml.md)")
-    p_audit_stub.add_argument("args", nargs=argparse.REMAINDER)
-    p_audit_stub.set_defaults(func=lambda _args: run_stub("audit"))
+    p_audit = sub.add_parser(
+        "audit", help="live settings audit: SEC-005/006/007, GEN-006/011 (distinct from 'cache audit')"
+    )
+    p_audit.add_argument("--repo", default=".")
+    p_audit.add_argument("--default-branch", default="main")
+    p_audit.add_argument(
+        "--gate-check-name",
+        default=DEFAULT_GATE_CHECK_NAME,
+        help=f"the required-status-check name GEN-011 expects (default: {DEFAULT_GATE_CHECK_NAME!r})",
+    )
+    p_audit.add_argument("--json", action="store_true")
+    p_audit.set_defaults(func=_cmd_audit)
+
+    p_publish = sub.add_parser("publish", help="publish checks: oidc-check (issue #6 §7 mock publisher)")
+    publish_sub = p_publish.add_subparsers(dest="publish_command", required=True)
+
+    p_publish_oidc = publish_sub.add_parser(
+        "oidc-check", help="mint the mock publisher's OIDC token, assert its claims, never print it"
+    )
+    p_publish_oidc.add_argument("--repo", default=".")
+    p_publish_oidc.add_argument("--audience", required=True)
+    p_publish_oidc.add_argument("--expect-ref", default="refs/heads/main")
+    p_publish_oidc.add_argument("--expect-event", default="workflow_dispatch")
+    p_publish_oidc.add_argument("--json", action="store_true")
+    p_publish_oidc.set_defaults(func=_cmd_publish_oidc_check)
+
+    p_release = sub.add_parser("release", help="release-candidate checks: verify")
+    release_sub = p_release.add_subparsers(dest="release_command", required=True)
+
+    p_release_verify = release_sub.add_parser(
+        "verify", help="verify the staged release artifact set (PKG-006) and write release-manifest.json"
+    )
+    p_release_verify.add_argument("--repo", default=".")
+    p_release_verify.add_argument("--dist", required=True, help="directory holding the staged wheels + sdist")
+    p_release_verify.add_argument("--sha", required=True, help="the candidate's exact 40-hex commit SHA")
+    p_release_verify.add_argument(
+        "--smoke", default=None, help="a directory of smoke-results/*.json (platform-run's own output)"
+    )
+    p_release_verify.add_argument("--json", action="store_true")
+    p_release_verify.set_defaults(func=_cmd_release_verify)
+
+    p_perf = sub.add_parser("perf", help="perf checks: compare")
+    perf_sub = p_perf.add_subparsers(dest="perf_command", required=True)
+
+    p_perf_compare = perf_sub.add_parser("compare", help="compare a baseline and a current benchmark report")
+    p_perf_compare.add_argument("--repo", default=".")
+    p_perf_compare.add_argument("--baseline", required=True)
+    p_perf_compare.add_argument("--current", required=True)
+    p_perf_compare.add_argument("--threshold-pct", type=float, default=None)
+    p_perf_compare.add_argument("--json", action="store_true")
+    p_perf_compare.set_defaults(func=_cmd_perf_compare)
 
     return parser
 
