@@ -376,6 +376,60 @@ Every run below was checked with `gh run view` / `gh run view --log`.
 | init job | 36509118845 (PR #27) | `init` job 109217234549 succeeded in 1m32s. |
 | platform-run fix | 36508656115 (PR #24) | `platform-build` + `platform-run` succeeded for `windows-x64` (1m38s / 30 s) and `windows-arm64` (2m0s / 58 s); artifacts `platform-windows-x64`, `platform-windows-arm64`. |
 
+## Round M2-7: D8 — does dylint-driver compile through zccache?
+
+Issue [#48](https://github.com/zackees/ci.yml/issues/48) asked whether the
+`dylint` job's zccache-backed units bypass zccache (making the
+`dylint-foundation`/`dylint-output` build-cache family dead weight, per the
+"clud saved a 22-byte, 0-file entry" observation in comment 1). Checked
+against two recent `zackees/template-python-rust-cmd` `main` runs' `dylint`
+job logs (`gh run view --job <id> --log`), reading the `Setup soldr (Dylint
+mode)` step's cache table and the `Post Setup soldr (Dylint mode)` step's
+`final zccache session stats` / `compile cache report` lines.
+
+**Warm run, no dependency change** (run 36517195693, job 109242536800, PR
+"pin ci-lint to zackees/ci.yml@1bf980f"): `dylint-output-cache` HIT
+(2.1 s), `build-cache` HIT (matched key
+`…e0ca860d92638-dylint-40d011b8bf414a69`, archive 80.0 MB, inflated 302.2 MB,
+1229 files, 3.3 s), `dylint-cache` (driver) HIT (15.5 s). Even with the
+output cache satisfying the whole job from a prior identical build, the
+in-job compiler invocations still ran through zccache and recorded:
+
+```
+final zccache session stats: hits=6 misses=20 compilations=71 non_cacheable=45 errors=0 hit_rate=23.1%
+compile cache report: ok hits=6 misses=20 hit_rate=23.1% soldr=0.9.25
+```
+
+**Cold-ish run, `Cargo.lock`-only libc bump** (run 36509863041, job
+109219473942, the same run already in the D4 row above): `dylint-output-cache`
+FALLBACK (partial match, not exact), `build-cache` FALLBACK (matched a
+predecessor key, 69.6 MB archive, 269.3 MB inflated, 985 files restored, then
+rebuilt on top). Session stats:
+
+```
+final zccache session stats: hits=2 misses=40 compilations=87 non_cacheable=45 errors=0 hit_rate=4.8%
+compile cache report: ok hits=2 misses=40 hit_rate=4.8% soldr=0.9.25
+```
+
+**Conclusion: not dead weight.** In both runs `compilations` (71 and 87)
+plus non-zero `hits` (6 and 2) show the dylint-driver/lint-crate compiler
+invocations in the `dylint` job's `Dylint -- host + every declared cross
+target` step do go through zccache — the driver's own compile is part of
+that accounted total, not bypassed. Separately, the `build-cache` layer
+(`dylint-foundation`+`dylint-output`, `SETUP_SOLDR_CACHE_POLICY_JSON` layer
+list `toolchain+cargo-registry+zccache-unit+dylint-foundation+dylint-output`)
+restores real content every run: 80.0 MB / 1229 files on a warm hit, 69.6 MB
+/ 985 files on a fallback restore that still saves ~50–90 s of driver/lint
+rebuild versus a cold start (cold Dylint save 36501247176, referenced in the
+D1 row, first populated this cache). The "22-byte, 0-file" observation in
+issue #48's source is not reproduced here; it likely describes a different,
+degenerate cache state (e.g. clud's own dylint invocation, a different repo,
+or a run with nothing new to save — `Post Setup soldr` logs `exact hit -
+skipping save` when there is nothing to add, which produces a tiny/empty
+save payload without meaning the restore side was empty). No template or
+`ci.toml` change is needed; the family is live and caches real bytes.
+Issue #48 is resolved as answered, no code change required.
+
 ## Scenario status (issue #6 Dylint comment, D1–D8)
 
 | # | Status | Evidence |
@@ -387,7 +441,7 @@ Every run below was checked with `gh run view` / `gh run view --log`.
 | D5 poison and heal | done (local heal) | id 8237268308 deleted |
 | D6 invocation shape | done: multi-target | PR #19 |
 | D7 local act | done for `fast` | PR #20, PR #24 |
-| D8 dylint-driver through zccache | not reported in these sources | unknown |
+| D8 dylint-driver through zccache | done: confirmed cached, not dead weight | 36517195693 (hit_rate 23.1%, build-cache HIT 80.0 MB/1229 files); 36509863041 (hit_rate 4.8%, build-cache FALLBACK 69.6 MB/985 files) — ci.yml#48 |
 
 ## Open items
 
@@ -398,7 +452,6 @@ Every run below was checked with `gh run view` / `gh run view --log`.
   - soldr#3444: `bundle-bins` fails on the from-sdist build.
   - soldr-toolchain#191: the 1.95 bucket has no Dylint driver.
 - setup-soldr `v0` has not been moved to v0.9.81/v0.9.82.
-- D8 evidence is missing from the published sources (table above).
 - `ci.sh` is still an approved exception (template issue #15).
 - The owner's janitor, PR-key and `pr-<N>` decisions still need to reach
   `ci_lint` and the template.
