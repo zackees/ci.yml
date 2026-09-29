@@ -1,0 +1,19 @@
+[
+  {
+    "shape": "multi-target",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc",
+      "aarch64-pc-windows-msvc",
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin"
+    ],
+    "command": ["soldr", "dylint", "--all", "--", "--workspace", "--all-targets",
+      "--target", "aarch64-unknown-linux-gnu", "--target", "aarch64-apple-darwin",
+      "--target", "x86_64-apple-darwin", "--target", "aarch64-pc-windows-msvc",
+      "--target", "x86_64-pc-windows-msvc"],
+    "seconds": 26.116,
+    "returncode": 0
+  }
+]

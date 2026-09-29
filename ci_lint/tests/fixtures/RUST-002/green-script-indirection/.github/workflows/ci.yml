@@ -1,0 +1,11 @@
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+jobs:
+  dylint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - run: python3 ci/dylint.py --shape multi-target

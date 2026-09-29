@@ -71,6 +71,9 @@ from ci_lint.release import render_text as render_release_verify_text
 from ci_lint.release import to_json_dict as release_verify_to_json_dict
 from ci_lint.reuse import ReuseResult, compute_reuse, empty_result
 from ci_lint.rules.contract import extract_bracket_tokens
+from ci_lint.runtime.dylint import DylintCoverageError, compute_dylint_coverage
+from ci_lint.runtime.dylint import render_text as render_dylint_coverage_text
+from ci_lint.runtime.dylint import to_json_dict as dylint_coverage_to_json_dict
 from ci_lint.runtime.gate import compute_gate
 from ci_lint.runtime.gate import render_text as render_gate_text
 from ci_lint.runtime.gate import to_json_dict as gate_to_json_dict
@@ -436,6 +439,24 @@ def _cmd_suite_check(args: argparse.Namespace) -> int:
         print(f"ci-lint suite check: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(suite_check_to_json_dict(report), indent=2) if args.json else render_suite_check_text(report))
+    return 1 if report.findings else 0
+
+
+def _cmd_dylint_coverage(args: argparse.Namespace) -> int:
+    repo_root = Path(args.repo).resolve()
+    ci = _load_ci_or_die(repo_root, "dylint coverage")
+    if ci is None:
+        return 1
+    try:
+        report = compute_dylint_coverage(ci, [Path(p) for p in (args.log or [])])
+    except DylintCoverageError as exc:
+        print(f"ci-lint dylint coverage: {exc}", file=sys.stderr)
+        return 2
+    print(
+        json.dumps(dylint_coverage_to_json_dict(report), indent=2)
+        if args.json
+        else render_dylint_coverage_text(report)
+    )
     return 1 if report.findings else 0
 
 
@@ -968,6 +989,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_suite_check.add_argument("--pytest-junit", action="append", default=[])
     p_suite_check.add_argument("--json", action="store_true")
     p_suite_check.set_defaults(func=_cmd_suite_check)
+
+    p_dylint = sub.add_parser("dylint", help="dylint checks: coverage (RUST-003)")
+    dylint_sub = p_dylint.add_subparsers(dest="dylint_command", required=True)
+    p_dylint_coverage = dylint_sub.add_parser(
+        "coverage",
+        help="RUST-003: every ci.toml [platforms] target (when [lint.dylint].targets = "
+        "'all-platforms') must show a completed Dylint check pass in the given evidence, from a "
+        "real Dylint job log and/or ci/dylint.py's own --results-out JSON",
+    )
+    p_dylint_coverage.add_argument("--repo", default=".")
+    p_dylint_coverage.add_argument(
+        "--log",
+        action="append",
+        default=[],
+        help="a Dylint job log (gh run view --job <id> --log) or ci/dylint.py's --results-out JSON; "
+        "repeatable",
+    )
+    p_dylint_coverage.add_argument("--json", action="store_true")
+    p_dylint_coverage.set_defaults(func=_cmd_dylint_coverage)
 
     p_example = sub.add_parser("example", help="canonical-example checks: drift")
     example_sub = p_example.add_subparsers(dest="example_command", required=True)

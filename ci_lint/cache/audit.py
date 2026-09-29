@@ -1,12 +1,37 @@
 """`ci-lint cache audit`: live, read-only classification of every cache
 entry the GitHub Actions cache API reports, against ci.toml's declared
-families (round-4A brief, deliverable 4).
+families (round-4A brief, deliverable 4). Round-6E adds RUST-004: a
+`setup-soldr:dylint-output`/`setup-soldr:dylint` family with NO live entry
+at all on the default branch, while the default branch's latest run has a
+successful `dylint` job -- "a successful Dylint run never saved its output
+cache" (setup-soldr#538/#540, zackees/ci.yml#1).
+
+RUST-004 cannot literally recompute setup-soldr's own cache-key hash to
+match "the current Cargo.lock hash" the way a `via = "ci-lint"` family's
+key can be rebuilt (`ci_lint.cache.keys`): `dylintOutputKey`'s hash covers
+`cargo_lock` *together with* `source_revision` (the exact commit SHA),
+`target_shape`, and several other inputs ci-lint has no access to
+(setup-soldr `src/lib/resolve-setup.ts`, read read-only, ~line 1185); it is
+fundamentally source-SHA-keyed, not a reproducible function of Cargo.lock
+content alone. An earlier design correlated a family's live entries'
+`created_at` against the qualifying job's own `started_at` instead --
+proven WRONG live against the real template repo (round-6E): an unrelated
+commit (workflow/docs-only) legitimately reproduces the IDENTICAL
+`dylintOutputHash` and gets a correct "exact hit - skipping save" (the
+existing entry is still perfectly valid; nothing was silently lost), so
+"no entry created since this job started" false-positives on ordinary warm
+reuse. The only signal ci-lint can trust without literally decoding the
+hash is coarser but sound: does ANY live entry for the family exist on the
+default branch at all -- exactly zackees/clud's observed failure mode
+(zero cache layers reused, ever, on either sampled run). See
+`_find_default_branch_dylint_run`/`_check_rust_004` below.
 
 Requires `GITHUB_TOKEN` + `GITHUB_REPOSITORY` and `actions: read` (listing
-caches); the PR-state half of CACHE-008 additionally needs a `GraphQLFn`
-(also just a read). Never deletes anything -- see `ci_lint.cache.ops` for
-trim/janitor/heal/preprune, which reuse this module's classification and
-then act on it.
+caches, and -- when `fetch` is given to `audit_classified`/`run_audit` --
+RUST-004's runs/jobs lookup); the PR-state half of CACHE-008 additionally
+needs a `GraphQLFn` (also just a read). Never deletes anything -- see
+`ci_lint.cache.ops` for trim/janitor/heal/preprune, which reuse this
+module's classification and then act on it.
 """
 
 from __future__ import annotations
@@ -16,6 +41,7 @@ import re
 from dataclasses import dataclass
 
 from ci_lint.cache.families import resolve_prefix, resolve_retired_prefix
+from ci_lint.cargo_messages import JsonValue
 from ci_lint.cache.github_cache import (
     CacheApiError,
     CacheEntry,
@@ -24,9 +50,17 @@ from ci_lint.cache.github_cache import (
     list_caches,
 )
 from ci_lint.finding import Finding
-from ci_lint.github_api import FetchFn, GraphQLFn
+from ci_lint.github_api import FetchFn, GitHubApiError, GraphQLFn
 from ci_lint.rules.cache_static import parse_size
 from ci_lint.schema import CiToml
+
+# RUST-004: the two `via` values whose live entries this correlates against
+# real Dylint run evidence -- the output-cache family (source-SHA-keyed,
+# issue #1's "cold on every new commit" finding) and the driver/foundation
+# family (issue #1's qualified-vs-short-nightly identity-bridge gap).
+DYLINT_CACHE_VIA_VALUES: frozenset[str] = frozenset({"setup-soldr:dylint-output", "setup-soldr:dylint"})
+_RUST_004_RUNS_PER_PAGE = 20
+_RUST_004_JOBS_PER_PAGE = 50
 
 # CACHE-005: "poisoned/tiny (< family min, or <= 1KB for any family)" --
 # the 1KB floor applies regardless of whether a family declares its own
@@ -248,6 +282,133 @@ def _check_cache_009(classified: tuple[ClassifiedEntry, ...]) -> list[Finding]:
     return findings
 
 
+def _as_dict(value: JsonValue) -> dict[str, JsonValue]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value: JsonValue) -> list[JsonValue]:
+    return value if isinstance(value, list) else []
+
+
+def _is_dylint_job_name(name: str) -> bool:
+    """The template's job id is literally `dylint`, but its DISPLAY name
+    carries the lane-digest suffix `ci_lint.plan`'s title-edit reuse relies
+    on (e.g. `"dylint [309e89b739f0]"`) -- match the prefix, not equality."""
+
+    return name == "dylint" or name.startswith("dylint ") or name.startswith("dylint[")
+
+
+@dataclass(frozen=True)
+class _DylintRunEvidence:
+    run_id: int
+    html_url: str
+
+
+def _find_default_branch_dylint_run(
+    fetch: FetchFn, token: str, repo: str, default_branch: str
+) -> _DylintRunEvidence | None:
+    """The default branch's most recent run (event=push, its own top-level
+    conclusion=success) that has a successful `dylint`-named job --
+    `None` when no such run/job is found, so RUST-004 has nothing to
+    correlate a missing cache entry against yet (never a false positive on
+    a repo/branch that has simply never run Dylint successfully). Matches
+    `ci_lint.reuse.compute_reuse`'s "no network in tests, inject FetchFn"
+    convention; raises `GitHubApiError` on a transport/HTTP failure, same
+    as every other live call in this module."""
+
+    payload = fetch(
+        f"https://api.github.com/repos/{repo}/actions/runs"
+        f"?branch={default_branch}&event=push&status=success&per_page={_RUST_004_RUNS_PER_PAGE}",
+        token,
+    )
+    runs = _as_list(_as_dict(payload).get("workflow_runs"))
+    for raw in runs:
+        run = _as_dict(raw)
+        run_id = run.get("id")
+        html_url = run.get("html_url")
+        if not isinstance(run_id, int):
+            continue
+        jobs_payload = fetch(
+            f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs"
+            f"?per_page={_RUST_004_JOBS_PER_PAGE}",
+            token,
+        )
+        for raw_job in _as_list(_as_dict(jobs_payload).get("jobs")):
+            job = _as_dict(raw_job)
+            name = job.get("name")
+            conclusion = job.get("conclusion")
+            if not isinstance(name, str) or not _is_dylint_job_name(name):
+                continue
+            if conclusion != "success":
+                continue
+            return _DylintRunEvidence(run_id=run_id, html_url=html_url if isinstance(html_url, str) else "")
+    return None
+
+
+def _check_rust_004(
+    ci: CiToml,
+    classified: tuple[ClassifiedEntry, ...],
+    *,
+    fetch: FetchFn,
+    token: str,
+    repo: str,
+    default_branch: str,
+) -> tuple[list[Finding], str | None]:
+    families = sorted(fam_id for fam_id, fam in ci.cache.family.items() if fam.via in DYLINT_CACHE_VIA_VALUES)
+    if not families:
+        return [], None
+
+    try:
+        run = _find_default_branch_dylint_run(fetch, token, repo, default_branch)
+    except GitHubApiError as exc:
+        return [], f"RUST-004: could not confirm the default branch's latest successful dylint job: {exc}"
+    if run is None:
+        return [], None
+
+    default_ref = f"refs/heads/{default_branch}"
+    findings: list[Finding] = []
+    for fam_id in families:
+        on_default = [
+            c
+            for c in classified
+            if c.family_id == fam_id and not c.is_delta and not c.is_retired and c.entry.ref == default_ref
+        ]
+        # NOT "created_at >= the job's own started_at": a live run against
+        # the real template (round-6E) proved that signal false-positives
+        # on an entirely legitimate case -- setup-soldr's dylint-output key
+        # is a hash over (among other things) the workspace's manifest/
+        # target-shape/compiler identity, NOT the commit SHA alone, so an
+        # unrelated commit (e.g. a docs/workflow-only change) reproduces the
+        # IDENTICAL key and correctly gets an "exact hit - skipping save"
+        # (confirmed in zackees/template-python-rust-cmd run 36514507620's
+        # own job log) -- a perfectly healthy warm cache, not a missed
+        # save. The only signal ci-lint can trust without literally
+        # recomputing that hash is "does ANY live entry for this family
+        # exist on the default branch at all" -- exactly the failure mode
+        # issue #1 actually observed (zackees/clud: zero cache layers
+        # reused on either sampled run).
+        if on_default:
+            continue
+        via = ci.cache.family[fam_id].via
+        run_ref = run.html_url or f"run id={run.run_id}"
+        findings.append(
+            Finding(
+                rule="RUST-004",
+                path=f"cache:family:{fam_id}",
+                message=f"successful Dylint run never saved its output cache (see setup-soldr#538/#540): "
+                f"{run_ref}'s 'dylint' job succeeded on {default_ref!r}, but family '{fam_id}' ({via}) "
+                "has no live entry at all on the default branch",
+                fix=f"inspect {run_ref}'s Dylint job log for its 'Setup soldr' Post-job step -- "
+                "setup-soldr's save gate compares a QUALIFIED nightly identity (e.g. "
+                "'nightly-2026-05-28-x86_64-unknown-linux-gnu') against a short one and can silently "
+                "skip saving on a mismatch (setup-soldr#538, fixed in v0.9.81+); confirm setup-soldr is "
+                f"pinned to >= v0.9.81 and that the job actually reports a cache save (not just a hit) "
+                f"for '{fam_id}'",
+            )
+        )
+    return findings, None
+
+
 def _current_base_entries(classified: tuple[ClassifiedEntry, ...]) -> dict[str, list[ClassifiedEntry]]:
     out: dict[str, list[ClassifiedEntry]] = {}
     for c in classified:
@@ -323,10 +484,18 @@ def audit_classified(
     token: str,
     repo: str,
     default_branch: str = "main",
+    fetch: FetchFn | None = None,
 ) -> AuditReport:
-    """The pure half: findings from an already-fetched cache listing.
+    """The pure-ish half: findings from an already-fetched cache listing.
     Split from `run_audit` so `ci_lint.cache.ops` can classify once and
-    reuse it for both the findings and the deletions."""
+    reuse it for both the findings and the deletions. `fetch` is optional
+    and keyword-only, defaulting to `None` (RUST-004 skipped, no runs/jobs
+    lookup, identical output to before round-6E) -- `ci_lint.cache.ops`'s
+    trim/janitor/preprune classify+audit for their OWN rule subsets (none
+    of which include RUST-004, which never deletes anything) and so never
+    pass it, keeping their live-call count unchanged; `run_audit` (used by
+    `ci-lint cache audit` and `precheck --live`) always has a `fetch` in
+    hand already (it just used it to list caches) and passes it through."""
 
     findings: list[Finding] = []
     findings.extend(_check_cache_001(classified))
@@ -336,6 +505,14 @@ def audit_classified(
     findings.extend(_check_cache_009(classified))
     cache008_findings, warning = _check_cache_008(classified, graphql=graphql, token=token, repo=repo)
     findings.extend(cache008_findings)
+
+    if fetch is not None:
+        rust004_findings, rust004_warning = _check_rust_004(
+            ci, classified, fetch=fetch, token=token, repo=repo, default_branch=default_branch
+        )
+        findings.extend(rust004_findings)
+        if rust004_warning and warning is None:
+            warning = rust004_warning
 
     total_bytes = sum(c.entry.size_in_bytes for c in classified)
     budget_bytes = parse_size(ci.cache.budget) if ci.cache.budget else None
@@ -383,7 +560,7 @@ def run_audit(
         raise AuditError(str(exc)) from exc
     classified = classify(ci, entries)
     return audit_classified(
-        ci, classified, graphql=graphql, token=token, repo=repo, default_branch=default_branch
+        ci, classified, graphql=graphql, token=token, repo=repo, default_branch=default_branch, fetch=fetch
     )
 
 

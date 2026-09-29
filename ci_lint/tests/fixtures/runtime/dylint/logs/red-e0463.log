@@ -1,0 +1,24 @@
+dylint [e0463test]	Dylint -- host + every declared cross target	﻿2026-09-29T01:52:21.3098965Z ##[group]Run python3 ci/dylint.py --shape multi-target --results-out /home/runner/work/_temp/dylint-results.json
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:21.4348042Z + soldr dylint prepare --target aarch64-unknown-linux-gnu
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:21.7873016Z prepare --target aarch64-unknown-linux-gnu: 0.4s rc=0
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:21.7874278Z + soldr dylint prepare --target aarch64-apple-darwin
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.1108013Z prepare --target aarch64-apple-darwin: 0.3s rc=0
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.1108683Z + soldr dylint prepare --target x86_64-apple-darwin
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.4312249Z prepare --target x86_64-apple-darwin: 0.3s rc=0
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.4312979Z + soldr dylint prepare --target aarch64-pc-windows-msvc
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.7604068Z prepare --target aarch64-pc-windows-msvc: 0.3s rc=0
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:22.7604785Z + soldr dylint prepare --target x86_64-pc-windows-msvc
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:23.0824403Z prepare --target x86_64-pc-windows-msvc: 0.3s rc=0
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:23.0825775Z + soldr dylint --all -- --workspace --all-targets --target aarch64-unknown-linux-gnu --target aarch64-apple-darwin --target x86_64-apple-darwin --target aarch64-pc-windows-msvc --target x86_64-pc-windows-msvc
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:23.0852695Z soldr broker endpoint: ci=github_actions executable=/home/runner/.soldr/broker/soldr-broker logical=/home/runner/.soldr/broker/soldr-broker.sock bind=/home/runner/.soldr/broker/soldr-broker.sock log=/home/runner/.soldr/broker/broker-spawn.log
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:27.2958864Z     1.67 Building workspace metadata entry `platform_boundary`
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:28.3319821Z     2.70     0.11 ^[[1m^[[92m   Compiling^[[0m platform_boundary v0.1.0 (/home/runner/work/template-python-rust-cmd/template-python-rust-cmd/dylints/platform_boundary)
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:28.4815680Z     2.85     0.26 ^[[1m^[[92m    Finished^[[0m `release` profile [unoptimized] target(s) in 0.25s
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:28.6838953Z     3.06 Checking with toolchain `nightly-2026-05-28-x86_64-unknown-linux-gnu`
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:28.7414789Z     3.11 info: downloading component rust-std
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:31.2201021Z    5.64     1.15 ^[[1m^[[91merror[E0463]^[[0m^[[1m: can't find crate for `core`^[[0m
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:31.2203344Z    5.64   |
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:31.2204981Z    5.64   = note: the `aarch64-pc-windows-msvc` target may not be installed
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:31.2206612Z    5.64   = help: consider downloading the target with `rustup target add aarch64-pc-windows-msvc`
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:31.3402118Z    5.75 ^[[1m^[[91merror^[[0m^[[1m: could not compile `template_platform` (lib) due to 1 previous error^[[0m
+dylint [e0463test]	Dylint -- host + every declared cross target	2026-09-29T01:52:31.3502211Z ##[error]Process completed with exit code 101.

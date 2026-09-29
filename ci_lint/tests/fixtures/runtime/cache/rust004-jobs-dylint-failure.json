@@ -1,0 +1,7 @@
+{
+  "_note": "synthetic (round-6E, RUST-004): same run, but the 'dylint' job did NOT succeed -- _find_default_branch_dylint_run must return None (nothing to correlate a missing cache entry against), not treat a failed job as evidence of anything.",
+  "total_count": 1,
+  "jobs": [
+    {"name": "dylint [309e89b739f0]", "conclusion": "failure", "started_at": "2026-09-29T01:51:58Z"}
+  ]
+}

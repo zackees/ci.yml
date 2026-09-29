@@ -125,6 +125,22 @@ class Plan:
         }
 
 
+def dylint_target_platform_ids(ci: CiToml) -> tuple[str, ...]:
+    """Every `[platforms]` id Dylint must check from the one Linux job
+    (issue #6 §2/§3) when `ci.toml` alone -- not a particular run's flow/
+    tag resolution -- decides it: `[lint.dylint].targets = "all-platforms"`
+    means every declared platform. This is the ci.toml-only half of
+    `compute_plan`'s own `dylint_targets` computation below (which also
+    considers a flow's `resolved.dylint` override); `ci_lint.runtime.dylint`
+    (RUST-003's `ci-lint dylint coverage`) has no run/flow/tag context of
+    its own -- it is a standalone repo-level check -- so it calls this
+    directly rather than a full `compute_plan`."""
+
+    if ci.lint_dylint is not None and ci.lint_dylint.targets == "all-platforms":
+        return tuple(sorted(ci.platforms))
+    return ()
+
+
 def _required_job_ids(
     needs_platform_lanes: bool,
     dylint_targets: tuple[str, ...],
