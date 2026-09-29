@@ -5,7 +5,9 @@ No cargo is invoked; targets are derived from tomllib + the filesystem.
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from ci_lint.cargo_scan import discover_workspace
 from ci_lint.rules.rust_units import check_rust_005, check_rust_011, check_rust_012
@@ -69,6 +71,72 @@ class CargoScanUnitTest(unittest.TestCase):
         crates = discover_workspace(repo)
         names = expected_target_names(crates[0])
         self.assertEqual({"demo-core:lib": "lib"}, names)
+
+
+def _write(root: Path, rel: str, content: str) -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+_WORKSPACE_MANIFEST = '[workspace]\nmembers = ["crates/private/demo-core"]\n'
+_PRIVATE_MANIFEST = (
+    '[package]\nname = "demo-core"\nversion = "0.1.0"\nedition = "2021"\npublish = false\n'
+)
+
+
+class RustUnitsMultilineCfgFeatureTest(unittest.TestCase):
+    """Round-6B regression (found on zackees/template-python-rust-cmd,
+    round 2F): `cargo_scan.has_cfg_feature` matched the literal substring
+    `"cfg(feature"` / `"cfg_attr(feature"` against the whole (comment/
+    string-stripped) file text, so splitting the paren and `feature`
+    across lines -- `#[cfg(\n    feature = "json"\n)]` -- evaded RUST-011
+    the same way it evaded LAYOUT-001. Each case builds a throwaway
+    workspace + private-crate manifest (matching `[rust].private =
+    "crates/private/*"`) on disk and reuses the RUST-011 green fixture's
+    `ci.toml`, so only `has_cfg_feature` -- not `publish = false` /
+    `[features]` -- is under test."""
+
+    def _findings(self, lib_rs: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root, "Cargo.toml", _WORKSPACE_MANIFEST)
+            _write(root, "crates/private/demo-core/Cargo.toml", _PRIVATE_MANIFEST)
+            _write(root, "crates/private/demo-core/src/lib.rs", lib_rs)
+            repo = fixture("RUST-011", "green")
+            ci, _ = load_ci_toml(repo)
+            crates = discover_workspace(root)
+            findings = check_rust_011(ci, crates, root)
+        return [f.rule for f in findings]
+
+    def test_multiline_cfg_feature(self) -> None:
+        findings = self._findings(
+            '#[cfg(\n    feature = "json"\n)]\n'
+            "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n"
+        )
+        self.assertIn("RUST-011", findings)
+
+    def test_multiline_cfg_attr_feature(self) -> None:
+        findings = self._findings(
+            '#[cfg_attr(\n    feature = "json",\n    derive(Debug)\n)]\npub struct S;\n'
+        )
+        self.assertIn("RUST-011", findings)
+
+    def test_multiline_block_comment_mentioning_cfg_feature_stays_green(self) -> None:
+        findings = self._findings(
+            '/* mentions cfg(\n   feature = "json"\n) in prose, not real code */\n'
+            "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n"
+        )
+        self.assertEqual([], findings)
+
+    def test_multiline_raw_string_mentioning_cfg_feature_stays_green(self) -> None:
+        findings = self._findings(
+            '#[doc = r#"\n'
+            '    see cfg(\n    feature = "json"\n    ) for context\n'
+            '"#]\n'
+            "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n"
+        )
+        self.assertEqual([], findings)
 
 
 if __name__ == "__main__":

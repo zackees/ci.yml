@@ -11,12 +11,19 @@ the way ci.toml's `[rust.tests].binaries` does: `<crate>:lib`,
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 from ci_lint.repo_files import list_repo_files
-from ci_lint.rust_lexer import strip_comments_and_strings
+from ci_lint.rust_lexer import find_attribute_and_macro_spans, strip_comments_and_strings
+
+# Round-6B: match `cfg(feature`/`cfg_attr(feature` allowing whitespace
+# (including newlines) between the paren and `feature`, e.g.
+# `#[cfg(\n    feature = "json"\n)]`, matched against a whole
+# `find_attribute_and_macro_spans` span rather than a raw source line.
+_CFG_FEATURE_RE = re.compile(r"cfg(_attr)?\(\s*feature")
 
 
 @dataclass(frozen=True)
@@ -249,7 +256,10 @@ def has_cfg_feature(repo_root: Path, crate_dir_rel: str) -> bool:
     `cfg(feature = ...)` / `cfg_attr(feature = ...)` in real code -- not
     merely mentioned inside a `//`/`///`/`//!`/`/* */` doc comment or a
     string literal (round-2A brief, defect 2: a doc comment mentioning
-    `cfg(feature = "json")` was flagged as though it were real code)."""
+    `cfg(feature = "json")` was flagged as though it were real code), and
+    not evaded by splitting the attribute/macro across lines (round-6B:
+    `#[cfg(\n    feature = "json"\n)]` used to evade the old
+    `"cfg(feature" in code` line-blind substring check)."""
 
     prefix = f"{crate_dir_rel}/src/" if crate_dir_rel != "." else "src/"
     for rel in list_repo_files(repo_root):
@@ -260,6 +270,7 @@ def has_cfg_feature(repo_root: Path, crate_dir_rel: str) -> bool:
         except OSError:
             continue
         code = strip_comments_and_strings(text)
-        if "cfg(feature" in code or "cfg_attr(feature" in code:
-            return True
+        for span in find_attribute_and_macro_spans(code):
+            if _CFG_FEATURE_RE.search(span.text):
+                return True
     return False
