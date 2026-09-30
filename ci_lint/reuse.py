@@ -12,7 +12,9 @@ inputs) stand in for this lane's.
 
 Only ever consulted for the `pull_request` event -- never `push`,
 `schedule`, or `workflow_dispatch` (round-3A brief, Part 2: "Never reuse
-on push/schedule/dispatch").
+on push/schedule/dispatch"). Verified reuse on default-branch pushes
+(GEN-021) is a separate mechanism with its own proof rules:
+`ci_lint.default_branch_reuse` (`ci-lint reuse-check`).
 """
 
 from __future__ import annotations

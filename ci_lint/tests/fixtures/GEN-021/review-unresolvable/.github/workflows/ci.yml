@@ -1,0 +1,23 @@
+# NEEDS REVIEW: a gate-required job's `if:` combines github.event_name with
+# `||`; ci_lint cannot prove whether a default-branch push runs it.
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  unit:
+    name: Test linux-x64 (unit)
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[ci full]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: soldr cargo test --locked
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [unit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: python3 ci/ci_ok.py

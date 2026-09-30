@@ -1,0 +1,315 @@
+{
+ "https://api.github.com/repos/zackees/clud/actions/runs/36630585480/jobs?filter=latest&per_page=100&page=1": [
+  200,
+  {
+   "jobs": [
+    {
+     "completed_at": "2026-09-29T21:03:13Z",
+     "conclusion": "success",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618495557",
+     "id": 109618495557,
+     "name": "Static checks",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:02:41Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:07:11Z",
+     "conclusion": "success",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618737886",
+     "id": 109618737886,
+     "name": "Build linux-x64 / x86_64-unknown-linux-gnu",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:17Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:07:17Z",
+     "conclusion": "success",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618738073",
+     "id": 109618738073,
+     "name": "Dylint / Dylint",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:17Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:03:14Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618738672",
+     "id": 109618738672,
+     "name": "Build windows-x64",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:14Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:03:14Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618738755",
+     "id": 109618738755,
+     "name": "Build macos-x64",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:14Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:03:14Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618738930",
+     "id": 109618738930,
+     "name": "Build macos-arm",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:14Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:03:14Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618739403",
+     "id": 109618739403,
+     "name": "Build windows-arm",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:14Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:03:14Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618739428",
+     "id": 109618739428,
+     "name": "Build linux-arm",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:14Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:03:14Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618740636",
+     "id": 109618740636,
+     "name": "Test windows-arm",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:15Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:03:14Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618740762",
+     "id": 109618740762,
+     "name": "Test linux-arm",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:15Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:03:14Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618740873",
+     "id": 109618740873,
+     "name": "Test macos-arm",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:15Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:03:14Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618740971",
+     "id": 109618740971,
+     "name": "Test windows-x64",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:15Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:03:14Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109618741270",
+     "id": 109618741270,
+     "name": "Test macos-x64",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:03:15Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:10:32Z",
+     "conclusion": "success",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109620283395",
+     "id": 109620283395,
+     "name": "Test linux-x64 (unit) / x86_64-unknown-linux-gnu unit",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:07:14Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:07:11Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109620284321",
+     "id": 109620284321,
+     "name": "Test linux-x64 (harness)",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:07:11Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:07:11Z",
+     "conclusion": "skipped",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109620285329",
+     "id": 109620285329,
+     "name": "Test linux-x64 (integration)",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:07:12Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-29T21:10:39Z",
+     "conclusion": "success",
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480/job/109621556981",
+     "id": 109621556981,
+     "name": "CI OK",
+     "run_attempt": 1,
+     "run_id": 36630585480,
+     "started_at": "2026-09-29T21:10:36Z",
+     "status": "completed"
+    }
+   ],
+   "total_count": 17
+  }
+ ],
+ "https://api.github.com/repos/zackees/clud/actions/runs?head_sha=27c81ca09e77f13808954eb99d5ca3e2859895b0&event=pull_request&per_page=100&page=1": [
+  200,
+  {
+   "total_count": 2,
+   "workflow_runs": [
+    {
+     "conclusion": "success",
+     "created_at": "2026-09-29T21:02:37Z",
+     "event": "pull_request",
+     "head_branch": "fix/grind-detached-head-1382",
+     "head_repository": {
+      "full_name": "zackees/clud"
+     },
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585480",
+     "id": 36630585480,
+     "name": "CI",
+     "path": ".github/workflows/ci.yml",
+     "pull_requests": [],
+     "run_attempt": 1,
+     "status": "completed",
+     "updated_at": "2026-09-29T21:10:40Z"
+    },
+    {
+     "conclusion": "skipped",
+     "created_at": "2026-09-29T21:02:37Z",
+     "event": "pull_request",
+     "head_branch": "fix/grind-detached-head-1382",
+     "head_repository": {
+      "full_name": "zackees/clud"
+     },
+     "head_sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36630585889",
+     "id": 36630585889,
+     "name": "Installer acceptance",
+     "path": ".github/workflows/installer-check.yml",
+     "pull_requests": [],
+     "run_attempt": 1,
+     "status": "completed",
+     "updated_at": "2026-09-29T21:02:39Z"
+    }
+   ]
+  }
+ ],
+ "https://api.github.com/repos/zackees/clud/commits/37288c0185deaab0e1babc5ec1e67ac0e1fb692b/pulls?per_page=100": [
+  200,
+  [
+   {
+    "base": {
+     "ref": "main",
+     "repo": {
+      "full_name": "zackees/clud"
+     },
+     "sha": "c5f41a5453bbdd282e53c2444092d500d997738c"
+    },
+    "head": {
+     "ref": "fix/grind-detached-head-1382",
+     "repo": {
+      "full_name": "zackees/clud"
+     },
+     "sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0"
+    },
+    "html_url": "https://github.com/zackees/clud/pull/1575",
+    "merge_commit_sha": "37288c0185deaab0e1babc5ec1e67ac0e1fb692b",
+    "merged_at": "2026-09-29T21:11:07Z",
+    "number": 1575,
+    "state": "closed",
+    "title": "fix(grind): recover a detached HEAD at preflight; list leftover branches at finish (#1382)"
+   }
+  ]
+ ],
+ "https://api.github.com/repos/zackees/clud/git/commits/27c81ca09e77f13808954eb99d5ca3e2859895b0": [
+  200,
+  {
+   "message": "fix(grind): recover a detached HEAD at preflight and list leftover branches at finish (#1382)",
+   "parents": [
+    {
+     "sha": "c5f41a5453bbdd282e53c2444092d500d997738c"
+    }
+   ],
+   "sha": "27c81ca09e77f13808954eb99d5ca3e2859895b0",
+   "tree": {
+    "sha": "12b64538f504affae12e7f2006ae24ef34b06f40"
+   }
+  }
+ ],
+ "https://api.github.com/repos/zackees/clud/git/commits/37288c0185deaab0e1babc5ec1e67ac0e1fb692b": [
+  200,
+  {
+   "message": "fix(grind): recover a detached HEAD at preflight and list leftover branches at finish (#1382) (#1575)",
+   "parents": [
+    {
+     "sha": "c5f41a5453bbdd282e53c2444092d500d997738c"
+    }
+   ],
+   "sha": "37288c0185deaab0e1babc5ec1e67ac0e1fb692b",
+   "tree": {
+    "sha": "12b64538f504affae12e7f2006ae24ef34b06f40"
+   }
+  }
+ ]
+}

@@ -52,6 +52,7 @@ from ci_lint.fbuild_coverage import render_text as render_fbuild_coverage_text
 from ci_lint.fbuild_coverage import to_json_dict as fbuild_coverage_to_json_dict
 from ci_lint.finding import Finding, Status
 from ci_lint.fleet_cli import register as register_fleet
+from ci_lint.reuse_cli import register as register_reuse
 from ci_lint.github_api import default_delete, default_fetch, default_fetch_status, default_graphql
 from ci_lint.perf import (
     PERF_SCHEMA_VERSION,
@@ -1518,6 +1519,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_rust_toolchain_build.set_defaults(func=_cmd_rust_toolchain_build_check)
 
     register_fleet(sub)
+    register_reuse(sub)
 
     return parser
 
