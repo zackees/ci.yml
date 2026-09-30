@@ -747,7 +747,7 @@ jobs:
         run: python3 ci/ci_ok.py      # section 4.5 semantics
 ```
 
-`ci_lint/tests/fixtures/GEN-021/green/.github/workflows/ci.yml` is a trimmed copy of this wiring and is checked clean by `GEN-021` in the test suite, so the snippet and the rule cannot silently drift apart.
+`ci_lint/tests/fixtures/GEN-021/green/.github/workflows/ci.yml` is a trimmed copy of this wiring (in its Phase 1 `--mode shadow` form) and is checked clean by `GEN-021` in the test suite, so the snippet's shape and the rule cannot silently drift apart.
 
 ### 13.2 Strategy (ii) variant
 
