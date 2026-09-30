@@ -44,6 +44,11 @@ round-2A) checks a real build's output against. It documents what
   manifest.json` (`PKG-006`). `ci_lint perf compare` (`ci_lint.perf`) --
   a baseline/current benchmark comparison, non-gating unless `[suites.
   perf].gating = true` and `--threshold-pct` is given.
+- #156 (`GEN-021`): `ci_lint reuse-check` -- verified reuse on
+  default-branch pushes (GET-only, fail-closed, `enforce|shadow`) -- and
+  `ci_lint reuse-report` (retroactive shadow evidence), plus the static
+  `GEN-021` precheck rule. See "Verified reuse on default-branch pushes"
+  under "Runtime commands".
 
 `ci_lint audit` (round-5) is a live, read-only **settings/secrets** audit
 -- `SEC-005`/`006`/`007`, `GEN-006`, `GEN-011` -- see "Settings audit
@@ -658,6 +663,7 @@ when neither PyYAML nor `yq` is available).
 | `GEN-016` | (#23 §3) A `ci-pre.yml` job other than `cache-janitor` with `concurrency:`, or with `needs: cache-janitor`. | Remove it: check jobs take no lock and never wait on a queued sweep. |
 | `GEN-017` | (#23 §3) The `cache-janitor` job lacks the repo-wide, non-cancelling group. | `concurrency: { group: cache-janitor, cancel-in-progress: false }`. |
 | `GEN-018` | (#23 §2) An install step in `ci-pre.yml`: `astral-sh/setup-uv`, `actions/setup-python`, or a `run:` invoking `uv`/`uvx`/`pip`/`pip3`/`pipx`/`python -m pip`. | Use stdlib `python3` only, or move the step into a later `ci.yml` job. |
+| `GEN-021` | (#156, static) In a workflow triggered by both `pull_request` and a `push` reaching the default branch: a job-level `if:` conjunct that runs a job on PRs but never on a default-branch push (`github.event_name != 'push'`, `github.event_name == 'pull_request'`, `github.ref != 'refs/heads/<default>'`, `github.ref_name != '<default>'`, `startsWith(github.ref, 'refs/pull/')`) on a job the gate job (`ci-ok`/`gate`, or named `CI OK`) needs, with no `ci-lint reuse-check` decision in the workflow, is a violation. `needs_review`: the same skip beside a reuse decision; no recognizable gate job; an event/ref expression the classifier cannot resolve (`||` mixing PR and non-PR events, `!(...)`, `contains(...)`); a `needs.<X>.outputs.reuse` whose job `<X>` does not run `reuse-check` (directly or in its local reusable workflow); a consumption other than `needs.<X>.outputs.reuse != 'true'`; a literal `--required-job` matching no job display name; a job skipped on reuse that no `--required-job` covers. A job that never runs on a PR (`github.event_name == 'push'`, `github.ref == 'refs/heads/<default>'`, ...) is not a subject. | Run the job on default-branch pushes, or skip it only through `if: needs.<decision job>.outputs.reuse != 'true'` fed by `ci-lint reuse-check` (see "Verified reuse on default-branch pushes" below); a live merge queue validating the exact merge commit (`GEN-010` live half) is the only other justification, recorded as a `[[exceptions]]` entry. |
 | `SEC-001` | `secrets.<X>` other than `secrets.GITHUB_TOKEN` or a name in `[allow].secrets`, or `secrets: inherit`. | Remove the dependency; this profile is OIDC-only. |
 | `SEC-002` | Top-level permissions wider than `contents: read` + `actions: read` (round-4B: `actions: read` is now free at the top level too). Per job: any grant beyond `contents: read`/`actions: read` (free) whose job id is not listed in `[allow].permissions."<permission>: <value>"`; `id-token: write` additionally must be on an OIDC publisher: the `publish` job with `environment:` set to `[publish].pypi.environment` (default `pypi`), or a crates.io trusted-publishing job that runs `rust-lang/crates-io-auth-action` under an `environment:` (ci.yml#134). Checked identically inside a reusable (`workflow_call`) workflow file, by its own job ids. | Narrow the permissions block, or add the job id to `[allow].permissions` for that exact grant. |
 | `SEC-003` | `pull_request_target` or `workflow_run` declared anywhere. | Use `pull_request` instead. |
@@ -844,6 +850,8 @@ above, which are all static.
 | `ci-lint precheck --local` (or env `ACT=true`) [`--github-output`] [`--reuse`] | -- | Runs every static group as usual, then adds one `needs_review` finding per check that needs the GitHub API and is not implemented yet (`CACHE-005`/`006`/`008`) or needs a real local act cache-store path (`ACT-001`), each explicitly labeled `skipped (local): ...` -- never silently passed. Round-3A: `--github-output` writes the same `$GITHUB_OUTPUT` keys as `ci-lint plan --github-output` (computing a plan internally, same as `--plan-out` already did); `--reuse` adds the title-edit reuse lookup to both `--plan-out`'s written JSON (under a `"reuse"` key) and `--github-output`. | as `precheck` |
 | `ci-lint cache payload-check --manifest <file.json> [--json]` (round M2-20) | a JSON array of path strings (e.g. from `tar -tf` on a saved cache archive, or a wrapper-emitted manifest) | `CACHE-007` runtime half: classifies each path against `[cache].never`'s forbidden content classes (linked test binary, nextest archive, `incremental/`, a whole `target/` directory) | 1 if any violation, 2 on a bad `--manifest` |
 | `ci-lint act audit --repo <path> --store-dir <dir> [--json]` (round M2-20) | a local act `--cache-server-path` directory (`bolt.db`'s cache-index records + real bytes on disk under `cache/`) | `ACT-001`: the local act cache store's total on-disk bytes must fit `ci.toml [cache].budget`, and no complete cache-index entry's key may match a `[cache].retired` family | 1 if any violation |
+| `ci-lint reuse-check --repo <owner/name> --sha <pushed sha> --workflow <file>... --required-job <name>... [--max-age-hours 24] [--mode enforce\|shadow] [--default-branch main] [--event-name E] [--ref R] [--now T] [--json] [--out F] [--github-output] [--record F\|--replay F]` (#156) | GitHub REST, GET only: the pushed commit's associated PRs, both commits' trees, the PR head's `pull_request` runs and their jobs | `GEN-021`'s runtime decision: may this default-branch push skip validation because the one merged PR's head had the identical tree and a green, fresh, per-job proof? See "Verified reuse on default-branch pushes" below. `--repo`/`--sha`/`--event-name`/`--ref` default to `$GITHUB_REPOSITORY`/`$GITHUB_SHA`/`$GITHUB_EVENT_NAME`/`$GITHUB_REF`. | 0 whenever the arguments are valid (every "cannot prove" outcome is `reuse=false`), 2 on a usage error |
+| `ci-lint reuse-report --repo <owner/name> --since YYYY-MM-DD [--until YYYY-MM-DD] --workflow <file>... --required-job <name>... [--max-age-hours 24] [--default-branch main] [--min-runs 100] [--limit 300] [--accept-flaky <run id>...] [--json] [--record F\|--replay F]` (#156) | GitHub REST, GET only: the first workflow's completed default-branch `push` runs since the date, then the same reads as `reuse-check` per run | Retroactive shadow mode: re-evaluates each push run with the clock set to its `created_at` and compares the verdict with the run's real conclusion -- `safe-skip`, `false-reuse-candidate` (would have reused, but the push run failed), `accepted-flaky` (a candidate passed via `--accept-flaky` after analysis), `must-run`, `no-signal` (cancelled). Verdict `promotable` needs >= `--min-runs` decisive runs and zero candidates; otherwise `insufficient-sample`, `blocked`, or `error`. | 0 = promotable, 1 = not promotable, 2 on a usage error |
 | `ci-lint selftest` | -- | Runs this package's own `unittest` suite (`ci_lint.selftest`; zackees/zccache#1760 -- agents must be able to run this directly). | 0/1 |
 
 ### Reuse verification (round-3A, `ci-lint gate --reuse`)
@@ -874,6 +882,78 @@ pass. A job the plan does *not* mark reused, or whose live verification
 fails (wrong digest, wrong head SHA, not `success`), is the pre-existing
 `TEST-001` "a skip is a failure" outcome. The gate's summary table shows
 `reused from run <N>` next to any job whose skip was accepted this way.
+
+### Verified reuse on default-branch pushes (`ci-lint reuse-check`, GEN-021, #156)
+
+A different mechanism from title-edit reuse above (which reuses lanes
+within the SAME pull_request head by lane digest, `ci_lint.reuse`, whose
+behavior is unchanged): `ci_lint.default_branch_reuse` decides whether a
+**default-branch push** may skip validation because a pull request already
+validated the identical tree. Policy: docs/policy-general.md "Default-branch
+validation"; full design, threat model, rollout, and reference wiring:
+[docs/designs/default-branch-verified-reuse.md](designs/default-branch-verified-reuse.md).
+
+Procedure (stdlib `urllib` through the injectable `FetchStatusFn`, GET only;
+the typical verified decision is 5 calls):
+
+1. Preconditions, no API call: the event is `push` and the ref is
+   `refs/heads/<default branch>`; a token (`GITHUB_TOKEN`/`GH_TOKEN`) exists.
+2. `GET /repos/{r}/commits/{sha}/pulls`: exactly one PR with `merged_at` set,
+   `base.ref` = the default branch, and `merge_commit_sha` = the pushed SHA
+   (GitHub's documented squash commit / merge commit / rebase tip), whose
+   head is in this repository.
+3. `GET /repos/{r}/git/commits/{sha}` and `.../git/commits/{head}`: the tree
+   SHAs are equal.
+4. `GET /repos/{r}/actions/runs?head_sha={head}&event=pull_request` (up to
+   3 pages): per `--workflow`, the newest run created at or before the
+   clock, passing over `cancelled`/`skipped`/`stale`, must be completed,
+   `success`, and for this repository.
+5. `GET /repos/{r}/actions/runs/{id}/jobs?filter=latest` (up to 3 pages):
+   every `--required-job` (exact display name) is `success` and completed
+   within `--max-age-hours` before the clock (and not after it).
+
+`--mode shadow` computes everything but always reports `reuse=false` and the
+proof as `would_reuse`. `--github-output` appends `reuse`, `would_reuse`,
+`reason`, `pr`, `run_id`, `run_url`, `tree`; when `$GITHUB_STEP_SUMMARY` is
+set a provenance block (reason, PR, tree, proving run, mode) is appended.
+`--json`/`--out` write the schema-1 document (`schema`, `command`, `repo`,
+`sha`, `default_branch`, `event_name`, `ref`, `mode`, `reuse`, `would_reuse`,
+`reason`, `detail`, `pr`, `pr_head_sha`, `tree`, `run_id`, `run_url`,
+`runs[]`, `workflows`, `required_jobs`, `jobs[]`, `max_age_hours`,
+`evaluated_at`, `api_calls`). Token permissions: `contents: read`,
+`actions: read`, `pull-requests: read` (in a `ci.toml` repository the last
+needs an `[allow].permissions` grant for the decision job, `SEC-002`).
+
+Reason codes (every value except `verified` means `reuse=false`,
+`would_reuse=false`, exit 0):
+
+| Reason | Condition |
+| --- | --- |
+| `verified` | Every condition above holds. |
+| `event-not-push` | The event is not `push` (PR, `workflow_dispatch`, `schedule`, ...). |
+| `ref-not-default-branch` | The ref is not `refs/heads/<default branch>` (a tag push, another branch). |
+| `no-token` | No `GITHUB_TOKEN`/`GH_TOKEN`. |
+| `api-error` | A non-200 response, transport failure, or invalid JSON. |
+| `rate-limited` | HTTP 429, or a 403 whose message mentions a rate limit. |
+| `api-malformed` | A required field is missing or mistyped. |
+| `no-associated-pr` | No merged PR into the default branch with `merge_commit_sha` = the pushed SHA (a direct push, or the association is not indexed yet). |
+| `ambiguous-pr` | More than one such PR. |
+| `fork-head` | The PR head lives in another (or a deleted) repository. |
+| `tree-mismatch` | The pushed tree differs from the PR head's tree. |
+| `too-many-runs` | More than 300 runs on the head SHA. |
+| `run-in-progress` | The newest non-cancelled run of the workflow on the head has not completed. |
+| `newest-run-not-success` | The newest decisive run concluded something other than `success`. |
+| `no-successful-run` | No decisive run of the workflow on the head. |
+| `fork-run` | The proving run's `head_repository` is not this repository. |
+| `too-many-jobs` | More than 300 jobs in a proving run. |
+| `required-job-missing` | No job with that exact display name in the proving run(s) (renamed job, different tier). |
+| `required-job-not-success` | A required job is skipped, cancelled, neutral, failed, or unfinished (e.g. an iteration-mode run that skipped the Linux lanes). |
+| `stale-run` | A proving job completed more than `--max-age-hours` before the clock. |
+| `run-after-decision` | A proving job completed after the clock (retroactive evaluation only). |
+
+Fixtures: `ci_lint/tests/fixtures/runtime/default-branch-reuse/` (live
+`--record` recordings of zackees/clud PRs #1643, #1575, #1630, trimmed).
+`ci-lint reuse-report` (row above) is the shadow-mode promotion evidence.
 
 ### Example drift classification (round-6C, `ci-lint example drift`)
 
