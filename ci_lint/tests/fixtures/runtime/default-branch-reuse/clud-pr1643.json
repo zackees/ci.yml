@@ -1,0 +1,351 @@
+{
+ "https://api.github.com/repos/zackees/clud/actions/runs/36742138072/jobs?filter=latest&per_page=100&page=1": [
+  200,
+  {
+   "jobs": [
+    {
+     "completed_at": "2026-09-30T16:10:21Z",
+     "conclusion": "success",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979014333",
+     "id": 109979014333,
+     "name": "Static checks",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:09:44Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:12:19Z",
+     "conclusion": "success",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979331475",
+     "id": 109979331475,
+     "name": "Clippy linux-x64 / x86_64-unknown-linux-gnu",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:27Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:14:36Z",
+     "conclusion": "success",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979331518",
+     "id": 109979331518,
+     "name": "Build linux-x64 / x86_64-unknown-linux-gnu",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:25Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:14:35Z",
+     "conclusion": "success",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979331527",
+     "id": 109979331527,
+     "name": "Dylint / Dylint",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:26Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:10:21Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979333132",
+     "id": 109979333132,
+     "name": "Build macos-arm",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:22Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:10:21Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979333360",
+     "id": 109979333360,
+     "name": "Build windows-arm",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:22Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:10:21Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979333433",
+     "id": 109979333433,
+     "name": "Build windows-x64",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:22Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:10:21Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979333445",
+     "id": 109979333445,
+     "name": "Build macos-x64",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:22Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:10:22Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979333561",
+     "id": 109979333561,
+     "name": "Test macos-arm",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:22Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:10:22Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979333783",
+     "id": 109979333783,
+     "name": "Test windows-arm",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:22Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:10:21Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979334336",
+     "id": 109979334336,
+     "name": "Build linux-arm",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:22Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:10:22Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979335016",
+     "id": 109979335016,
+     "name": "Test windows-x64",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:22Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:10:22Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979335041",
+     "id": 109979335041,
+     "name": "Test linux-arm",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:22Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:10:22Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109979335272",
+     "id": 109979335272,
+     "name": "Test macos-x64",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:10:22Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:15:58Z",
+     "conclusion": "success",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109981139435",
+     "id": 109981139435,
+     "name": "Test linux-x64 (unit) (rust) / x86_64-unknown-linux-gnu unit",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:14:40Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:16:33Z",
+     "conclusion": "success",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109981139530",
+     "id": 109981139530,
+     "name": "Test linux-x64 (unit) (py2of2) / x86_64-unknown-linux-gnu unit",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:14:40Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:16:33Z",
+     "conclusion": "success",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109981139574",
+     "id": 109981139574,
+     "name": "Test linux-x64 (unit) (py1of2) / x86_64-unknown-linux-gnu unit",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:14:39Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:14:36Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109981140286",
+     "id": 109981140286,
+     "name": "Test linux-x64 (harness)",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:14:37Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:14:36Z",
+     "conclusion": "skipped",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109981140992",
+     "id": 109981140992,
+     "name": "Test linux-x64 (integration)",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:14:37Z",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-09-30T16:16:41Z",
+     "conclusion": "success",
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072/job/109981971090",
+     "id": 109981971090,
+     "name": "CI OK",
+     "run_attempt": 1,
+     "run_id": 36742138072,
+     "started_at": "2026-09-30T16:16:37Z",
+     "status": "completed"
+    }
+   ],
+   "total_count": 20
+  }
+ ],
+ "https://api.github.com/repos/zackees/clud/actions/runs?head_sha=8f8bc6c40d3f277730ef843e7a843d3b10963023&event=pull_request&per_page=100&page=1": [
+  200,
+  {
+   "total_count": 2,
+   "workflow_runs": [
+    {
+     "conclusion": "skipped",
+     "created_at": "2026-09-30T16:09:29Z",
+     "event": "pull_request",
+     "head_branch": "feat/1606-clean-worktrees-verdict",
+     "head_repository": {
+      "full_name": "zackees/clud"
+     },
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742137868",
+     "id": 36742137868,
+     "name": "Installer acceptance",
+     "path": ".github/workflows/installer-check.yml",
+     "pull_requests": [],
+     "run_attempt": 1,
+     "status": "completed",
+     "updated_at": "2026-09-30T16:09:30Z"
+    },
+    {
+     "conclusion": "success",
+     "created_at": "2026-09-30T16:09:29Z",
+     "event": "pull_request",
+     "head_branch": "feat/1606-clean-worktrees-verdict",
+     "head_repository": {
+      "full_name": "zackees/clud"
+     },
+     "head_sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+     "html_url": "https://github.com/zackees/clud/actions/runs/36742138072",
+     "id": 36742138072,
+     "name": "CI",
+     "path": ".github/workflows/ci.yml",
+     "pull_requests": [],
+     "run_attempt": 1,
+     "status": "completed",
+     "updated_at": "2026-09-30T16:16:42Z"
+    }
+   ]
+  }
+ ],
+ "https://api.github.com/repos/zackees/clud/commits/1ab2f4e49d7eee355dda5878e9dc1f354886f81c/pulls?per_page=100": [
+  200,
+  [
+   {
+    "base": {
+     "ref": "main",
+     "repo": {
+      "full_name": "zackees/clud"
+     },
+     "sha": "2d3f32c39ff27808889cc79a6e5ca723b11bf4ad"
+    },
+    "head": {
+     "ref": "feat/1606-clean-worktrees-verdict",
+     "repo": {
+      "full_name": "zackees/clud"
+     },
+     "sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023"
+    },
+    "html_url": "https://github.com/zackees/clud/pull/1643",
+    "merge_commit_sha": "1ab2f4e49d7eee355dda5878e9dc1f354886f81c",
+    "merged_at": "2026-09-30T16:18:11Z",
+    "number": 1643,
+    "state": "closed",
+    "title": "feat(worktrees): --clean-worktrees shares the squash-aware repo_worktree_verdict (Fixes #1606)"
+   }
+  ]
+ ],
+ "https://api.github.com/repos/zackees/clud/git/commits/1ab2f4e49d7eee355dda5878e9dc1f354886f81c": [
+  200,
+  {
+   "message": "feat(worktrees): --clean-worktrees shares the squash-aware repo_worktree_verdict (Fixes #1606) (#1643)",
+   "parents": [
+    {
+     "sha": "2d3f32c39ff27808889cc79a6e5ca723b11bf4ad"
+    }
+   ],
+   "sha": "1ab2f4e49d7eee355dda5878e9dc1f354886f81c",
+   "tree": {
+    "sha": "3410191f9f21351dea1c1504cc4fafc08b4edf55"
+   }
+  }
+ ],
+ "https://api.github.com/repos/zackees/clud/git/commits/8f8bc6c40d3f277730ef843e7a843d3b10963023": [
+  200,
+  {
+   "message": "ci: run the routine Linux lanes on the final commit (#1606)",
+   "parents": [
+    {
+     "sha": "8f8f0b9abbd35813c5a0a02465ad3c5e2d2becbc"
+    }
+   ],
+   "sha": "8f8bc6c40d3f277730ef843e7a843d3b10963023",
+   "tree": {
+    "sha": "3410191f9f21351dea1c1504cc4fafc08b4edf55"
+   }
+  }
+ ]
+}

@@ -1,0 +1,59 @@
+{
+ "https://api.github.com/repos/zackees/clud/commits/8c20d6044e963952c7b84a07481b16fe2bc36b18/pulls?per_page=100": [
+  200,
+  [
+   {
+    "base": {
+     "ref": "main",
+     "repo": {
+      "full_name": "zackees/clud"
+     },
+     "sha": "57cb920a53e056274b19bf2a5b8da7a2f8709354"
+    },
+    "head": {
+     "ref": "fix/1628-windows-build-and-paths",
+     "repo": {
+      "full_name": "zackees/clud"
+     },
+     "sha": "17983132904d52990214652bce74091e4b124335"
+    },
+    "html_url": "https://github.com/zackees/clud/pull/1630",
+    "merge_commit_sha": "8c20d6044e963952c7b84a07481b16fe2bc36b18",
+    "merged_at": "2026-09-30T10:44:06Z",
+    "number": 1630,
+    "state": "closed",
+    "title": "fix(windows): rm_tool clippy build break + verbatim-path / same_path test failures (#1628)"
+   }
+  ]
+ ],
+ "https://api.github.com/repos/zackees/clud/git/commits/17983132904d52990214652bce74091e4b124335": [
+  200,
+  {
+   "message": "ci: trigger routine Linux lanes after the ci-windows run",
+   "parents": [
+    {
+     "sha": "65bee89bdcb0aafd265ee17cdc260971935787d4"
+    }
+   ],
+   "sha": "17983132904d52990214652bce74091e4b124335",
+   "tree": {
+    "sha": "230a730a1d1e789caa04bf94dc6b1c99a9a32a99"
+   }
+  }
+ ],
+ "https://api.github.com/repos/zackees/clud/git/commits/8c20d6044e963952c7b84a07481b16fe2bc36b18": [
+  200,
+  {
+   "message": "fix(windows): rm_tool clippy build break + verbatim-path / same_path test failures (#1628) (#1630)",
+   "parents": [
+    {
+     "sha": "f71ef5785e4ecf95b366257f5876224d09501616"
+    }
+   ],
+   "sha": "8c20d6044e963952c7b84a07481b16fe2bc36b18",
+   "tree": {
+    "sha": "e078050ecfa48e1ff17d1862e6d4e1c316d91d94"
+   }
+  }
+ ]
+}
