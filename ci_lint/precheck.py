@@ -23,6 +23,7 @@ from ci_lint.rules.build_parallelism import check_gen_012
 from ci_lint.rules.cache_payload import check_cache_007_static
 from ci_lint.rules.cache_restore_copy import check_gen_013
 from ci_lint.rules.cache_static import check_group9
+from ci_lint.rules.default_branch_skip import check_gen_021
 from ci_lint.rules.ci_pre import check_group12
 from ci_lint.rules.contract import check_ct_006, check_tag_001, check_tag_002
 from ci_lint.rules.layout import check_group6
@@ -107,6 +108,7 @@ GROUP_LABELS: dict[int, str] = {
     11: "release gate (REL-001/002/005)",
     12: "ci-pre.yml shape + PR cache keys (GEN-014..018, CACHE-013)",
     15: "paths blast radius + platform check-only coverage + cook safety (GEN-007, RUST-008/010)",
+    16: "default-branch skips only through verified reuse (GEN-021)",
 }
 
 
@@ -161,6 +163,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(check_rust_017(repo_root))
         all_findings.extend(check_rust_015(repo_root))
         all_findings.extend(check_rust_016(repo_root))
+        all_findings.extend(check_gen_021(repo_root))
 
         outcome = apply_exceptions(ci, all_findings)
         all_findings = outcome.findings

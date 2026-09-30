@@ -1,0 +1,15 @@
+# NEEDS REVIEW: a blanket default-branch skip, but no recognizable gate job
+# (id ci-ok/gate or name "CI OK"), so ci_lint cannot tell whether the
+# skipped job is required.
+name: CI
+on:
+  pull_request:
+  push:
+jobs:
+  unit:
+    name: Test linux-x64 (unit)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: soldr cargo test --locked

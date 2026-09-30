@@ -1,0 +1,33 @@
+# NEEDS REVIEW: a hand-written "reuse" flag -- `decide` echoes reuse=true
+# without running ci-lint reuse-check, and `unit` skips on it.
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  decide:
+    name: Decide
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      reuse: ${{ steps.flag.outputs.reuse }}
+    steps:
+      - id: flag
+        run: python3 ci/always_reuse.py
+  unit:
+    name: Test linux-x64 (unit)
+    needs: decide
+    if: needs.decide.outputs.reuse != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: soldr cargo test --locked
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [decide, unit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: python3 ci/ci_ok.py

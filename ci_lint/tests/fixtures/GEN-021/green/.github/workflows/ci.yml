@@ -1,0 +1,109 @@
+# GREEN: the verified-reuse reference wiring (docs/designs/default-branch-
+# verified-reuse.md, "Reference wiring"), clud-shaped. The decision is a
+# step in the first job (skipped on pull requests, so its output is empty
+# and every job runs); validation jobs skip only on `reuse != 'true'`; the
+# cache writers (Build, Dylint) always run; a PR-only job the gate does not
+# need is not a GEN-021 subject.
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+concurrency:
+  group: ci-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+permissions:
+  contents: read
+  actions: read
+jobs:
+  static:
+    name: Static checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      mode: ${{ steps.mode.outputs.tier }}
+      reuse: ${{ steps.reuse.outputs.reuse }}
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - name: Check out ci-lint
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+        with:
+          repository: zackees/ci.yml
+          ref: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          path: .ci-lint
+          persist-credentials: false
+      - name: Verified reuse decision (GEN-021)
+        id: reuse
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: .ci-lint
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python3 -m ci_lint reuse-check --workflow ci.yml --mode shadow --github-output
+          --required-job "Static checks"
+          --required-job "Dylint / Dylint"
+          --required-job "Clippy linux-x64 / x86_64-unknown-linux-gnu"
+          --required-job "Build linux-x64 / x86_64-unknown-linux-gnu"
+          --required-job "Test linux-x64 (unit) (rust) / x86_64-unknown-linux-gnu unit"
+          --required-job "Test linux-x64 (unit) (py1of2) / x86_64-unknown-linux-gnu unit"
+          --required-job "Test linux-x64 (unit) (py2of2) / x86_64-unknown-linux-gnu unit"
+      - name: Resolve CI mode
+        id: mode
+        run: python3 -m ci.ci_matrix
+      - run: python3 -m ci.lint --static-only
+  dylint:
+    name: Dylint
+    needs: static
+    uses: ./.github/workflows/_dylint.yml
+  lint-linux-x64:
+    name: Clippy linux-x64
+    needs: static
+    if: needs.static.outputs.reuse != 'true' && needs.static.outputs.mode != 'windows'
+    uses: ./.github/workflows/_build-target.yml
+    with:
+      clippy: true
+  build-linux-x64:
+    name: Build linux-x64
+    needs: static
+    if: needs.static.outputs.mode != 'windows'
+    uses: ./.github/workflows/_build-target.yml
+    with:
+      clippy: false
+  test-linux-x64-unit:
+    name: Test linux-x64 (unit)
+    needs: [static, build-linux-x64]
+    if: ${{ needs.static.outputs.reuse != 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [rust, py1of2, py2of2]
+    uses: ./.github/workflows/_run-tests.yml
+    with:
+      shard: ${{ matrix.shard }}
+  pr-title:
+    name: PR title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: python3 ci/pr_title.py
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [static, dylint, lint-linux-x64, build-linux-x64, test-linux-x64-unit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - name: Check results
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          REUSE: ${{ needs.static.outputs.reuse }}
+          REUSE_SKIPPABLE: lint-linux-x64 test-linux-x64-unit
+        run: python3 ci/ci_ok.py

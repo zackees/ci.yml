@@ -1,0 +1,48 @@
+# RED: two gate-required jobs skipped on every default-branch push by a
+# blanket `if:`, and no verified-reuse decision anywhere -- the "main is
+# validated by the PR" assumption with no proof (clud case study).
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  static:
+    name: Static checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - run: python3 -m ci.lint --static-only
+  clippy:
+    name: Clippy linux-x64
+    needs: static
+    if: github.event_name != 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - run: soldr cargo clippy --locked --all-targets
+  unit:
+    name: Test linux-x64 (unit)
+    needs: static
+    if: ${{ github.ref != 'refs/heads/main' && needs.static.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  # v4.1.1
+      - run: soldr cargo test --locked
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [static, clippy, unit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: python3 ci/ci_ok.py
