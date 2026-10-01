@@ -764,6 +764,7 @@ when neither PyYAML nor `yq` is available).
 | `GATE-003` | (#166, runtime, `local-gate verify` / `check-push`) The PR head has no `Local-Gate:` trailer for its exact tree. | `ci-lint local-gate run`, then `git push --force-with-lease`. |
 | `GATE-004` | (#166, live, `local-gate first-pass`) First-push pass rate below target (default 80%) over >= `--min-prs` merged PRs; `needs_review`. | Move each recurring first-push failure class into the local gate, or fix the flaky remote lane. |
 | `GATE-005` | (#168, static, group 17 / `local-gate lint`) `[gate.isolation]` declared but its guard ignores `CI` or the marker, its bosn runner never sets the marker, or the gate never invokes the runner; a known self-hosted tool repo (soldr, zccache, clud, bosn) with no isolation is `needs_review`. |
+| `RUST-001` (gate surfaces) | (#170, static, `local-gate lint` / precheck group 17) In a repository with a root `Cargo.toml`: a bare `cargo`/`rustc`/`rustup`/`maturin`/`cargo-nextest` in a workflow or composite-action `run:` line (`local-gate lint` only; precheck's group-4 RUST-001 covers a ci.toml repo's workflows), in the local gate's `run` argv or a file it names (shell lines; Python string-literal argv), or in a `bosn.toml` task `cmd`. `"$soldr" rustup ...` (the tool as soldr's argument) is not bare. Excuse one line with `# ci-lint: allow RUST-001 <reason>`. |
 
 ## The planner
 

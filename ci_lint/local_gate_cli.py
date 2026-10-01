@@ -23,6 +23,7 @@ from pathlib import Path
 from ci_lint.finding import Status
 from ci_lint.first_pass import DEFAULT_MIN_PRS, DEFAULT_TARGET, collect, render_text
 from ci_lint.github_api import GitHubApiError, default_fetch
+from ci_lint.gate_bare_tools import check_no_bare_rust
 from ci_lint.local_gate import (
     GateConfig,
     check_gate_static,
@@ -123,7 +124,7 @@ def _cmd_lint(args: argparse.Namespace) -> int:
         print("ci-lint local-gate lint: no local gate declared (ci.toml [local.gate] or local-gate.toml [gate])", file=sys.stderr)
         return 1
     if config is not None:
-        findings = findings + check_gate_static(config, repo)
+        findings = findings + check_gate_static(config, repo) + check_no_bare_rust(repo, config.run)
     for finding in findings:
         print(finding.render())
     violations = [f for f in findings if f.status == Status.VIOLATION]
