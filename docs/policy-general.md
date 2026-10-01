@@ -66,6 +66,59 @@ The trailer is an **honesty contract, not a cryptographic proof**: anyone can ty
 
 Evidence: soldr's 2026-09-30 22:00 → 2026-10-01 19:00 UTC window had a **43% first-push pass rate (3 of 7 merged PRs)**, and most misses were Python lint/guard-test failures a seconds-long local run would have caught -- [docs/case-studies/soldr-first-pass.md](case-studies/soldr-first-pass.md).
 
+## Where checks run locally: host, bosn, bosn → act (candidate GATE-006)
+
+**Decision ([issue #172](https://github.com/zackees/ci.yml/issues/172)):** the local gate places each class of check where it is both safe and faithful to the remote job.
+
+| Check class | Local placement | Why |
+| --- | --- | --- |
+| Lint, format, static guards, type checks, Clippy/Dylint, dependency policy: the tool used *as a tool* | **host**, no container | Reads the tree and writes only build output; the host's warm caches make it the fastest place. |
+| Tests that start daemons, brokers, or servers, or touch a tool's state roots; any test of a self-hosted tool (GATE-005) | **bosn container** (`bosn run --task <t>`) | A host run can damage live infrastructure ([soldr#3516](https://github.com/zackees/soldr/issues/3516)) and is not hermetic (12 host-only failures). |
+| The remote workflow job itself | **bosn → act**, when measured parity or speed justifies it | act replays the *workflow* (same steps and env). Today `bosn act plan` resolves the job DAG but cannot execute ([zackees/bosn#302](https://github.com/zackees/bosn/issues/302)). |
+
+**The isolated runner must reproduce the remote job, not a dev loop.** Every divergence found in the soldr pilot was an environment difference, not a code bug:
+- `cargo test` vs CI's nextest: a shared-process panic poisoned an env lock and failed 6 unrelated tests;
+- the image's dev-loop `CARGO_PROFILE_*` overrides and `CARGO_BUILD_JOBS=2`;
+- bosn's `sh -lc` dropping the image's `ENV PATH`: 59 "rustup not found" failures;
+- bosn reaping a task on an output burst ([zackees/bosn#317](https://github.com/zackees/bosn/pull/317)).
+
+The isolated step runs exactly the remote job's commands, under the remote job's profiles and job caps. A gate lane must be **no stricter than CI** either: a broader local check that `main` cannot pass (soldr's full `cargo deny check` vs CI's `deny check bans`) attests nothing.
+
+**Containers must not write into the host checkout** beyond build output. Each of these happened in this pilot:
+- a container-created root-owned `.venv` broke every host `uv run` ([soldr#3519](https://github.com/zackees/soldr/issues/3519));
+- an in-place cargo-chef skeleton, killed mid-cook, truncated real sources ([soldr#3518](https://github.com/zackees/soldr/issues/3518)).
+
+Measured on a 16-core host (soldr):
+- lint lane: **62 s** on the host, vs the remote `Lint` job's 153–163 s;
+- host `rust` lane (CI's fmt/lint-ci/Clippy/Dylint/deny-bans/audit/machete commands): 181 s cold;
+- bosn tests lane (CI's nextest + doctest stages, 3,559 tests): 296 s after an image rebuild, ~106 s warm;
+- remote `Linux x64` (`ci-test`, warm cache): 504–555 s.
+
+## Cache compression tiers (candidate CACHE-023)
+
+**Decision ([issue #173](https://github.com/zackees/ci.yml/issues/173)):** compression level is a property of the cache *tier*, chosen from measurement, not hard-coded per step.
+
+Experiment: soldr's real `target/x86_64-unknown-linux-gnu/debug/deps` (1.83 GB tar), zstd, on a loaded 16-core host. Absolute times are approximate; the ratios are exact.
+
+| zstd level | ratio | compress, 4 threads (hosted runner) | compress, 16 threads (local) | decompress |
+| --- | --- | --- | --- | --- |
+| 1 | 4.27× | 1.1 s | 0.9 s | 1.4 s |
+| 3 | 4.69× | 1.9 s | 1.4 s | 1.5 s |
+| 6 | 5.05× | 4.6 s | 3.4 s | 1.4 s |
+| 9 | 5.25× | 8.5 s | 8.3 s | 1.4 s |
+| 15 | 5.44× | 48.8 s | 33.5 s | 1.3 s |
+| 19 | 6.09× | 191.6 s | 124.1 s | 1.8 s |
+| none (tar) | 1.00× | — | — | 1.5 s (extract) |
+
+What the data says:
+1. **Restore cost does not depend on the level.** Decompress is 1.3–2.0 s at every level, the same as extracting an uncompressed tar. "Low compression for fast local iteration" only ever saves *save* time.
+2. **Local tier (bosn volumes, act's local cache server):** zstd 1–3. It is 4.3–4.7× smaller than raw for ≤ 2 s per save, and leaving it uncompressed restores no faster. Local caches never count against the remote budget and never reach GitHub.
+3. **Remote tier (GitHub Actions, 10 GB per repository, `CACHE-004`):** compression buys entries.
+   - **Default-branch writer families** saved at most once per merge: zstd 9 (5.25×, about 8 s).
+   - **Long-lived, rarely rewritten artifacts:** zstd 19 (6.09×, about 30% more cache per GB than level 3). soldr's cook artifacts already use `COOK_ZSTD_LEVEL = 19`. The ~2–3 min save must stay off the PR critical path.
+   - **PR-scoped delta saves:** zstd 3, because they are written on the critical path and short-lived.
+4. **The knobs today are compile-time constants:** soldr's `DEFAULT_ZSTD_LEVEL = 3` (cache save/load, mirrored by setup-soldr) and `COOK_ZSTD_LEVEL = 19`. Making the save level tier-selectable is the implementation follow-up.
+
 ## Performance rule
 
 The initial candidate threshold is **at least five completed ordinary PR samples in a rolling 30-day window**, with either a **75th-percentile required job execution time over 10 minutes** or a **75th-percentile required PR critical path over 15 minutes** on two successive scans. These are policy starting points to calibrate against fleet data, not claims about current fleet performance. A single severe outlier can be sent for review, but should not automatically become a confirmed timing violation. This rule (`PERF-001`) is distinct from `ci_lint perf compare` (round-5, [docs/ci-toml.md](ci-toml.md#perf-compare-round-5)): that command compares one repository's own benchmark numbers between two runs (non-gating unless a suite opts in with a threshold); it does not compute or enforce a fleet-wide PR-timing percentile, so it does not implement `PERF-001`.
@@ -150,6 +203,8 @@ The **Status** column below reflects what `ci_lint` actually checks today, verif
 | `GATE-003` | The PR head commit has no `Local-Gate:` trailer matching its tree (`missing`/`stale`). | Enforced by ci-lint (runtime, `ci-lint local-gate verify` in CI and `local-gate check-push` as a pre-push hook) |
 | `GATE-004` | First-push pass rate below 80% over >= 5 merged PRs (`needs_review`). | Enforced by ci-lint (live audit, `ci-lint local-gate first-pass`) |
 | `GATE-005` | A declared `[gate.isolation]` whose guard file does not check both `CI` and the marker, whose bosn runner task/image never sets the marker, or whose local gate script never invokes the runner; a known self-hosted tool repository (soldr, zccache, clud, bosn) with no isolation declared is `needs_review`. | Enforced by ci-lint (static precheck, group 17; also `ci-lint local-gate lint`) |
+| `GATE-006` | A local-gate check placed against #172's table: a daemon-touching test lane on the host, or an isolated lane whose commands, profiles, or job caps differ from the remote job's. | Candidate |
+| `CACHE-023` | A cache save whose zstd level ignores its tier (#173): a PR-path save above level 3, or a long-lived default-branch family below the measured remote recommendation. | Candidate |
 
 An exception must name the repository, rule ID, reason, owner, compensating coverage, and review date. The documented Soldr dependency cycle in `zackees/running-process` is an example to evaluate for an exception. Exceptions are reviewed when their date arrives or the dependency changes; they do not erase historical findings. `ci.toml`'s `[[exceptions]]` array implements this mechanically for a `ci_lint`-checked repository (`rule`, `path`, `reason`, `issue`, `expires` -- `CT-005` fails an expired entry).
 

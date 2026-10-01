@@ -29,7 +29,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 | `LAYOUT` | 001 | `LAYOUT-002` | 001 |
 | `RUST` | 001–017 | `RUST-018` | 001, 002, 003, 004, 005, 006, 008, 009, 010, 011, 012, 013, 014, 015, 016, 017 (007 candidate) |
 | `PKG` | 001–007 | `PKG-008` | 001, 002, 003, 004, 005, 006, 007 |
-| `CACHE` | 001–014 | `CACHE-015` | 001–014 |
+| `CACHE` | 001–023 | `CACHE-024` | 001–014 (015–022 claimed as candidates by open issues #110/#111/#120/#150/#153 -- see #154; 023 candidate, #173) |
 | `ACT` | 001 | `ACT-002` | 001 |
 | `TEST` | 001–002 | `TEST-003` | all |
 | `BIN` | 001–002 | `BIN-003` | 001, 002 |
@@ -37,7 +37,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 | `PERF` | 001 | `PERF-002` | 001 (distinct from the implemented `ci-lint perf compare` runtime command -- see policy-general.md) |
 | `FLEET` | 001–003 | `FLEET-004` | 001, 002 (fleet-scan-only rules, live, `ci-lint fleet scan`); 003 candidate (default-branch CI burn with no verified reuse or live merge queue, #159) |
 | `REL` | 001–005 | `REL-006` | 001, 002, 003, 004, 005 (issue #8/#74) |
-| `GATE` | 001–005 | `GATE-006` | 001, 002, 003, 004, 005 (issues #166/#168; a new family, so it cannot collide with the contested `GEN-022` -- see #154) |
+| `GATE` | 001–006 | `GATE-007` | 001, 002, 003, 004, 005 (issues #166/#168; a new family, so it cannot collide with the contested `GEN-022` -- see #154) |
 
 ## Working rules
 
