@@ -573,7 +573,7 @@ a real local act `--cache-server-path` directory.
 | `cache` | string | e.g. `"machine"`. Informational in round 1A. |
 | `gate` | table | `[local.gate]`, the local gate (GATE-001..004, #166). See below. |
 
-### `[local.gate]` (GATE-001..004, zackees/ci.yml#166)
+### `[local.gate]` (GATE-001..005, zackees/ci.yml#166, #168)
 
 The one local command the remote quick gate must be a subset of. A
 repository without `ci.toml` declares the identical table as `[gate]` in a
@@ -589,6 +589,9 @@ repo-root `local-gate.toml`; declaring both is `GATE-001`. Parsed strictly
 | `verify-exempt` | array of strings | Job ids in the verify workflow allowed to run before/without it (e.g. `ci-pre`). |
 | `exempt-authors` | array of strings | PR authors verify passes without a trailer. Default `["dependabot[bot]", "renovate[bot]", "github-actions[bot]"]`. |
 | `mode` | `"enforce"` (default) or `"shadow"` | `shadow`: verify reports a missing/stale attestation but exits 0. |
+| `isolation.marker` | string (env var name) | `GATE-005`: set only by the isolated test environment, e.g. `SOLDR_TEST_ISOLATED`. |
+| `isolation.runner` | array of strings | `GATE-005`: how the local gate runs the suite isolated, e.g. `["bosn", "run", "--task", "test"]`. A `bosn` runner's task must exist in `bosn.toml`, and its command or stack Dockerfile (`ENV <marker>=1`) must set the marker; the gate's script (a repository file named in `run`) must invoke the runner. |
+| `isolation.guard` | path | `GATE-005`: the file every test process passes through (soldr: its nextest run-wrapper), which must check both `CI` and the marker and refuse otherwise. |
 
 A repository with no `.github/workflows` that declares neither `mirrors`
 nor `verify` gets no `GATE-001`/`GATE-002` finding: its pre-push hook is
@@ -760,6 +763,7 @@ when neither PyYAML nor `yq` is available).
 | `GATE-002` | (#166, static) No `verify` job, verify does not run `ci-lint local-gate verify`, or a job does not transitively `needs:` it; a job-level `if:` on verify is `needs_review`. | Add the verify step and route every job's `needs:` through it, or list a must-run-first job in `verify-exempt`. |
 | `GATE-003` | (#166, runtime, `local-gate verify` / `check-push`) The PR head has no `Local-Gate:` trailer for its exact tree. | `ci-lint local-gate run`, then `git push --force-with-lease`. |
 | `GATE-004` | (#166, live, `local-gate first-pass`) First-push pass rate below target (default 80%) over >= `--min-prs` merged PRs; `needs_review`. | Move each recurring first-push failure class into the local gate, or fix the flaky remote lane. |
+| `GATE-005` | (#168, static, group 17 / `local-gate lint`) `[gate.isolation]` declared but its guard ignores `CI` or the marker, its bosn runner never sets the marker, or the gate never invokes the runner; a known self-hosted tool repo (soldr, zccache, clud, bosn) with no isolation is `needs_review`. |
 
 ## The planner
 

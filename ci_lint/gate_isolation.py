@@ -1,0 +1,179 @@
+"""GATE-005: a self-hosted tool's test suite runs isolated, never on the
+developer host (zackees/ci.yml#168, evidence zackees/soldr#3516).
+
+Some fleet repositories build a tool that is also live infrastructure on the
+developer's own machine (soldr, zccache, clud, bosn). Their tests start that
+tool's daemons and touch its state roots; one leaked fixture on a host run
+claimed the real `~/.soldr` root and wedged every soldr build on the machine.
+So for these repositories "run it locally first" must mean "run it in an
+isolated container", and the suite itself must refuse anything else.
+
+Declared as `[gate.isolation]` (`local-gate.toml`) or
+`[local.gate.isolation]` (`ci.toml`):
+
+    marker = "SOLDR_TEST_ISOLATED"            # set only by the isolated environment
+    runner = ["bosn", "run", "--task", "test"] # how the local gate runs the suite
+    guard  = ".github/scripts/nextest_wrapper.sh"  # where the suite refuses otherwise
+
+Static checks, all GATE-005:
+
+1. The guard file exists and references both the marker and `CI` (GitHub
+   runners and act set `CI=true`): the suite is self-refusing on a host.
+2. A `bosn` runner names a task that exists in `bosn.toml`, and that task's
+   command or its stack's Dockerfile sets the marker.
+3. The local gate's own script (a repository file named in the gate's
+   `run` argv) invokes the runner, so the gate really runs the suite
+   isolated rather than skipping it.
+4. A repository whose `origin` is a known self-hosted tool and that declares
+   no isolation is `needs_review`.
+
+The guard is the runtime enforcement; this module only proves it is wired.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+import tomllib
+from dataclasses import dataclass
+from pathlib import Path
+
+from ci_lint.finding import Finding, Status
+from ci_lint.toml_cursor import Cursor, TomlValue
+
+SELF_HOSTED_TOOL_REPOS: frozenset[str] = frozenset(
+    {"zackees/soldr", "zackees/zccache", "zackees/clud", "zackees/bosn"}
+)
+_ORIGIN_RE = re.compile(r"github\.com[:/](?P<slug>[^/]+/[^/]+?)(?:\.git)?/?$")
+
+
+@dataclass(frozen=True)
+class IsolationConfig:
+    marker: str
+    runner: tuple[str, ...]
+    guard: str
+
+
+def parse_isolation(raw: dict[str, TomlValue], *, path: str, source: str, findings: list[Finding]) -> IsolationConfig | None:
+    sub = Cursor(raw, path, findings, source)
+    marker = sub.str_("marker")
+    runner = sub.list_str("runner")
+    guard = sub.str_("guard")
+    sub.finish()
+    if not marker or not runner or not guard:
+        return None
+    if not re.fullmatch(r"[A-Z_][A-Z0-9_]*", marker):
+        findings.append(
+            Finding(rule="GATE-005", path=source, message=f"{path}.marker {marker!r} is not an environment variable name",
+                    fix="use an upper-case variable name such as SOLDR_TEST_ISOLATED")
+        )
+        return None
+    return IsolationConfig(marker=marker, runner=runner, guard=guard)
+
+
+def origin_slug(repo_root: Path) -> str | None:
+    proc = subprocess.run(
+        ["git", "-C", str(repo_root), "remote", "get-url", "origin"], capture_output=True, text=True, check=False
+    )
+    match = _ORIGIN_RE.search(proc.stdout.strip()) if proc.returncode == 0 else None
+    return match.group("slug").lower() if match else None
+
+
+def _invokes(text: str, runner: tuple[str, ...]) -> bool:
+    if " ".join(runner) in re.sub(r"\s+", " ", text):
+        return True
+    # A Python/TOML argv: every token as a string literal, in order.
+    pos = 0
+    for token in runner:
+        match = re.compile(rf"""["']{re.escape(token)}["']""").search(text, pos)
+        if match is None:
+            return False
+        pos = match.end()
+    return True
+
+
+def _bosn_marker_findings(iso: IsolationConfig, repo_root: Path, source: str) -> list[Finding]:
+    tokens = list(iso.runner)
+    task = tokens[tokens.index("--task") + 1] if "--task" in tokens[:-1] else None
+    manifest = repo_root / "bosn.toml"
+    if task is None:
+        return [Finding(rule="GATE-005", path=source, message="the bosn runner names no --task",
+                        fix="write the runner as ['bosn', 'run', '--task', '<task>']")]
+    if not manifest.is_file():
+        return [Finding(rule="GATE-005", path="bosn.toml", message="the isolation runner is bosn but bosn.toml is missing",
+                        fix=f"declare [task.{task}] in bosn.toml")]
+    try:
+        doc = tomllib.loads(manifest.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as exc:
+        return [Finding(rule="GATE-005", path="bosn.toml", message=f"invalid TOML: {exc}", fix="fix bosn.toml")]
+    tasks = doc.get("task")
+    spec = tasks.get(task) if isinstance(tasks, dict) else None
+    if not isinstance(spec, dict):
+        return [Finding(rule="GATE-005", path="bosn.toml", message=f"bosn.toml has no [task.{task}]",
+                        fix=f"declare [task.{task}] running the test suite")]
+    cmd = spec.get("cmd")
+    if isinstance(cmd, str) and f"{iso.marker}=" in cmd:
+        return []
+    stacks = doc.get("stack")
+    stack = stacks.get(spec.get("stack")) if isinstance(stacks, dict) and isinstance(spec.get("stack"), str) else None
+    dockerfile = stack.get("dockerfile") if isinstance(stack, dict) else None
+    if isinstance(dockerfile, str) and (repo_root / dockerfile).is_file():
+        text = (repo_root / dockerfile).read_text(encoding="utf-8", errors="replace")
+        if re.search(rf"^\s*ENV\s+(?:.*\s)?{re.escape(iso.marker)}[= ]", text, re.MULTILINE):
+            return []
+    return [
+        Finding(
+            rule="GATE-005",
+            path="bosn.toml",
+            message=f"bosn task '{task}' never sets {iso.marker}, so the isolated run would be refused by the guard too",
+            fix=f"add `ENV {iso.marker}=1` to the task's stack Dockerfile (or prefix the task cmd with {iso.marker}=1)",
+        )
+    ]
+
+
+def check_isolation(isolation: IsolationConfig | None, gate_run: tuple[str, ...], repo_root: Path, source: str) -> list[Finding]:
+    if isolation is None:
+        slug = origin_slug(repo_root)
+        if slug in SELF_HOSTED_TOOL_REPOS:
+            return [
+                Finding(
+                    rule="GATE-005",
+                    path=source,
+                    status=Status.NEEDS_REVIEW,
+                    message=f"{slug} builds a tool that is live infrastructure on developer hosts, but its local gate "
+                    "declares no [gate.isolation]",
+                    fix="declare marker/runner/guard so the test suite refuses to run on the host and the gate runs it isolated",
+                )
+            ]
+        return []
+    iso = isolation
+    findings: list[Finding] = []
+    guard = repo_root / iso.guard
+    if not guard.is_file():
+        findings.append(Finding(rule="GATE-005", path=iso.guard, message="the isolation guard file does not exist",
+                                fix="point 'guard' at the file every test process passes through"))
+    else:
+        text = guard.read_text(encoding="utf-8", errors="replace")
+        missing = [name for name in (iso.marker, "CI") if not re.search(rf"\b{re.escape(name)}\b", text)]
+        if missing:
+            findings.append(
+                Finding(
+                    rule="GATE-005",
+                    path=iso.guard,
+                    message=f"the guard never checks {' or '.join(missing)}, so the suite can still run on a developer host",
+                    fix=f"refuse to start unless CI=true or {iso.marker}=1, naming the isolated command ({' '.join(iso.runner)})",
+                )
+            )
+    if iso.runner[0] == "bosn":
+        findings.extend(_bosn_marker_findings(iso, repo_root, source))
+    scripts = [repo_root / token for token in gate_run if (repo_root / token).is_file()]
+    if not any(_invokes(s.read_text(encoding="utf-8", errors="replace"), iso.runner) for s in scripts):
+        findings.append(
+            Finding(
+                rule="GATE-005",
+                path=source,
+                message=f"the local gate ({' '.join(gate_run)}) never invokes the isolation runner `{' '.join(iso.runner)}`",
+                fix="run the test suite from the gate script through the isolation runner",
+            )
+        )
+    return findings

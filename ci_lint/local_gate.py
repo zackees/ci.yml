@@ -1,4 +1,4 @@
-"""Local gate first (GATE-001..004, zackees/ci.yml#166).
+"""Local gate first (GATE-001..005, zackees/ci.yml#166, #168).
 
 A pull request should pass remote CI on its first push. The cheapest way to
 get there is to make the remote quick gate a *subset* of one local command,
@@ -47,6 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
+from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
 from ci_lint.toml_cursor import Cursor, TomlValue
 from ci_lint.yaml_io import YamlValue
 
@@ -106,6 +107,8 @@ class GateConfig:
     exempt_authors: frozenset[str]
     mode: str
     source: str
+    # GATE-005 (zackees/ci.yml#168): how a self-hosted tool's suite runs isolated.
+    isolation: IsolationConfig | None = None
 
     @property
     def command(self) -> str:
@@ -126,7 +129,13 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
     verify_exempt = sub.list_str("verify-exempt", required=False)
     exempt_authors = sub.list_str("exempt-authors", required=False, default=DEFAULT_EXEMPT_AUTHORS)
     mode = sub.str_("mode", required=False, default="enforce") or "enforce"
+    isolation_raw = sub.table_("isolation", required=False)
     sub.finish()
+    isolation = (
+        parse_isolation(isolation_raw, path=f"{path}.isolation", source=source, findings=findings)
+        if isolation_raw is not None
+        else None
+    )
 
     def bad(message: str, fix: str) -> None:
         findings.append(Finding(rule="GATE-001", path=source, message=f"{path}: {message}", fix=fix))
@@ -158,6 +167,7 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
         exempt_authors=frozenset(exempt_authors),
         mode=mode,
         source=source,
+        isolation=isolation,
     )
 
 
@@ -502,7 +512,7 @@ def _load_workflows(repo_root: Path) -> _Workflows:
 def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:
     from ci_lint.workflow_scan import jobs_of, steps_of  # noqa: PLC0415
 
-    findings: list[Finding] = []
+    findings: list[Finding] = check_isolation(config.isolation, config.run, repo_root, config.source)
     wfs = _load_workflows(repo_root)
     if not wfs.docs and not wfs.unreadable and not config.mirrors and config.verify is None:
         # No remote CI at all (e.g. zackees/ci.yml itself): nothing to mirror
