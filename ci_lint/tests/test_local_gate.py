@@ -318,3 +318,62 @@ class FirstPassTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+ISO_GATE = """[gate]
+run = ["python3", "ci/gate.py"]
+
+[gate.isolation]
+marker = "TOOL_TEST_ISOLATED"
+runner = ["bosn", "run", "--task", "test"]
+guard = "scripts/test_wrapper.sh"
+"""
+ISO_GUARD = '#!/bin/sh\nif [ "${CI:-}" != true ] && [ "${TOOL_TEST_ISOLATED:-}" != 1 ]; then exit 97; fi\nexec "$@"\n'
+ISO_BOSN = '[stack.dev]\ndockerfile = "docker/Dockerfile"\n\n[task.test]\nstack = "dev"\ncmd = "cargo nextest run"\n'
+ISO_SCRIPT = 'TESTS = ("bosn", "run", "--task", "test")\n'
+
+
+class IsolationTest(TempRepoCase):
+    """GATE-005 -- ci_lint/gate_isolation.py (zackees/ci.yml#168)."""
+
+    def _repo(self, *, guard: str = ISO_GUARD, docker_env: str = "ENV TOOL_TEST_ISOLATED=1\n",
+              script: str = ISO_SCRIPT, gate: str = ISO_GATE) -> Path:
+        files = {
+            "local-gate.toml": gate,
+            "scripts/test_wrapper.sh": guard,
+            "bosn.toml": ISO_BOSN,
+            "docker/Dockerfile": "FROM rust@sha256:" + "0" * 64 + "\n" + docker_env,
+            "ci/gate.py": script,
+        }
+        for rel, text in files.items():
+            (self.tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.tmp / rel).write_text(text, encoding="utf-8")
+        return self.tmp
+
+    def _gate_005(self, repo: Path) -> list[Status]:
+        return [f.status for f in check_gate_static(self.config(repo), repo) if f.rule == "GATE-005"]
+
+    def test_green(self) -> None:
+        self.assertEqual(self._gate_005(self._repo()), [])
+
+    def test_guard_that_ignores_the_marker(self) -> None:
+        self.assertEqual(self._gate_005(self._repo(guard="#!/bin/sh\nexec \"$@\"\n")), [Status.VIOLATION])
+
+    def test_isolated_image_that_never_sets_the_marker(self) -> None:
+        self.assertEqual(self._gate_005(self._repo(docker_env="")), [Status.VIOLATION])
+
+    def test_gate_that_never_runs_the_isolated_suite(self) -> None:
+        self.assertEqual(self._gate_005(self._repo(script="print('lint only')\n")), [Status.VIOLATION])
+
+    def test_bad_marker_name(self) -> None:
+        (self.tmp / "local-gate.toml").write_text(ISO_GATE.replace("TOOL_TEST_ISOLATED", "not a var"), encoding="utf-8")
+        _config, findings = load_gate_config(self.tmp)
+        self.assertEqual([f.rule for f in findings], ["GATE-005"])
+
+    def test_self_hosted_tool_without_isolation_needs_review(self) -> None:
+        _git(self.tmp, "init", "-q")
+        _git(self.tmp, "remote", "add", "origin", "https://github.com/zackees/soldr.git")
+        (self.tmp / "local-gate.toml").write_text('[gate]\nrun = ["python3", "ci/gate.py"]\n', encoding="utf-8")
+        self.assertEqual(self._gate_005(self.tmp), [Status.NEEDS_REVIEW])
+        _git(self.tmp, "remote", "set-url", "origin", "git@github.com:zackees/other.git")
+        self.assertEqual(self._gate_005(self.tmp), [])

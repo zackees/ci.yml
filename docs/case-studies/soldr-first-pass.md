@@ -86,6 +86,37 @@ a *local gate first* contract (#166):
 
 Class 2 stays remote-only by design; class 3 and 4 are soldr workflow fixes.
 
+## Incident during the pilot: a host test run wedged the host's soldr
+
+To size a Rust lane for soldr's local gate, `soldr ci-test` (the same frozen
+DAG the remote `build-linux-x64` job runs) was run directly on the developer
+host in a clean worktree of `origin/main` (2026-10-01 12:18:55-12:29:01
+local, 606 s cold). Two things went wrong, and both changed the policy.
+
+1. **The suite is not hermetic on a host.** 12 nextest tests failed that
+   are green on CI runners (reentrancy guard, global-upgrade delegation,
+   daemon generations, doc-route deadlines), because the host has a newer
+   global soldr, live daemons of other generations, and agent PATH shims.
+2. **The suite damaged the host.** A fixture
+   (`direct_rustc_like_commands_route_through_zccache_with_and_without_global_flags`)
+   started a broker-launched `soldr-daemon` (PID 253182) whose environment
+   still carried the real `HOME`. It claimed the real `~/.soldr`
+   root-ownership lock and was orphaned when the test exited. From then on
+   *every* host `soldr cargo build` failed with "soldr root ownership is
+   busy ... orphaned soldr-daemon", for every agent session on the machine.
+   Killing that one orphan restored the host
+   ([zackees/soldr#3516](https://github.com/zackees/soldr/issues/3516)).
+
+Lesson, adopted as `GATE-005` ([#168](https://github.com/zackees/ci.yml/issues/168)):
+for a repository whose tool is also live infrastructure on the developer's
+machine, "run it locally first" must mean "run it in an isolated
+container". The suite must refuse to start anywhere else (`CI=true` or an
+isolation marker that only the bosn image sets), and the local gate runs it
+through `bosn run --task test`. Soldr's bosn route had itself rotted
+unnoticed: bosn now requires digest-pinned base images and
+`docker/cook-shared-cache/Dockerfile` floated `rust:1.98.1-trixie` and
+`ghcr.io/astral-sh/uv:0.9.18`.
+
 ## Pilot status
 
 - soldr adoption PR: TBD
