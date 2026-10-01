@@ -139,4 +139,10 @@ unnoticed: bosn now requires digest-pinned base images and
   - The bosn image was not digest-pinned. Its `test` task ran `cargo test` instead of CI's nextest and used dev-loop Cargo profiles.
   - `soldr lint deps` was stricter than CI.
 - **Still remote-only by design:** the native macOS, Windows and linux-arm64 target-runs ([#172](https://github.com/zackees/ci.yml/issues/172)). That covers today's failure class 2 (#3505's arm64 exec bits, the macOS reld gate).
-- **Post-adoption measurement:** run `ci-lint local-gate first-pass --slug zackees/soldr --since <merge date of soldr#3524>` once at least 5 PRs have merged under the gate. The target is >= 80% first-push green, excluding runner flakes. GATE-004 reports `needs_review` below it.
+- **Early post-adoption measurement** (`ci-lint local-gate first-pass --slug zackees/soldr --since 2026-10-01T21:58:44Z`, the merge time of soldr#3524): **3 of 3 merged PRs passed on their first push, 3/3 heads attested**:
+  - soldr#3524, the adoption PR itself;
+  - soldr#3525, which rebalanced `rust-cache-residual` after `main`'s cache-budget verdict went red twice, and which the local gate had already stopped once for two stale tests before any push;
+  - soldr#3526, the bosn 0.1.6 floor.
+
+  The baseline was 3 of 7 (43%). The sample is tiny and all three PRs are the pilot's own, so this proves the mechanism works end to end, not the fleet rate.
+- **Next measurement:** run the same command after at least a week and at least 5 merged PRs by other authors. The target is >= 80% first-push green, excluding runner flakes. GATE-004 reports `needs_review` below it.
