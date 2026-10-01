@@ -24,6 +24,7 @@ from ci_lint.rules.cache_payload import check_cache_007_static
 from ci_lint.rules.cache_restore_copy import check_gen_013
 from ci_lint.rules.cache_static import check_group9
 from ci_lint.rules.default_branch_skip import check_gen_021
+from ci_lint.local_gate import GATE_FILE, check_gate_static
 from ci_lint.rules.ci_pre import check_group12
 from ci_lint.rules.contract import check_ct_006, check_tag_001, check_tag_002
 from ci_lint.rules.layout import check_group6
@@ -109,6 +110,7 @@ GROUP_LABELS: dict[int, str] = {
     12: "ci-pre.yml shape + PR cache keys (GEN-014..018, CACHE-013)",
     15: "paths blast radius + platform check-only coverage + cook safety (GEN-007, RUST-008/010)",
     16: "default-branch skips only through verified reuse (GEN-021)",
+    17: "local gate first: remote quick gate mirrors the local gate, PR entry verifies it (GATE-001/002)",
 }
 
 
@@ -164,6 +166,17 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(check_rust_015(repo_root))
         all_findings.extend(check_rust_016(repo_root))
         all_findings.extend(check_gen_021(repo_root))
+        if ci.local.gate is not None:
+            all_findings.extend(check_gate_static(ci.local.gate, repo_root))
+            if (repo_root / GATE_FILE).is_file():
+                all_findings.append(
+                    Finding(
+                        rule="GATE-001",
+                        path=GATE_FILE,
+                        message="the local gate is declared in both ci.toml [local.gate] and local-gate.toml",
+                        fix="delete local-gate.toml; ci.toml's [local.gate] is the declaration",
+                    )
+                )
 
         outcome = apply_exceptions(ci, all_findings)
         all_findings = outcome.findings
