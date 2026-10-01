@@ -119,5 +119,24 @@ unnoticed: bosn now requires digest-pinned base images and
 
 ## Pilot status
 
-- soldr adoption PR: TBD
-- post-adoption measurement: TBD
+- **soldr adoption:** [soldr#3524](https://github.com/zackees/soldr/pull/3524). Its head was stamped by the gate it introduces: 39/39 checks in 338 s.
+  - lint lane: 62 s (the remote `Lint` job takes 153-163 s);
+  - rust lane: 181 s cold (CI's rustfmt/lint-ci/Clippy/Dylint/deny-bans/audit/machete commands);
+  - isolated tests lane: 3,570 nextest tests plus doctests, 170 s in bosn.
+
+  The PR's `CI mode` job verified the attestation in real CI.
+- **What the gate caught before any push:**
+  - four test files and one newly merged script on `main` were never ruff-formatted, because the old Lint job formatted in place instead of checking;
+  - four jobs that did not depend on the verify job (GATE-002);
+  - 28 bare `cargo`/`rustup` sites (RUST-001 on gate surfaces, #170).
+- **What making "local" safe and faithful required.** Every item is now fixed:
+  - [soldr#3516](https://github.com/zackees/soldr/issues/3516) / #3523: a host test run orphaned a daemon that held the real `~/.soldr` root and wedged every soldr build on the machine.
+  - [soldr#3519](https://github.com/zackees/soldr/issues/3519) / #3523: a container wrote a root-owned `.venv` into the host checkout.
+  - [soldr#3518](https://github.com/zackees/soldr/issues/3518) / #3522: `soldr dylint cook`'s in-place cargo-chef skeleton truncated real sources when killed.
+  - [soldr#3520](https://github.com/zackees/soldr/issues/3520) / #3521: a 0.9.27 linker regression on NixOS.
+  - [zackees/bosn#317](https://github.com/zackees/bosn/pull/317) (v0.1.5): bosn reaped tasks on output bursts.
+  - bosn v0.1.6: client/daemon version mismatch, stale sockets, and the image `ENV PATH` under `sh -lc`.
+  - The bosn image was not digest-pinned. Its `test` task ran `cargo test` instead of CI's nextest and used dev-loop Cargo profiles.
+  - `soldr lint deps` was stricter than CI.
+- **Still remote-only by design:** the native macOS, Windows and linux-arm64 target-runs ([#172](https://github.com/zackees/ci.yml/issues/172)). That covers today's failure class 2 (#3505's arm64 exec bits, the macOS reld gate).
+- **Post-adoption measurement:** run `ci-lint local-gate first-pass --slug zackees/soldr --since <merge date of soldr#3524>` once at least 5 PRs have merged under the gate. The target is >= 80% first-push green, excluding runner flakes. GATE-004 reports `needs_review` below it.
