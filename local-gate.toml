@@ -1,0 +1,7 @@
+# The local gate for zackees/ci.yml itself (GATE-001..004, ci.yml#166).
+# This repository has no GitHub Actions workflows, so the pre-push hook
+# (`python3 -m ci_lint local-gate install-hook`) is the whole enforcement:
+# a push is refused unless its head carries a Local-Gate trailer for its
+# exact tree, written by `python3 -m ci_lint local-gate run`.
+[gate]
+run = ["uv", "run", "--no-project", "--with", "pyyaml", "python3", "-m", "ci_lint", "selftest"]

@@ -41,7 +41,7 @@ The exact Dylint command is not a text-match rule. For example, `soldr cargo dyl
 
 ## Documentation
 
-- [General code repository policy](docs/policy-general.md): quick gate, the `ci.toml`/`ci-lint` contract, caching, secrets/publishing, local CI, timing, and exceptions — with a full rule-ID table marking what `ci_lint` enforces today versus what remains a candidate.
+- [General code repository policy](docs/policy-general.md): quick gate, the `ci.toml`/`ci-lint` contract, caching, secrets/publishing, local CI, the local gate first rule (`GATE-001..004`: the remote quick gate is a subset of one local command, and a PR head must carry a tree-bound `Local-Gate:` attestation before remote CI runs), timing, and exceptions — with a full rule-ID table marking what `ci_lint` enforces today versus what remains a candidate.
 - [Rust repository policy](docs/policy-rust.md): common Rust checks, the Soldr/platform-facade/Dylint/private-crate decisions, libraries, and apps published to PyPI or npm.
 - [`docs/ci-toml.md`](docs/ci-toml.md): the field-by-field schema-3 reference and rule catalog for `ci_lint`, the source of truth this repository's policy docs are checked against.
 - [`ci_lint/`](ci_lint/): the checker itself (stdlib-only Python) — static precheck, the tag/flow planner, runtime build/wheel/units checks, cache key/save-ok/audit/janitor commands, the live settings/secrets audit, the OIDC mock-publish check, and the release-candidate gate.

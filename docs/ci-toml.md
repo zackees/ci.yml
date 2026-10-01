@@ -571,6 +571,52 @@ a real local act `--cache-server-path` directory.
 | `runner` | string | e.g. `"bosn-act"`. Informational in round 1A. |
 | `lanes` | array of strings | e.g. `["precheck", "fast", "dylint"]`. Informational in round 1A. |
 | `cache` | string | e.g. `"machine"`. Informational in round 1A. |
+| `gate` | table | `[local.gate]`, the local gate (GATE-001..004, #166). See below. |
+
+### `[local.gate]` (GATE-001..004, zackees/ci.yml#166)
+
+The one local command the remote quick gate must be a subset of. A
+repository without `ci.toml` declares the identical table as `[gate]` in a
+repo-root `local-gate.toml`; declaring both is `GATE-001`. Parsed strictly
+(unknown keys `CT-001`, wrong types `CT-002`).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `run` | array of strings (required) | The gate's argv, e.g. `["python3", "ci/local_gate.py"]`. Run from the repository root. |
+| `mirrors` | array of `"<workflow file>:<job id>"` | Remote jobs whose `run:` lines must each start with `run` (trailing args such as `--lane lint` and leading `VAR=value` assignments allowed; `set -e…`/`shopt`/`cd` boilerplate and comments ignored). `GATE-001`. Empty is `needs_review`. |
+| `setup-steps` | array of strings | Step names in a mirrored job that only prepare the environment (e.g. `"Enlarge swap (OOM headroom)"`); exempt from `GATE-001`. |
+| `verify` | `"<workflow file>:<job id>"` | The PR entry job that runs `ci-lint local-gate verify`; every other job in that workflow must transitively `needs:` it. `GATE-002`. |
+| `verify-exempt` | array of strings | Job ids in the verify workflow allowed to run before/without it (e.g. `ci-pre`). |
+| `exempt-authors` | array of strings | PR authors verify passes without a trailer. Default `["dependabot[bot]", "renovate[bot]", "github-actions[bot]"]`. |
+| `mode` | `"enforce"` (default) or `"shadow"` | `shadow`: verify reports a missing/stale attestation but exits 0. |
+
+A repository with no `.github/workflows` that declares neither `mirrors`
+nor `verify` gets no `GATE-001`/`GATE-002` finding: its pre-push hook is
+the whole enforcement (this repository's own `local-gate.toml`).
+
+**Attestation.** `Local-Gate: v1 tree=<40-hex tree sha> secs=<n>`, the last
+such trailer in the commit message. States: `attested` (tree matches),
+`attested-parent` (an unattested merge commit whose first parent is
+attested), `stale` (trailer tree differs from the commit's tree), `missing`.
+
+**Commands** (`ci-lint local-gate ...`; exit 0 pass, 1 violation/failure, 2 usage/environment error):
+
+| Command | Does |
+| --- | --- |
+| `run [--repo .] [--no-stamp] [--force]` | Refuses (2) on uncommitted tracked changes; no-op (0) if HEAD is already attested; runs `run`; exits with the gate's code on failure; fails (1) if the gate changed tracked files or moved HEAD; else amends HEAD's message with the trailer (`git commit --amend --no-verify`, tree unchanged). |
+| `verify [--repo .] [--sha S] [--event E] [--author A] [--github-output]` | `GATE-003`. Defaults from `GITHUB_EVENT_PATH`/`GITHUB_EVENT_NAME`. Non-PR events and exempt authors pass. Exit 1 on `missing`/`stale` in `enforce` mode (with a `::error` annotation in Actions). `--github-output` appends `attested=`/`state=`. Needs only git, no token; check out the PR head (`fetch-depth: 2` if merge-from-base commits should resolve via their first parent). |
+| `check-push` | pre-push hook body: reads git's stdin, refuses (1) any pushed branch head that is not attested; tags and deletes pass; a repository with no gate declared passes. |
+| `install-hook [--repo .] [--launcher CMD] [--force]` | Writes `$(git rev-parse --git-path hooks)/pre-push`; refuses (1) to replace a hook it did not write unless `--force`. |
+| `lint [--repo .]` | `GATE-001`/`GATE-002` for any repository, with or without `ci.toml` (needs PyYAML or `yq`). |
+| `first-pass --slug o/r --since ISO [--workflow ci.yml] [--target 0.8] [--min-prs 5] [--json]` | `GATE-004`, live GET-only (`GITHUB_TOKEN`/`GH_TOKEN`). `--workflow` is the workflow *file* name, matched against each run's `path`. |
+
+With `ci.toml`, `precheck` runs `GATE-001`/`GATE-002` as group 17.
+
+**Running without a checkout of this repository.** `pyproject.toml`
+packages `ci_lint` (still stdlib-only; `ci-lint[yaml]` adds PyYAML):
+
+    uvx --from git+https://github.com/zackees/ci.yml@<sha> ci-lint local-gate run
+    uvx --from 'ci-lint[yaml] @ git+https://github.com/zackees/ci.yml@<sha>' ci-lint local-gate lint
 
 ## `[allow]`
 
@@ -710,6 +756,10 @@ when neither PyYAML nor `yq` is available).
 | `BIN-001` | (round M2-20, static; only when `[python].cli.native = true`) No `group = "linux"` platform's `target` ends with `-unknown-linux-musl`. | Add a `[platforms.<id>]` entry with a `*-unknown-linux-musl` target (the portable Linux floor), or record a `[[exceptions]]` entry. |
 | `BIN-002` | (round M2-20, static; only when `[python].cli.native = true`) A `group = "windows"` platform uses the GNU ABI (`-pc-windows-gnu`) instead of MSVC, a platform's target architecture doesn't match the one its id implies (e.g. a `windows-arm64` id with an `x86_64-` triple), or `group = "windows"` platforms don't cover both x64 and arm64. | Use `*-pc-windows-msvc` triples with the architecture matching each platform id; declare both a `windows-x64` and a `windows-arm64` entry. |
 | `ACT-001` | (round M2-20, runtime, `ci-lint act audit --store-dir <dir>`) A local act cache-server store's total on-disk bytes exceed `ci.toml [cache].budget`, or a complete cache-index entry's key matches a `[cache].retired` family. | Garbage-collect the machine-scoped act-cache-server volume, or remove whatever input re-enabled the retired family (see `CACHE-009`). |
+| `GATE-001` | (#166, static, precheck group 17 / `local-gate lint`) The local gate declaration is invalid or duplicated, or a `mirrors` job runs a `run:` line or non-setup `uses:` step other than the gate command; no mirrors is `needs_review`. | Move the command into the gate script and have the job invoke the gate, or name a pure-setup step in `setup-steps`. |
+| `GATE-002` | (#166, static) No `verify` job, verify does not run `ci-lint local-gate verify`, or a job does not transitively `needs:` it; a job-level `if:` on verify is `needs_review`. | Add the verify step and route every job's `needs:` through it, or list a must-run-first job in `verify-exempt`. |
+| `GATE-003` | (#166, runtime, `local-gate verify` / `check-push`) The PR head has no `Local-Gate:` trailer for its exact tree. | `ci-lint local-gate run`, then `git push --force-with-lease`. |
+| `GATE-004` | (#166, live, `local-gate first-pass`) First-push pass rate below target (default 80%) over >= `--min-prs` merged PRs; `needs_review`. | Move each recurring first-push failure class into the local gate, or fix the flaky remote lane. |
 
 ## The planner
 

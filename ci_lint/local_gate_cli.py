@@ -1,0 +1,195 @@
+"""CLI wiring for `ci-lint local-gate ...` (GATE-001..004, zackees/ci.yml#166).
+Kept out of ci_lint/cli.py, which only calls `register(sub)`.
+
+    local-gate run          run the declared gate; stamp HEAD with a tree-bound trailer
+    local-gate verify       CI side (GATE-003): fail fast on an unattested PR head
+    local-gate check-push   git pre-push hook body (reads git's stdin)
+    local-gate install-hook write .git/hooks/pre-push calling check-push
+    local-gate lint         static GATE-001/002 against the workflows
+    local-gate first-pass   live GET-only first-push pass rate (GATE-004)
+
+Exit codes: 0 pass, 1 violation/failure, 2 usage or environment error.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+from ci_lint.finding import Status
+from ci_lint.first_pass import DEFAULT_MIN_PRS, DEFAULT_TARGET, collect, render_text
+from ci_lint.github_api import GitHubApiError, default_fetch
+from ci_lint.local_gate import (
+    GateConfig,
+    check_gate_static,
+    check_push,
+    default_launcher,
+    install_hook,
+    load_gate_config,
+    run_gate,
+    verify,
+)
+
+
+def _config(repo: Path, command: str) -> GateConfig | None:
+    config, findings = load_gate_config(repo)
+    for finding in findings:
+        print(finding.render(), file=sys.stderr)
+    if config is None:
+        print(
+            f"ci-lint local-gate {command}: no local gate declared (ci.toml [local.gate] or local-gate.toml [gate])",
+            file=sys.stderr,
+        )
+    return config
+
+
+def _event_payload() -> dict[str, object]:
+    path = os.environ.get("GITHUB_EVENT_PATH")
+    if not path or not Path(path).is_file():
+        return {}
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    repo = Path(args.repo).resolve()
+    config = _config(repo, "run")
+    if config is None:
+        return 2
+    outcome = run_gate(repo, config, stamp=not args.no_stamp, force=args.force)
+    print(outcome.message, file=sys.stderr if outcome.exit_code else sys.stdout)
+    return outcome.exit_code
+
+
+def _cmd_verify(args: argparse.Namespace) -> int:
+    repo = Path(args.repo).resolve()
+    config = _config(repo, "verify")
+    if config is None:
+        return 2
+    payload = _event_payload()
+    pr = payload.get("pull_request")
+    pr = pr if isinstance(pr, dict) else {}
+    head = pr.get("head") if isinstance(pr.get("head"), dict) else {}
+    user = pr.get("user") if isinstance(pr.get("user"), dict) else {}
+    event = args.event or os.environ.get("GITHUB_EVENT_NAME") or ""
+    sha = args.sha or (head.get("sha") if isinstance(head.get("sha"), str) else None) or os.environ.get("GITHUB_SHA")
+    author = args.author or (user.get("login") if isinstance(user.get("login"), str) else None)
+    if not sha:
+        print("ci-lint local-gate verify: --sha is required outside GitHub Actions", file=sys.stderr)
+        return 2
+    outcome = verify(repo, config, sha=sha, event=event, author=author)
+    print(outcome.message)
+    if outcome.exit_code and os.environ.get("GITHUB_ACTIONS") == "true":
+        print(f"::error title=GATE-003 local gate not run::{outcome.message.splitlines()[0]}")
+    if args.github_output:
+        target = os.environ.get("GITHUB_OUTPUT")
+        if target:
+            with open(target, "a", encoding="utf-8") as fh:
+                fh.write(f"attested={'true' if outcome.attested else 'false'}\nstate={outcome.state}\n")
+    return outcome.exit_code
+
+
+def _cmd_check_push(args: argparse.Namespace) -> int:
+    repo = Path(args.repo).resolve()
+    config, _findings = load_gate_config(repo)
+    if config is None:
+        return 0
+    code, problems = check_push(repo, sys.stdin.read())
+    if code:
+        print("ci-lint local-gate: push refused -- these heads have not passed the local gate (GATE-003):", file=sys.stderr)
+        for problem in problems:
+            print(f"  {problem}", file=sys.stderr)
+        print(f"  fix: ci-lint local-gate run   (runs {config.command} and stamps HEAD), then push again", file=sys.stderr)
+    return code
+
+
+def _cmd_install_hook(args: argparse.Namespace) -> int:
+    code, message = install_hook(Path(args.repo).resolve(), args.launcher or default_launcher(), force=args.force)
+    print(message, file=sys.stderr if code else sys.stdout)
+    return code
+
+
+def _cmd_lint(args: argparse.Namespace) -> int:
+    repo = Path(args.repo).resolve()
+    config, findings = load_gate_config(repo)
+    if config is None and not findings:
+        print("ci-lint local-gate lint: no local gate declared (ci.toml [local.gate] or local-gate.toml [gate])", file=sys.stderr)
+        return 1
+    if config is not None:
+        findings = findings + check_gate_static(config, repo)
+    for finding in findings:
+        print(finding.render())
+    violations = [f for f in findings if f.status == Status.VIOLATION]
+    print(f"local-gate lint: {len(violations)} violation(s), {len(findings) - len(violations)} other finding(s)")
+    return 1 if violations else 0
+
+
+def _cmd_first_pass(args: argparse.Namespace) -> int:
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not token:
+        print("ci-lint local-gate first-pass: GITHUB_TOKEN (or GH_TOKEN) is required", file=sys.stderr)
+        return 2
+    try:
+        since = datetime.fromisoformat(args.since)
+    except ValueError:
+        print(f"ci-lint local-gate first-pass: --since {args.since!r} is not an ISO date", file=sys.stderr)
+        return 2
+    if since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+    try:
+        report = collect(args.slug, args.workflow, since, default_fetch, token, target=args.target, min_prs=args.min_prs)
+    except GitHubApiError as exc:
+        print(f"ci-lint local-gate first-pass: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(report.to_json_dict(), indent=2) if args.json else render_text(report))
+    return 0
+
+
+def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    p = sub.add_parser("local-gate", help="local gate first: run, attest, verify, hook (GATE-001..004, ci.yml#166)")
+    lg = p.add_subparsers(dest="local_gate_command", required=True)
+
+    run = lg.add_parser("run", help="run the declared gate and stamp HEAD with a tree-bound Local-Gate trailer")
+    run.add_argument("--repo", default=".")
+    run.add_argument("--no-stamp", action="store_true", help="run only; do not amend HEAD")
+    run.add_argument("--force", action="store_true", help="run even when HEAD is already attested")
+    run.set_defaults(func=_cmd_run)
+
+    ver = lg.add_parser("verify", help="CI side (GATE-003): fail when the PR head is not attested")
+    ver.add_argument("--repo", default=".")
+    ver.add_argument("--sha", help="commit to verify (default: the PR head from GITHUB_EVENT_PATH)")
+    ver.add_argument("--event", help="event name (default: GITHUB_EVENT_NAME)")
+    ver.add_argument("--author", help="PR author login (default: from the event payload)")
+    ver.add_argument("--github-output", action="store_true", help="append attested=/state= to $GITHUB_OUTPUT")
+    ver.set_defaults(func=_cmd_verify)
+
+    hook = lg.add_parser("check-push", help="pre-push hook body: refuse unattested branch heads")
+    hook.add_argument("--repo", default=".")
+    hook.add_argument("hook_args", nargs="*", help="git's <remote> <url> (ignored)")
+    hook.set_defaults(func=_cmd_check_push)
+
+    inst = lg.add_parser("install-hook", help="install the pre-push hook")
+    inst.add_argument("--repo", default=".")
+    inst.add_argument("--launcher", help="command that runs ci-lint (default: this interpreter + this checkout)")
+    inst.add_argument("--force", action="store_true", help="replace an existing non-ci-lint pre-push hook")
+    inst.set_defaults(func=_cmd_install_hook)
+
+    lint = lg.add_parser("lint", help="static GATE-001/002 for a repository with or without ci.toml")
+    lint.add_argument("--repo", default=".")
+    lint.set_defaults(func=_cmd_lint)
+
+    fp = lg.add_parser("first-pass", help="live first-push pass rate of merged PRs (GATE-004)")
+    fp.add_argument("--slug", required=True, help="owner/name")
+    fp.add_argument("--workflow", default="ci.yml", help="workflow file name (default: ci.yml)")
+    fp.add_argument("--since", required=True, help="ISO date/time; PRs merged at or after it")
+    fp.add_argument("--target", type=float, default=DEFAULT_TARGET)
+    fp.add_argument("--min-prs", type=int, default=DEFAULT_MIN_PRS)
+    fp.add_argument("--json", action="store_true")
+    fp.set_defaults(func=_cmd_first_pass)

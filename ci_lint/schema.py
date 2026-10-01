@@ -19,6 +19,7 @@ from pathlib import Path
 
 from ci_lint.cache.families import ALLOWED_VIA_VALUES
 from ci_lint.finding import Finding
+from ci_lint.local_gate import GateConfig, parse_gate_table
 from ci_lint.toml_cursor import Cursor, TomlValue
 
 LINTER_RE = re.compile(r"^zackees/ci\.yml@([0-9a-fA-F]{40})$")
@@ -210,6 +211,9 @@ class LocalConfig:
     runner: str
     lanes: tuple[str, ...]
     cache: str
+    # `[local.gate]` (GATE-001..004, zackees/ci.yml#166): the declared local
+    # gate, or None when the repository has not opted in.
+    gate: GateConfig | None = None
 
 
 # ── Fleet (central scanner opt-in) ────────────────────────────────────────
@@ -594,8 +598,14 @@ def _parse_local(root: Cursor) -> LocalConfig:
     runner = sub.str_("runner") or ""
     lanes = sub.list_str("lanes")
     cache = sub.str_("cache") or ""
+    gate_raw = sub.table_("gate", required=False)
     sub.finish()
-    return LocalConfig(runner=runner, lanes=lanes, cache=cache)
+    gate = (
+        parse_gate_table(gate_raw, path="local.gate", source=root.source, findings=root.findings)
+        if gate_raw is not None
+        else None
+    )
+    return LocalConfig(runner=runner, lanes=lanes, cache=cache, gate=gate)
 
 
 def _parse_allow(root: Cursor) -> AllowConfig:

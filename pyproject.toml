@@ -1,0 +1,23 @@
+# Packaging only, so any repository can run the checker without a sister
+# checkout (zackees/ci.yml#166):
+#   uvx --from git+https://github.com/zackees/ci.yml@<sha> ci-lint local-gate run
+# ci_lint stays standard-library-only; PyYAML is an optional accelerant.
+[project]
+name = "ci-lint"
+version = "0.1.0"
+description = "Fleet CI policy checker for zackees/ci.yml"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6"]
+
+[project.scripts]
+ci-lint = "ci_lint.cli:entrypoint"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["ci_lint*"]
