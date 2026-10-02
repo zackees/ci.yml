@@ -207,6 +207,19 @@
         "whole-file conflict resolution is unsafe even when the visible conflict is a pin"
       ],
       "decision": "resolve per hunk; re-run local-gate lint + wiring tests after any rebase (the gate itself caught nothing because the dropped lane simply did not exist)."
+    },
+    {
+      "id": "S2",
+      "question": "Do side entries keep up as gates grow?",
+      "method": "phase-4 main run 37062025601 with 13 attested gates",
+      "result": "8 save slots, alphabetical publishing: rust/x86_64-unknown-linux-gnu/test (the gate hydration requires) was dropped for m2200; the resolver correctly refused to hydrate from that commit",
+      "pros": [
+        "omission semantics failed safe: no hydration from an unproven commit"
+      ],
+      "cons": [
+        "silent truncation (stderr only)"
+      ],
+      "decision": "ci_lint publishes job-mapped gates first and emits ::warning on overflow (zackees/ci.yml#218); soldr raised to 16 slots (soldr#3550)."
     }
   ],
   "rounds": [
@@ -282,6 +295,32 @@
       "what": "phases 2-3: cross lane, wine lane, winvm lane, GATE-009 proof",
       "gate": "8 lanes passed in 1534 s on the rebased tree; 13/13 gates attested valid",
       "decision": "surface-changed (runs remotely, as designed)"
+    },
+    {
+      "pr": "zackees/soldr#3549",
+      "what": "phase 4: Tier-2 zccache hydration from the nearest attested ancestor; lineage-keyed saves",
+      "result": "PR: resolver found no labelled entries -> prefix fallback (as designed); main 71dd2b1 saved zccache-unit-v1-...-m2200-71dd2b19fd"
+    },
+    {
+      "pr": "zackees/soldr#3550",
+      "what": "16 side-entry slots + ci_lint db7ec84",
+      "result": "main 9f92fdb published att1-rust.x86_64-unknown-linux-gnu.test-m2201-9f92fdbe37 and saved zccache-unit-v1-...-m2201-9f92fdbe37; `ci-lint attest resolve --require-gate rust/x86_64-unknown-linux-gnu/test` now resolves to m2201 and skips m2200 (no test attestation) -- the hydration loop closed end to end"
     }
-  ]
+  ],
+  "summary": {
+    "pr_ci_ordinary": "20-46 s wall when every gate of the skip jobs is attested (soldr#3541, #3532) vs ~14 min before",
+    "gates_attested_locally": 13,
+    "lanes": [
+      "py-static",
+      "guards",
+      "ci-lint",
+      "rust",
+      "cross",
+      "wine",
+      "winvm (optional)",
+      "tests (bosn, proves-tree)"
+    ],
+    "cache_keys": "<family>-m<n>-<sha10> (main) / <family>-m<b>-c<k>-<sha10>-pr-<N> (PR; suffix = PR_CACHE_TAG): human-readable, ancestor-defining, git-confirmed",
+    "hydration": "nearest ancestor generation whose commit carries a valid required-gate attestation side entry, GET-only listing, advisory with prefix fallback"
+  }
 }

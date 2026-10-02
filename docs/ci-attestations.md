@@ -121,7 +121,7 @@ What makes the labels ancestor-defining:
    - A `…/test` gate takes only a native or native-equivalent lane.
    - Emulation lanes attest a distinct check name (`unit`) with an explicit crate scope.
    - **Host-optional lanes** (`optional = true`, exit 75) are never attested where they cannot run.
-3. **Phase 4:** hydrate build caches (zccache store, Dylint trees) from the nearest **attested** ancestor through `attest resolve --require-gate`, with lineage-keyed saves.
+3. **Phase 4: done** (soldr#3549 and soldr#3550). The Tier-2 zccache store is saved under lineage keys (`…-m<n>-<sha10>`). Linux x64 restores the nearest ancestor generation whose commit has a valid `rust/x86_64-unknown-linux-gnu/test` side entry (`attest resolve --require-gate`, GET-only, advisory, prefix fallback). Verified live: `main` m2201 published both, the resolver picks `…-m2201-9f92fdbe37`, and it skips m2200, whose test gate overflowed the old 8 slots (fixed in #218: job-mapped gates are published first, and overflow is a `::warning`). Next: the Dylint trees and cross lanes.
 4. **Isolation:** the isolated runner proves which tree it tested (GATE-009, `.gate-nonce`; bosn 0.1.7 fixed the container reuse at the root).
 
 ## Commands
