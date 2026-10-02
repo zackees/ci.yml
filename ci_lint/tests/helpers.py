@@ -21,6 +21,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from ci_lint.proc import run_captured
 from ci_lint.yaml_io import yaml_tooling_available
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -45,10 +46,6 @@ def init_git_repo(root: Path) -> None:
     build their own tiny repo on the fly in a tempdir instead of relying on
     a static checked-in fixture."""
 
-    subprocess.run(
-        ["git", "init", "-q"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    proc = run_captured(["git", "init", "-q"], cwd=root)
+    if not proc.ok:
+        raise subprocess.CalledProcessError(proc.returncode, ["git", "init"], proc.stdout, proc.stderr)

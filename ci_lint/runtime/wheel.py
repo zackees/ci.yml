@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import platform as host_platform
 import re
-import subprocess
 import sys
 import tarfile
 import tomllib
@@ -19,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
+from ci_lint.proc import run_captured
 from ci_lint.schema import CiToml
 
 _SCRIPT_MEMBER_RE = re.compile(r"^([^/]+)\.data/scripts/(.+)$")
@@ -540,9 +540,7 @@ def check_installed(ci: CiToml, repo_root: Path, venv_dir: Path) -> InstalledChe
                     )
                 )
         try:
-            proc = subprocess.run(
-                [str(cli_path), "--version"], capture_output=True, text=True, timeout=30, check=False
-            )
+            proc = run_captured([str(cli_path), "--version"], timeout=30)
         except OSError as exc:
             findings.append(
                 Finding(
@@ -581,9 +579,7 @@ def check_installed(ci: CiToml, repo_root: Path, venv_dir: Path) -> InstalledChe
         venv_python = _venv_python(venv_dir)
         code = f"import {pkg_name}, {pkg_name}._native as n; print(n.__file__)"
         try:
-            proc = subprocess.run(
-                [str(venv_python), "-c", code], capture_output=True, text=True, timeout=30, check=False
-            )
+            proc = run_captured([str(venv_python), "-c", code], timeout=30)
         except OSError as exc:
             findings.append(
                 Finding(

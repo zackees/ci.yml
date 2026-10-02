@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+
+from ci_lint.proc import run_captured
 
 # A YAML/JSON document, typed concretely (never Any) per AGENTS.md's
 # boundary-dictionary rule. This is the JSON/YAML wire boundary itself.
@@ -52,13 +53,7 @@ def _try_yq(path: Path) -> LoadResult | None:
     if yq is None:
         return None
     try:
-        proc = subprocess.run(
-            [yq, "-o=json", str(path)],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
+        proc = run_captured([yq, "-o=json", str(path)], timeout=10)
     except OSError as exc:
         return LoadResult(LoadStatus.NEEDS_REVIEW, None, f"yq invocation failed: {exc}")
     if proc.returncode != 0:

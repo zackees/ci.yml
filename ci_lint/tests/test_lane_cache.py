@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import shutil
 import subprocess
 import sys
@@ -17,21 +16,31 @@ from ci_lint.lane_cache import (
     ToolVersion,
     ToolVersions,
     audit_trace,
-    run_audit,
     cache_dir,
     check_lanes_static,
     lane_key,
     lookup,
     record,
+    run_audit,
     tree_entries,
 )
-from ci_lint.local_gate import Attestation, check_commit, load_gate_config, parse_attestation, run_gate
+from ci_lint.local_gate import (
+    Attestation,
+    check_commit,
+    load_gate_config,
+    parse_attestation,
+    run_gate,
+)
+from ci_lint.proc import run_captured
 
 TREE = "a" * 40
 
 
 def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=True).stdout.strip()
+    proc = run_captured(["git", "-C", str(repo), *args])
+    if not proc.ok:
+        raise subprocess.CalledProcessError(proc.returncode, ["git", *args], proc.stdout, proc.stderr)
+    return proc.stdout.strip()
 
 
 GATE_PY = """\
