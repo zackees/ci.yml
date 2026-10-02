@@ -19,8 +19,9 @@ and build noise: `.git`, `target`, `.venv*`, `.cargo/registry`,
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
+
+from ci_lint.proc import run_captured
 
 WALK_EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
     {
@@ -39,14 +40,7 @@ CARGO_REGISTRY_PREFIX = ".cargo/registry/"
 
 def _is_git_work_tree(repo_root: Path) -> bool:
     try:
-        proc = subprocess.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
+        proc = run_captured(["git", "rev-parse", "--is-inside-work-tree"], cwd=repo_root, timeout=15)
     except OSError:
         return False
     return proc.returncode == 0 and proc.stdout.strip() == "true"
@@ -63,14 +57,7 @@ def _git_tracked_files(repo_root: Path) -> list[str] | None:
     if not _is_git_work_tree(repo_root):
         return None
     try:
-        proc = subprocess.run(
-            ["git", "ls-files", "-co", "--exclude-standard"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
+        proc = run_captured(["git", "ls-files", "-co", "--exclude-standard"], cwd=repo_root, timeout=30)
     except OSError:
         return None
     if proc.returncode != 0:

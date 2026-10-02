@@ -58,6 +58,7 @@ from ci_lint.lane_cache import (
     record,
     tree_entries,
 )
+from ci_lint.proc import run_captured
 from ci_lint.toml_cursor import Cursor, TomlValue
 from ci_lint.yaml_io import YamlValue
 
@@ -260,9 +261,7 @@ class GitError(Exception):
 
 
 def _git(repo: Path, *args: str, stdin: str | None = None) -> str:
-    proc = subprocess.run(
-        ["git", "-C", str(repo), *args], input=stdin, capture_output=True, text=True, check=False
-    )
+    proc = run_captured(["git", "-C", str(repo), *args], input_text=stdin)
     if proc.returncode != 0:
         raise GitError(f"git {' '.join(args)}: {proc.stderr.strip() or proc.stdout.strip()}")
     return proc.stdout
@@ -629,7 +628,10 @@ class _Workflows:
 
 
 def _load_workflows(repo_root: Path) -> _Workflows:
-    from ci_lint.workflow_scan import as_dict, load_workflows  # noqa: PLC0415 -- YAML tooling is optional
+    from ci_lint.workflow_scan import (  # noqa: PLC0415 -- YAML tooling is optional
+        as_dict,
+        load_workflows,
+    )
     from ci_lint.yaml_io import LoadStatus  # noqa: PLC0415
 
     out = _Workflows()

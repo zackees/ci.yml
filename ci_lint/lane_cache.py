@@ -43,6 +43,7 @@ from pathlib import Path
 
 from ci_lint.finding import Finding, Status
 from ci_lint.globs import glob_to_regex
+from ci_lint.proc import run_captured
 from ci_lint.toml_cursor import Cursor, TomlValue
 
 KEY_VERSION = "gate-007/v1"
@@ -138,7 +139,9 @@ def parse_lanes(raw: dict[str, TomlValue], *, path: str, source: str, findings: 
 
 
 def _git(repo: Path, *args: str) -> str:
-    proc = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=True)
+    proc = run_captured(["git", "-C", str(repo), *args])
+    if not proc.ok:
+        raise subprocess.CalledProcessError(proc.returncode, ["git", *args], proc.stdout, proc.stderr)
     return proc.stdout
 
 
@@ -214,7 +217,7 @@ class ToolVersions:
         if exe is None:
             version = "missing"
         else:
-            proc = subprocess.run([exe, "--version"], capture_output=True, text=True, check=False)
+            proc = run_captured([exe, "--version"], timeout=60)
             text = (proc.stdout + proc.stderr).strip()
             # soldr prints a delegation notice before its version; keep version-shaped lines only.
             lines = [ln for ln in text.splitlines() if re.search(r"\d+\.\d+", ln) and "delegating" not in ln]

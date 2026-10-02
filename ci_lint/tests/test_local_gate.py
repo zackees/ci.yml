@@ -29,6 +29,7 @@ from ci_lint.local_gate import (
     run_gate,
     verify,
 )
+from ci_lint.proc import run_captured
 from ci_lint.schema import load_ci_toml
 from ci_lint.tests.helpers import requires_yaml_tooling
 
@@ -37,9 +38,10 @@ EXAMPLE = Path(__file__).resolve().parents[2] / "examples" / "rust-pypi-app" / "
 
 
 def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
-    ).stdout.strip()
+    proc = run_captured(["git", "-C", str(repo), *args])
+    if not proc.ok:
+        raise subprocess.CalledProcessError(proc.returncode, ["git", *args], proc.stdout, proc.stderr)
+    return proc.stdout.strip()
 
 
 def _repo(tmp: Path, gate_body: str) -> Path:

@@ -33,12 +33,12 @@ The guard is the runtime enforcement; this module only proves it is wired.
 from __future__ import annotations
 
 import re
-import subprocess
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
+from ci_lint.proc import run_captured
 from ci_lint.toml_cursor import Cursor, TomlValue
 
 SELF_HOSTED_TOOL_REPOS: frozenset[str] = frozenset(
@@ -72,9 +72,7 @@ def parse_isolation(raw: dict[str, TomlValue], *, path: str, source: str, findin
 
 
 def origin_slug(repo_root: Path) -> str | None:
-    proc = subprocess.run(
-        ["git", "-C", str(repo_root), "remote", "get-url", "origin"], capture_output=True, text=True, check=False
-    )
+    proc = run_captured(["git", "-C", str(repo_root), "remote", "get-url", "origin"])
     match = _ORIGIN_RE.search(proc.stdout.strip()) if proc.returncode == 0 else None
     return match.group("slug").lower() if match else None
 

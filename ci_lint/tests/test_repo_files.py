@@ -7,11 +7,11 @@ filesystem walk (skipping VCS/build noise) only for a non-git fixture dir.
 
 from __future__ import annotations
 
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
+from ci_lint.proc import run_captured
 from ci_lint.repo_files import list_repo_files
 from ci_lint.tests.helpers import init_git_repo
 
@@ -70,13 +70,7 @@ class NonGitFallbackTest(unittest.TestCase):
     def test_a_bare_directory_is_not_reported_as_a_git_work_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            proc = subprocess.run(
-                ["git", "rev-parse", "--is-inside-work-tree"],
-                cwd=root,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+            proc = run_captured(["git", "rev-parse", "--is-inside-work-tree"], cwd=root)
         # A bare tmp dir is not inside any git work tree (assuming the test
         # runner's tmp dir is not itself nested in one, which
         # tempfile.mkdtemp()'s default location never is).
