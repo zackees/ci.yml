@@ -26,6 +26,7 @@ from ci_lint.rules.cache_static import check_group9
 from ci_lint.rules.default_branch_skip import check_gen_021
 from ci_lint.gate_bare_tools import check_no_bare_rust
 from ci_lint.local_gate import GATE_FILE, check_gate_static
+from ci_lint.remote_only import check_gate_012
 from ci_lint.rules.ci_pre import check_group12
 from ci_lint.rules.contract import check_ct_006, check_tag_001, check_tag_002
 from ci_lint.rules.layout import check_group6
@@ -112,6 +113,7 @@ GROUP_LABELS: dict[int, str] = {
     15: "paths blast radius + platform check-only coverage + cook safety (GEN-007, RUST-008/010)",
     16: "default-branch skips only through verified reuse (GEN-021)",
     17: "local gate first: remote quick gate mirrors the local gate, PR entry verifies it (GATE-001/002)",
+    18: "remote-only checks never gate a PR: CodeRabbit suppressed, act-impossible steps confined, no app waits (GATE-012)",
 }
 
 
@@ -167,6 +169,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(check_rust_015(repo_root))
         all_findings.extend(check_rust_016(repo_root))
         all_findings.extend(check_gen_021(repo_root))
+        all_findings.extend(check_gate_012(repo_root))
         if ci.local.gate is not None:
             all_findings.extend(check_gate_static(ci.local.gate, repo_root))
             all_findings.extend(check_no_bare_rust(repo_root, ci.local.gate.run, workflows=False))

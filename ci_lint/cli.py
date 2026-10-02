@@ -56,6 +56,7 @@ from ci_lint.reuse_cli import register as register_reuse
 from ci_lint.attest_cli import register as register_attest
 from ci_lint.local_gate_cli import register as register_local_gate
 from ci_lint.py_lint import register as register_py
+from ci_lint.remote_only import register as register_remote_only
 from ci_lint.github_api import default_delete, default_fetch, default_fetch_status, default_graphql
 from ci_lint.perf import (
     PERF_SCHEMA_VERSION,
@@ -1526,6 +1527,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_local_gate(sub)
     register_attest(sub)
     register_py(sub)
+    register_remote_only(sub)
 
     return parser
 
