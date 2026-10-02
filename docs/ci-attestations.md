@@ -96,6 +96,27 @@ What makes the labels ancestor-defining:
   - `--target x86_64-pc-windows-msvc` ran in 74 s and **found 3 real warnings on soldr `main`** (two test-only items compiled into the library, and an unused import). No ordinary PR job runs Windows Clippy, so they had gone unnoticed. Attesting "Clippy (all platforms)" locally is cheap, and it catches what PR CI cannot.
 - **Resolve on soldr history:** for PR #3532 (`m2189-c1-…-pr-3532`), the resolver picks `m2189` and rejects `m2191`, which is not an ancestor. With `--require-gate …/test` and only `m2188` attested, it picks `m2188`.
 
+## Pilot results (soldr)
+
+| PR | GATE-008/010 decision | CI wall time |
+| --- | --- | ---: |
+| soldr#3537 (phase-1 wiring; surfaces changed) | `surface-changed`: both jobs ran; the publisher found no definition at the base | ~14 min |
+| **soldr#3541** (first ordinary PR: the Windows Clippy fixes X1 found) | trusted; `ci.yml:lint` skip (2/2 gates), `ci.yml:build-linux-x64` skip (5/5) | **20 s** |
+
+- `CI Pre › Publish ci-attestations` saved 7 entries of about 430 B each, e.g. `att1-rust.x86_64-unknown-linux-gnu.test-m2192-c1-59fd7786bc-pr-3541`. `ci-lint attest resolve` found them through the live REST listing (GET only).
+- **The squash commit can carry valid attestations.** #3537's `main` push (d17f707) published `att1-…-m2192-d17f7071c1` on `refs/heads/main`. The PR was up to date with main, so the squash commit had the attested head's exact tree and parent, and its stamps genuinely hold. These `main`-scoped entries are readable from every branch, so they are what later PRs hydrate from. When the PR is behind main, the stamps are rejected (`wrong-tree`/`wrong-parents`). Either way, `main` pushes run every job.
+
+## Roadmap
+
+1. **Phase 2:** a `cross` lane attests `rust/{x86_64-pc-windows-msvc,aarch64-apple-darwin}/{clippy,dylint}` from the Linux host (X2: 62 + 265 + 4 + 141 s; cached by GATE-007). No PR job runs these, so this is added coverage.
+2. **Phase 3:** Windows/macOS **unit-test** lanes that attest `rust/<target>/test` locally ([#202](https://github.com/zackees/ci.yml/issues/202), candidate GATE-011):
+   - Wine for `windows-gnu`;
+   - a warm dockur/windows guest for `windows-msvc` (soldr's guest probe already passes 220/220 tests; its cold boot is the blocker);
+   - the macOS Recovery guest, whose licensing is a constraint to verify.
+
+   Non-native lanes must run in a container or VM (GATE-005). Release still runs natively.
+3. **Phase 4:** hydrate build caches (zccache store, Dylint trees) from the nearest **attested** ancestor through `attest resolve --require-gate`, with lineage-keyed saves.
+
 ## Commands
 
 | Command | Use |

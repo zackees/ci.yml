@@ -1,0 +1,173 @@
+{
+  "schema": 1,
+  "title": "ci-attestations (GATE-010) pilot ledger",
+  "issue": "zackees/ci.yml#198",
+  "pilot": "zackees/soldr#3534",
+  "recorded": "2026-10-02",
+  "goal": "Per-gate attestations written into commit messages (YAML definition, compact JSON transit), validated on the host, consumed by ci.yml/ci-pre.yml per commit to skip remote jobs on ordinary PRs, published as tiny lineage-keyed cache side entries that decide which caches are valid to hydrate.",
+  "experiments": [
+    {
+      "id": "K1",
+      "question": "Is a PR commit ordinal (c<k>) ancestor-defining across real pushes?",
+      "method": "GitHub compare API over 92 consecutive PR-head transitions (46 soldr branches, 2026-09-25..10-02).",
+      "result": {
+        "fast_forward": 76,
+        "diverged": 16,
+        "diverged_breakdown": {
+          "rebase_onto_newer_main": 12,
+          "content_amend_or_squash": 4,
+          "message_only_amend": 0
+        }
+      },
+      "pros": [
+        "83% of transitions keep c<k> ordering exactly"
+      ],
+      "cons": [
+        "17% rewrite history; key order alone cannot prove ancestry there"
+      ],
+      "decision": "Carry the base's main ordinal (m<b>) as well as c<k>: a rebase moves m<b> forward (nearest ancestor becomes a main entry); an amend keeps m<b> but changes the SHA, so the 10-hex SHA + git merge-base --is-ancestor confirms."
+    },
+    {
+      "id": "K2",
+      "question": "Where does the PR component go in the key?",
+      "method": "First draft pr-<N>-m<b>-c<k>-<sha10> (owner sketch *-pr-NN-(ordinal)); checked against soldr's check_pr_cache_keys.py (CACHE-013), which requires ${{ env.PR_CACHE_TAG }} = -pr-<N> in every PR-reachable save.",
+      "result": "A suffix (m<b>-c<k>-<sha10>-pr-<N>) is exactly <stem>${{ env.PR_CACHE_TAG }}: one key shape for main (tag empty) and PRs, accepted unchanged by the fleet's checker and janitor.",
+      "pros": [
+        "no new convention",
+        "janitor already deletes closed-PR entries"
+      ],
+      "cons": [
+        "reads stem-first rather than pr-first"
+      ],
+      "decision": "Adopt the suffix form (zackees/ci.yml#201)."
+    },
+    {
+      "id": "X1",
+      "question": "Can the Linux host lint Windows/macOS targets (owner: dylint/clippy for linux/mac/win)?",
+      "method": "soldr cargo clippy --workspace --all-targets --target <t> -- -D warnings in a fresh soldr worktree.",
+      "result": {
+        "aarch64-apple-darwin": "pass, 111 s cold",
+        "x86_64-pc-windows-msvc": "FAIL in 74 s: 3 real warnings on soldr main (2 test-only items compiled into the lib, 1 unused import) that no PR job sees"
+      },
+      "pros": [
+        "cheap cross-target lint on the host",
+        "finds what PR CI cannot (PRs lint Linux only)"
+      ],
+      "cons": [
+        "first run downloads target std"
+      ],
+      "decision": "Phase 2 cross lane; fix the warnings first (demo PR)."
+    },
+    {
+      "id": "X2",
+      "question": "Cost of the full cross lane after the fix",
+      "method": "same worktree, sequential",
+      "result": {
+        "clippy windows-msvc": "62 s",
+        "dylint windows-msvc": "265 s",
+        "clippy apple-darwin": "4 s warm",
+        "dylint apple-darwin": "141 s"
+      },
+      "pros": [
+        "all pass after the fix"
+      ],
+      "cons": [
+        "~7-8 min cold, cached by GATE-007 when Rust inputs are unchanged"
+      ],
+      "decision": "Ship as its own heavy lane; gates map to no PR job (added coverage)."
+    },
+    {
+      "id": "C1",
+      "question": "Do concurrent soldr runs in sibling worktrees interfere?",
+      "method": "Pilot gate's rust lane ran `soldr cargo dylint` while X2 ran dylint in another worktree.",
+      "result": "rust lane failed: 'soldr: IO error: No such file or directory' building a lint library; rerun alone passed (163 s). Filed zackees/soldr#3538. Also bosn container reuse across worktrees (zackees/bosn#314; candidate GATE-009, #196).",
+      "pros": [],
+      "cons": [
+        "an attestation-producing host must not run two Dylint builds at once until #3538 is fixed"
+      ],
+      "decision": "Serialize heavy lanes across worktrees on one host for now; track #3538."
+    },
+    {
+      "id": "S1",
+      "question": "Attestation size in a commit message",
+      "method": "pilot head of soldr#3537",
+      "result": "7 trailers, 349-355 bytes each (~2.4 KiB)",
+      "pros": [
+        "compact enough for every commit"
+      ],
+      "cons": [
+        "lane keys are 64-hex; could be 16"
+      ],
+      "decision": "Keep full keys in v1 (audit value); revisit if gate counts grow."
+    }
+  ],
+  "rounds": [
+    {
+      "round": 1,
+      "design": "#198 as filed: JSON note/trailer + per-head GATE-008 trust; keys pr-<N>-m<b>-c<k>-<sha10>.",
+      "attacks": [
+        {
+          "attack": "Trust is all-or-nothing per head; an omitted gate (e.g. tests not run) would still skip the whole job.",
+          "change": "Per-job decision: skip_<job> = trusted AND every gate the base definition maps to the job is valid. Omission means not run."
+        },
+        {
+          "attack": "Lint can be skipped while Linux x64 must still run, but Linux x64 required needs.lint.result == 'success'.",
+          "change": "Linux x64 accepts (lint success OR skip_lint); pinned by soldr's wiring test."
+        },
+        {
+          "attack": "A host needs PyYAML/yq to read the YAML definition; soldr's dev host has neither.",
+          "change": "ci_lint.mini_yaml: stdlib restricted-YAML parser that also enforces the no-anchor/alias/tag/merge/block-scalar/multi-doc rule."
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "design": "Round 1 + per-job skip + mini_yaml + lineage keys.",
+      "attacks": [
+        {
+          "attack": "Can a PR forge or move attestations?",
+          "change": "Stamp = sha256(tree, parents, canonical JSON); verify rejects bad-stamp/wrong-tree/wrong-parents/lane-mismatch/duplicate/undeclared; definition read from the PR base and is itself a GATE-008 surface."
+        },
+        {
+          "attack": "Key format collides with the fleet PR tag convention (K2).",
+          "change": "PR tag as suffix."
+        },
+        {
+          "attack": "Publishing side entries from ci-pre checks out PR-authored content with cache write access.",
+          "change": "The job only READS the PR head (git objects); it runs ci_lint from a pinned SHA, has no actions:write, and cache saves are scoped by GitHub to the PR ref; soldr's ci-pre test pins all of it."
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "design": "Round 2 + suffix keys + hardened publisher.",
+      "attacks": [
+        {
+          "attack": "The squash commit on main carries the PR head's trailers.",
+          "change": "Measured (#3537 -> d17f707): when the PR is up to date with main, the squash commit has the attested head's exact tree AND parent, so its stamps are genuinely valid and the main push published 7 side entries on refs/heads/main -- the entries every branch can read, i.e. the ones later PRs hydrate from. When the PR is behind main, tree/parents differ and the stamps are rejected (wrong-tree/wrong-parents). Either way main pushes run every job; attestations only feed hydration there. (Round-3 draft wrongly assumed squash always invalidates.)"
+        },
+        {
+          "attack": "A side entry could be evicted or a PR closed.",
+          "change": "Hydration only ever falls back to an older or no ancestor (evict lru, 16 MiB family); never to a wrong one."
+        }
+      ]
+    }
+  ],
+  "pilot_runs": [
+    {
+      "pr": "zackees/soldr#3537",
+      "what": "phase 1 wiring (surface change)",
+      "decision": "surface-changed -> Lint and Linux x64 ran; publisher: no definition at base",
+      "result": "green, merged d17f707",
+      "main_push": "7 valid side entries att1-*-m2192-d17f7071c1 on refs/heads/main (squash identical to the attested head)"
+    },
+    {
+      "pr": "zackees/soldr#3541",
+      "what": "first ordinary PR (Windows clippy fixes found by X1)",
+      "decision": "[GATE-008] trusted; [GATE-010] lint skip (2/2 gates), build-linux-x64 skip (5/5 gates)",
+      "ci_wall_seconds": 20,
+      "side_entries": "7 x ~430 B: att1-<gate>-m2192-c1-59fd7786bc-pr-3541",
+      "resolve": "ci-lint attest resolve --family att1-rust.x86_64-unknown-linux-gnu.test --require-gate .../clippy -> its own entry (live REST listing, GET only)"
+    }
+  ]
+}
