@@ -65,21 +65,25 @@ Ci-Attestation: {"at":1790917000,"gate":"rust/x86_64-unknown-linux-gnu/test","ho
 ## Human-readable, ancestor-defining cache keys
 
 ```
-main-m<n>-<sha10>            default-branch commit, n = first-parent ordinal on main
-pr-<N>-m<b>-c<k>-<sha10>     PR #N's commit, k first-parent commits above its base main-m<b>
+<family>-m<n>-<sha10>              default-branch commit, n = first-parent ordinal on main
+<family>-m<b>-c<k>-<sha10>-pr-<N>  PR #N's commit, k first-parent commits above its base m<b>
 ```
 
 Examples, with real soldr values:
-- `att1-rust.x86_64-unknown-linux-gnu.test-pr-3532-m2189-c1-18204251ce`
-- `zccache-unit-v1-x86_64-unknown-linux-gnu-main-m2190-4b4f981d09`
+- `att1-rust.x86_64-unknown-linux-gnu.test-m2189-c1-18204251ce-pr-3532`
+- `zccache-unit-v1-x86_64-unknown-linux-gnu-m2190-4b4f981d09`
+
+**Why the PR component is a suffix (experiment K2).** The first draft was `pr-<N>-m<b>-c<k>-<sha10>`, after the owner's `*-pr-NN-(commit ordinal)` sketch. soldr's `check_pr_cache_keys.py` (CACHE-013) already requires every PR-reachable cache save to carry `${{ env.PR_CACHE_TAG }}`, which is exactly `-pr-<N>` in a PR and empty elsewhere. With the tag as a suffix:
+- one key shape (`<stem>${{ env.PR_CACHE_TAG }}`) serves both main and PRs;
+- the existing checkers and janitor accept it unchanged;
+- `ci-lint attest keys` outputs both the full `key_<i>` and the `stem_<i>` a workflow appends the tag to.
 
 What makes the labels ancestor-defining:
 - **Ancestry is readable from the key alone,** without git:
-  - `main-m<i>` precedes `main-m<j>` iff i < j (main is never rewritten);
-  - `pr-N-m<b>-c<i>` can precede `pr-N-m<b>-c<j>` only if i < j and the bases match;
+  - `m<i>` precedes `m<j>` iff i < j (main is never rewritten);
+  - `m<b>-c<i>-…-pr-N` can precede `m<b>-c<j>-…-pr-N` only if i < j and the bases match;
   - a main entry can precede a PR commit only if its ordinal is at most the PR's base ordinal.
 - **The SHA prefix lets git confirm it** (`merge-base --is-ancestor`) when history was rewritten.
-- **`pr-<N>` is a delimited component,** so the existing PR janitor (CACHE-013) deletes a closed PR's entries.
 
 ## Experiments (soldr pilot)
 
@@ -90,7 +94,7 @@ What makes the labels ancestor-defining:
 - **X1, cross-target Clippy on a Linux host.**
   - `soldr cargo clippy --workspace --all-targets --target aarch64-apple-darwin` passed in 111 s cold.
   - `--target x86_64-pc-windows-msvc` ran in 74 s and **found 3 real warnings on soldr `main`** (two test-only items compiled into the library, and an unused import). No ordinary PR job runs Windows Clippy, so they had gone unnoticed. Attesting "Clippy (all platforms)" locally is cheap, and it catches what PR CI cannot.
-- **Resolve on soldr history:** for PR #3532 (`pr-3532-m2189-c1`), the resolver picks `main-m2189` and rejects `main-m2191`, which is not an ancestor. With `--require-gate …/test` and only `main-m2188` attested, it picks `main-m2188`.
+- **Resolve on soldr history:** for PR #3532 (`m2189-c1-…-pr-3532`), the resolver picks `m2189` and rejects `m2191`, which is not an ancestor. With `--require-gate …/test` and only `m2188` attested, it picks `m2188`.
 
 ## Commands
 
@@ -99,6 +103,6 @@ What makes the labels ancestor-defining:
 | `ci-lint local-gate run` | runs the lanes and stamps `Local-Gate:` plus one `Ci-Attestation:` per gate of each passed lane |
 | `ci-lint attest verify [--commit X] [--base REV]` | the host or CI checks a commit's trailers: valid, missing (not run), or why not |
 | `ci-lint attest lineage [--commit X] [--pr N]` | prints the commit's label |
-| `ci-lint attest keys --pr N --out-dir D --github-output` | side files and cache keys for the valid gates |
+| `ci-lint attest keys --pr N --out-dir D --github-output` | side files and cache keys for the valid gates (`key_<i>`, and `stem_<i>` for `${{ env.PR_CACHE_TAG }}`) |
 | `ci-lint attest resolve --family F [--require-gate G] --github-output` | the nearest ancestor entry of a cache family to restore |
 | `ci-lint local-gate lint` | GATE-010 static checks: the definition parses, its lanes exist, skip jobs are mapped |

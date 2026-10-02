@@ -127,7 +127,7 @@ Measured on a 16-core host (soldr):
 3. **Per-job skip.** The verify job outputs `skip_<job>` for each GATE-008 skip job. It is `true` only when the head passes GATE-008's head-level policy **and** every gate the job lists has a valid attestation.
 4. **Stamp.** `sha256(tree, parents, canonical JSON)`: tamper-evident, bound to content and position, and not a signature.
 5. **Push and release.** Push events never skip. **Release always ignores attestations:** every gate runs remotely on the candidate's exact SHA.
-6. **Caching.** Valid attestations may be saved as tiny side cache entries. Cache keys carry the human-readable, ancestor-defining label `main-m<n>-<sha10>` / `pr-<N>-m<b>-c<k>-<sha10>`, and `ci-lint attest resolve` hydrates the nearest attested ancestor.
+6. **Caching.** Valid attestations may be saved as tiny side cache entries. Cache keys carry the human-readable, ancestor-defining label `m<n>-<sha10>` (main) or `m<b>-c<k>-<sha10>-pr-<N>` (the PR tag is the fleet's existing `PR_CACHE_TAG` suffix), and `ci-lint attest resolve` hydrates the nearest attested ancestor.
 
 ## Re-running the local gate: lane result cache (GATE-007)
 

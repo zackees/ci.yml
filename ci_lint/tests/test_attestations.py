@@ -192,9 +192,10 @@ class LineageTest(GitCase):
     def test_labels_parse_and_order_without_git(self) -> None:
         main = Lineage(main_ordinal=2189, sha="6f6b886c32" + "0" * 30)
         pr = Lineage(main_ordinal=2189, sha="18204251ce" + "0" * 30, pr=3532, ordinal=1)
-        self.assertEqual(main.label(), "main-m2189-6f6b886c32")
-        self.assertEqual(pr.label(), "pr-3532-m2189-c1-18204251ce")
-        entry = parse_key("att1-rust.x86_64-unknown-linux-gnu.test-pr-3532-m2189-c1-18204251ce")
+        self.assertEqual(main.label(), "m2189-6f6b886c32")
+        self.assertEqual(pr.label(), "m2189-c1-18204251ce-pr-3532")
+        self.assertEqual(pr.stem(), "m2189-c1-18204251ce")
+        entry = parse_key("att1-rust.x86_64-unknown-linux-gnu.test-m2189-c1-18204251ce-pr-3532")
         assert entry is not None
         self.assertEqual((entry.family, entry.lineage.pr, entry.lineage.ordinal),
                          ("att1-rust.x86_64-unknown-linux-gnu.test", 3532, 1))
@@ -202,6 +203,10 @@ class LineageTest(GitCase):
         self.assertFalse(Lineage(main_ordinal=2191, sha="a" * 40).may_precede(pr))  # after the PR's base
         self.assertFalse(Lineage(main_ordinal=2189, sha="b" * 40, pr=3532, ordinal=2).may_precede(pr))
         self.assertIsNone(parse_key("zccache-unit-v1-x86_64-unknown-linux-gnu-1234-36954283026"))
+        self.assertIsNone(parse_key("fam-m5-c2-aaaaaaaaaa"))  # a PR ordinal without its tag
+        main_entry = parse_key("x86_64-unknown-linux-gnu-m12-bbbbbbbbbb")
+        assert main_entry is not None
+        self.assertEqual((main_entry.family, main_entry.lineage.main_ordinal), ("x86_64-unknown-linux-gnu", 12))
 
     def test_resolve_prefers_the_nearest_verified_ancestor(self) -> None:
         m1 = self.commit("m1")
@@ -213,14 +218,15 @@ class LineageTest(GitCase):
         _git(self.repo, "checkout", "-q", "pr")
         c2 = self.commit("c2")
         head = lineage_of(self.repo, c2, main_ref="main", pr=7)
-        self.assertEqual(head.label(), f"pr-7-m2-c2-{c2[:10]}")
+        self.assertEqual(head.label(), f"m2-c2-{c2[:10]}-pr-7")
         fam = "cache-v1"
-        keys = [f"{fam}-main-m1-{m1[:10]}", f"{fam}-main-m2-{m2[:10]}", f"{fam}-main-m3-{m3[:10]}",
-                f"{fam}-pr-7-m2-c1-{c1[:10]}", f"{fam}-pr-7-m2-c1-{'f' * 10}", "other-main-m2-" + m2[:10]]
-        self.assertEqual(resolve(self.repo, head, keys, family=fam).key, f"{fam}-pr-7-m2-c1-{c1[:10]}")
+        keys = [f"{fam}-m1-{m1[:10]}", f"{fam}-m2-{m2[:10]}", f"{fam}-m3-{m3[:10]}",
+                f"{fam}-m2-c1-{c1[:10]}-pr-7", f"{fam}-m2-c1-{'f' * 10}-pr-7", f"{fam}-m2-c1-{c1[:10]}-pr-8",
+                "other-m2-" + m2[:10]]
+        self.assertEqual(resolve(self.repo, head, keys, family=fam).key, f"{fam}-m2-c1-{c1[:10]}-pr-7")
         only_main = resolve(self.repo, head, keys, family=fam, required_shas=frozenset({m1[:10], m2[:10], m3[:10]}))
-        self.assertEqual(only_main.key, f"{fam}-main-m2-{m2[:10]}")
-        self.assertIsNone(resolve(self.repo, head, [f"{fam}-main-m3-{m3[:10]}"], family=fam).key)
+        self.assertEqual(only_main.key, f"{fam}-m2-{m2[:10]}")
+        self.assertIsNone(resolve(self.repo, head, [f"{fam}-m3-{m3[:10]}"], family=fam).key)
 
 
 class LocalGateEmitsTest(GitCase):
