@@ -47,23 +47,46 @@ from ci_lint.toml_cursor import Cursor, TomlValue
 
 KEY_VERSION = "gate-007/v1"
 DEFAULT_MAX_AGE_HOURS = 24.0
-# Basenames that are always a lane input, wherever they live: what they pin
-# changes what every lane builds or resolves.
-MANDATORY_BASENAMES: frozenset[str] = frozenset(
-    {
-        "Cargo.lock",
-        "rust-toolchain.toml",
-        "rust-toolchain",
-        "uv.lock",
-        "poetry.lock",
-        "package-lock.json",
-        "pnpm-lock.yaml",
-        "yarn.lock",
-        ".python-version",
-        "local-gate.toml",
-        "ci.toml",
-    }
+# Gate declarations: always a lane input, for every lane.
+DECLARATION_BASENAMES: frozenset[str] = frozenset({"local-gate.toml", "ci.toml"})
+
+
+@dataclass(frozen=True)
+class EcosystemPins:
+    """Lockfiles and toolchain pins a lane must treat as inputs when it
+    drives any of `tools` (design revision 3, #177: soldr's Python-lint lane
+    was invalidated by every Cargo.lock bump it cannot be affected by)."""
+
+    tools: frozenset[str]
+    basenames: frozenset[str]
+
+
+ECOSYSTEM_PINS: tuple[EcosystemPins, ...] = (
+    EcosystemPins(
+        frozenset({"soldr", "cargo", "rustc", "rustup", "maturin"}),
+        frozenset({"Cargo.lock", "rust-toolchain.toml", "rust-toolchain"}),
+    ),
+    EcosystemPins(
+        frozenset({"uv", "uvx", "python", "python3", "pip", "poetry", "maturin"}),
+        frozenset({"uv.lock", "poetry.lock", ".python-version"}),
+    ),
+    EcosystemPins(
+        frozenset({"node", "npm", "npx", "pnpm", "yarn"}),
+        frozenset({"package-lock.json", "pnpm-lock.yaml", "yarn.lock"}),
+    ),
 )
+ALL_PIN_BASENAMES: frozenset[str] = frozenset().union(*(e.basenames for e in ECOSYSTEM_PINS))
+
+
+def pin_basenames(tools: tuple[str, ...]) -> frozenset[str]:
+    """The pins a lane's tools make mandatory. A lane that declares no
+    recognized tool gets every pin: the safe default when the gate cannot
+    tell what the lane resolves."""
+
+    matched = [e.basenames for e in ECOSYSTEM_PINS if e.tools & set(tools)]
+    if not matched:
+        return ALL_PIN_BASENAMES
+    return frozenset().union(*matched)
 
 
 @dataclass(frozen=True)
@@ -144,7 +167,8 @@ def tree_entries(repo: Path, tree: str) -> list[TreeEntry]:
 def mandatory_paths(lane: LaneConfig, gate_run: tuple[str, ...], gate_source: str, paths: set[str]) -> set[str]:
     named = {token for token in (*gate_run, *lane.run) if token in paths}
     named.add(gate_source)
-    named.update(p for p in paths if p.rsplit("/", 1)[-1] in MANDATORY_BASENAMES)
+    always = DECLARATION_BASENAMES | pin_basenames(lane.tools)
+    named.update(p for p in paths if p.rsplit("/", 1)[-1] in always)
     return named & paths
 
 
@@ -372,3 +396,118 @@ def check_lanes_static(
     if len(set(ids)) != len(ids):
         findings.append(Finding(rule="GATE-007", path=gate_source, message="duplicate lane ids", fix="give each lane a unique id"))
     return findings
+
+
+# ── history simulation (tuning exclusions from real commits) ─────────────────
+
+
+@dataclass(frozen=True)
+class LaneSimulation:
+    lane: str
+    commits: int
+    reusable: int
+    # The paths that most often forced this lane to run, most frequent first.
+    top_triggers: tuple[str, ...]
+
+    @property
+    def rate(self) -> float:
+        return self.reusable / self.commits if self.commits else 0.0
+
+
+def simulate(
+    repo: Path, lanes: tuple[LaneConfig, ...], gate_run: tuple[str, ...], gate_source: str, *, commits: int
+) -> list[LaneSimulation]:
+    """For each of the last `commits` first-parent commits of HEAD, would
+    each lane's inputs have been unchanged from the commit's parent? That is
+    the best case for the cache (a pass of the parent recorded), which makes
+    it the right signal for tuning `exclude`: a lane that is rarely reusable
+    either reads everything or excludes too little."""
+
+    shas = _git(repo, "rev-list", "--first-parent", f"--max-count={commits}", "HEAD").split()
+    paths = {e.path for e in tree_entries(repo, "HEAD")}
+    reusable = {lane.id: 0 for lane in lanes}
+    triggers: dict[str, dict[str, int]] = {lane.id: {} for lane in lanes}
+    counted = 0
+    for sha in shas:
+        try:
+            changed = [p for p in _git(repo, "diff", "--name-only", f"{sha}^", sha).splitlines() if p]
+        except subprocess.CalledProcessError:
+            continue  # root commit
+        counted += 1
+        for lane in lanes:
+            matcher = _Matcher.of(lane)
+            mandatory = mandatory_paths(lane, gate_run, gate_source, paths | set(changed))
+            hits = [p for p in changed if p in mandatory or not matcher.excluded(p)]
+            if not hits:
+                reusable[lane.id] += 1
+            for p in hits:
+                top = p.split("/", 2)
+                bucket = "/".join(top[:2]) if len(top) > 2 else p
+                triggers[lane.id][bucket] = triggers[lane.id].get(bucket, 0) + 1
+    out: list[LaneSimulation] = []
+    for lane in lanes:
+        ranked = sorted(triggers[lane.id].items(), key=lambda kv: -kv[1])[:5]
+        out.append(LaneSimulation(lane.id, counted, reusable[lane.id], tuple(f"{p} ({n})" for p, n in ranked)))
+    return out
+
+
+
+# ── exclusion audit (design revision 4, #177) ────────────────────────────────
+
+
+@dataclass(frozen=True)
+class TraceAudit:
+    """Tracked files a lane opened while running under `strace`, and those
+    of them its exclusions would have dropped (each one an unsafe
+    exclusion: the lane's result can depend on a file its key ignores)."""
+
+    lane: str
+    opened: int
+    excluded_reads: tuple[str, ...]
+
+
+_TRACE_PATH = re.compile(r'"(/[^"]+)"')
+
+
+def audit_trace(
+    repo_root: Path, lane: LaneConfig, gate_run: tuple[str, ...], gate_source: str, trace_text: str
+) -> TraceAudit:
+    """Only successful opens/execs of *tracked* files count. Reads made by
+    processes outside the traced tree -- a build daemon, a container -- are
+    invisible here, so a clean audit proves nothing about them."""
+
+    root = str(repo_root.resolve()).rstrip("/") + "/"
+    tracked = {e.path for e in tree_entries(repo_root, "HEAD")}
+    opened: set[str] = set()
+    for line in trace_text.splitlines():
+        if " = -1 " in line:
+            continue
+        for path in _TRACE_PATH.findall(line):
+            if path.startswith(root):
+                rel = path[len(root):]
+                if rel in tracked:
+                    opened.add(rel)
+    mandatory = mandatory_paths(lane, gate_run, gate_source, tracked)
+    matcher = _Matcher.of(lane)
+    bad = tuple(sorted(p for p in opened if p not in mandatory and matcher.excluded(p)))
+    return TraceAudit(lane=lane.id, opened=len(opened), excluded_reads=bad)
+
+
+def run_audit(repo_root: Path, lane: LaneConfig, gate_run: tuple[str, ...], gate_source: str) -> TraceAudit | None:
+    """Run the lane under `strace -f` and audit it; None when strace is absent."""
+
+    strace = shutil.which("strace")
+    if strace is None:
+        return None
+    trace_file = cache_dir(repo_root).parent / f"audit-{lane.id}.trace"
+    trace_file.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [strace, "-f", "-qq", "-e", "trace=openat,open,execve,stat,lstat,newfstatat,statx", "-o", str(trace_file), *lane.run],
+        cwd=repo_root,
+        check=False,
+    )
+    try:
+        text = trace_file.read_text(encoding="utf-8", errors="replace")
+    finally:
+        trace_file.unlink(missing_ok=True)
+    return audit_trace(repo_root, lane, gate_run, gate_source, text)
