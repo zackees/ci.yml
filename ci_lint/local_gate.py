@@ -52,7 +52,7 @@ from pathlib import Path
 
 from ci_lint.finding import Finding, Status
 from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
-from ci_lint.gate_trust import TrustConfig, check_trust_static, parse_trust
+from ci_lint.gate_trust import TrustConfig, WorkflowFacts, WorkflowJob, check_trust_static, parse_trust
 from ci_lint.lane_cache import (
     LaneConfig,
     ToolVersions,
@@ -742,10 +742,22 @@ def invokes_gate(line: str, config: GateConfig) -> bool:
     return tuple(tokens[: len(config.run)]) == config.run
 
 
+@dataclass(frozen=True)
+class _ParsedWorkflow:
+    name: str  # file name under .github/workflows/
+    doc: dict[str, YamlValue]  # the YAML wire boundary
+
+
 @dataclass
 class _Workflows:
-    docs: dict[str, dict[str, YamlValue]] = field(default_factory=dict)
+    parsed: list[_ParsedWorkflow] = field(default_factory=list)
     unreadable: set[str] = field(default_factory=set)
+
+    def doc(self, name: str) -> dict[str, YamlValue] | None:
+        for wf in self.parsed:
+            if wf.name == name:
+                return wf.doc
+        return None
 
 
 def _load_workflows(repo_root: Path) -> _Workflows:
@@ -761,7 +773,7 @@ def _load_workflows(repo_root: Path) -> _Workflows:
         if wf.status != LoadStatus.OK:
             out.unreadable.add(name)
         else:
-            out.docs[name] = as_dict(wf.document)
+            out.parsed.append(_ParsedWorkflow(name, as_dict(wf.document)))
     return out
 
 
@@ -772,7 +784,7 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:
     findings.extend(check_lanes_static(config.lanes, config.run, config.source, repo_root))
     wfs = _load_workflows(repo_root)
     findings.extend(_check_trust(config, wfs))
-    if not wfs.docs and not wfs.unreadable and not config.mirrors and config.verify is None:
+    if not wfs.parsed and not wfs.unreadable and not config.mirrors and config.verify is None:
         # No remote CI at all (e.g. zackees/ci.yml itself): nothing to mirror
         # or verify; the pre-push hook is the whole enforcement.
         return findings
@@ -785,7 +797,7 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:
                         fix="install PyYAML or yq so the workflow can be checked")
             )
             return None
-        doc = wfs.docs.get(ref.workflow)
+        doc = wfs.doc(ref.workflow)
         job = jobs_of(doc).get(ref.job) if doc is not None else None
         if job is None:
             findings.append(
@@ -885,7 +897,9 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:
                     message=f"verify job '{ref.job}' has an 'if:'; confirm it always runs on pull_request",
                     fix="drop the job-level 'if:' (verify itself skips non-PR events)")
         )
-    jobs = jobs_of(wfs.docs[ref.workflow])
+    verify_doc = wfs.doc(ref.workflow)
+    assert verify_doc is not None  # job_of() returned the verify job from it
+    jobs = jobs_of(verify_doc)
 
     def needs_of(job_id: str) -> list[str]:
         raw = jobs.get(job_id, {}).get("needs")
@@ -926,16 +940,22 @@ def _check_trust(config: GateConfig, wfs: _Workflows) -> list[Finding]:
 
     if config.trust is None:
         return []
-    jobs = {name: jobs_of(doc) for name, doc in wfs.docs.items()}
-    pushed = frozenset(name for name, doc in wfs.docs.items() if "push" in get_on_section(doc))
+    jobs: list[WorkflowJob] = []
+    for wf in wfs.parsed:
+        for job_id, job in jobs_of(wf.doc).items():
+            cond = job.get("if")
+            jobs.append(WorkflowJob(wf.name, job_id, cond if isinstance(cond, str) else None))
+    facts = WorkflowFacts(
+        jobs=tuple(jobs),
+        push_triggered=frozenset(wf.name for wf in wfs.parsed if "push" in get_on_section(wf.doc)),
+    )
     return check_trust_static(
         config.trust,
         verify_job=str(config.verify) if config.verify else None,
         mirrors=tuple(str(m) for m in config.mirrors),
         lane_ids=tuple(lane.id for lane in config.lanes),
         source=config.source,
-        jobs_by_workflow=jobs,
-        push_triggered=pushed,
+        workflows=facts,
     )
 
 

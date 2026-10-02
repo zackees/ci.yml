@@ -31,7 +31,6 @@ from pathlib import Path
 
 from ci_lint.finding import Finding, Status
 from ci_lint.toml_cursor import Cursor, TomlValue
-from ci_lint.yaml_io import YamlValue
 
 TRUST_MODES: tuple[str, ...] = ("never", "shadow", "enforce")
 # `author_association` values of people who can push to the repository.
@@ -249,10 +248,29 @@ def decide(repo: Path, inp: TrustInput) -> TrustDecision:
     return TrustDecision(True, True, "trusted", detail)
 
 
+@dataclass(frozen=True)
+class WorkflowJob:
+    """What the static check needs to know about one workflow job."""
+
+    workflow: str  # file name under .github/workflows/
+    job_id: str
+    condition: str | None  # the job-level `if:`, when it is a string
+
+
+@dataclass(frozen=True)
+class WorkflowFacts:
+    jobs: tuple[WorkflowJob, ...]
+    push_triggered: frozenset[str]  # workflow files with an `on: push` trigger
+
+    def job(self, workflow: str, job_id: str) -> WorkflowJob | None:
+        for job in self.jobs:
+            if job.workflow == workflow and job.job_id == job_id:
+                return job
+        return None
+
+
 def check_trust_static(trust: TrustConfig | None, *, verify_job: str | None, mirrors: tuple[str, ...],
-                       lane_ids: tuple[str, ...], source: str,
-                       jobs_by_workflow: dict[str, dict[str, dict[str, YamlValue]]],
-                       push_triggered: frozenset[str]) -> list[Finding]:
+                       lane_ids: tuple[str, ...], source: str, workflows: WorkflowFacts) -> list[Finding]:
     """GATE-008 static half: every skip job consumes the verify job's
     `trusted` output, non-mirror skip jobs name their covering lanes, and
     the workflow still runs on default-branch pushes (the post-merge catch)."""
@@ -268,14 +286,13 @@ def check_trust_static(trust: TrustConfig | None, *, verify_job: str | None, mir
     for ref in trust.skip:
         workflow, _, job_id = ref.partition(":")
         path = f".github/workflows/{workflow}"
-        job = jobs_by_workflow.get(workflow, {}).get(job_id)
+        job = workflows.job(workflow, job_id)
         if job is None:
             out.append(Finding(rule="GATE-008", path=source, message=f"skip job '{ref}' does not exist",
                                fix=f"point [gate.trust].skip at a real job in {path}"))
             continue
-        cond = job.get("if")
         needle = f"needs.{verify_id}.outputs.{TRUSTED_OUTPUT}"
-        if not isinstance(cond, str) or needle not in cond:
+        if job.condition is None or needle not in job.condition:
             out.append(Finding(rule="GATE-008", path=path,
                                message=f"skip job '{job_id}' has no job-level if: consuming {needle}, so trust never skips it",
                                fix=f"add `{needle} != 'true'` to its if:"))
@@ -291,7 +308,7 @@ def check_trust_static(trust: TrustConfig | None, *, verify_job: str | None, mir
                     out.append(Finding(rule="GATE-008", path=source,
                                        message=f"covered-by for '{ref}' names undeclared lane(s) {', '.join(unknown)}",
                                        fix="name lanes declared under [gate.lanes]"))
-        if workflow not in push_triggered:
+        if workflow not in workflows.push_triggered:
             out.append(Finding(rule="GATE-008", path=path, status=Status.VIOLATION,
                                message=f"{workflow} has no push trigger, so a skipped PR run is never re-run after merge",
                                fix="trigger the workflow on pushes to the default branch; that run is the post-merge catch"))

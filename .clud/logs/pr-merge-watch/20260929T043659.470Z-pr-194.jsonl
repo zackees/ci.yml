@@ -1,0 +1,15 @@
+{"v":1,"ts":"2026-09-29T04:36:59.470Z","elapsed_sec":0.0,"event":"START","repo":"zackees/soldr-toolchain","pr":194,"log_path":".clud/logs/pr-merge-watch/20260929T043659.470Z-pr-194.jsonl"}
+{"v":1,"elapsed_sec":3.74,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":3.74,"event":"coderabbit","coderabbit":{"state":"not_detected","sampled_merged_prs":5}}
+{"v":1,"elapsed_sec":24.76,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":43.88,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":63.73,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":84.58,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":104.46,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":127.23,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":144.24,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":165.1,"event":"checks","checks":{"total":2,"pending":1,"failed":1,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":165.83,"event":"required_failure","check":{"name":"pytest","state":"failure","link":"https://github.com/zackees/soldr-toolchain/actions/runs/36522414815/job/109257968129","workflow":".github/workflows/tests.yml"}}
+{"v":1,"elapsed_sec":167.95,"event":"cancel","trigger":"fail","attempts":0,"mode":"runs"}
+{"v":1,"elapsed_sec":167.95,"event":"failure_diagnostic","check_name":"pytest","first_error":"Process completed with exit code 1.","classifier":null}
+{"v":1,"elapsed_sec":167.95,"event":"EXIT","code":1,"reason":"fail"}

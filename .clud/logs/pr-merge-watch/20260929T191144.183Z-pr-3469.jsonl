@@ -1,0 +1,5 @@
+{"v":1,"ts":"2026-09-29T19:11:44.183Z","elapsed_sec":0.0,"event":"START","repo":"zackees/soldr","pr":3469,"log_path":".clud/logs/pr-merge-watch/20260929T191144.183Z-pr-3469.jsonl"}
+{"v":1,"elapsed_sec":3.97,"event":"checks","checks":{"total":41,"pending":3,"failed":1,"succeeded":37,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":4.43,"event":"required_failure","check":{"name":"Lint","state":"failure","link":"https://github.com/zackees/soldr/actions/runs/36617391259/job/109573999453","workflow":".github/workflows/ci.yml"}}
+{"v":1,"elapsed_sec":5.54,"event":"failure_diagnostic","check_name":"Lint","first_error":"Process completed with exit code 1.","classifier":null}
+{"v":1,"elapsed_sec":5.54,"event":"EXIT","code":1,"reason":"fail"}

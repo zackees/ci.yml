@@ -1,0 +1,87 @@
+{"v":1,"ts":"2026-09-29T02:14:45.167Z","elapsed_sec":0.0,"event":"START","repo":"zackees/template-python-rust-cmd","pr":30,"log_path":".clud/logs/pr-merge-watch/20260929T021445.167Z-pr-30.jsonl"}
+{"v":1,"elapsed_sec":2.7,"event":"checks","checks":{"total":1,"pending":1,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":2.7,"event":"coderabbit","coderabbit":{"state":"not_detected","sampled_merged_prs":5}}
+{"v":1,"elapsed_sec":22.97,"event":"checks","checks":{"total":1,"pending":1,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":42.65,"event":"checks","checks":{"total":19,"pending":17,"failed":0,"succeeded":2,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"CLEAN"}
+{"v":1,"elapsed_sec":42.65,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":42.65,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":42.65,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":42.65,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":42.65,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":62.72,"event":"checks","checks":{"total":19,"pending":17,"failed":0,"succeeded":2,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":62.72,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":62.72,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":62.72,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":62.72,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":62.72,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":82.86,"event":"checks","checks":{"total":20,"pending":17,"failed":0,"succeeded":3,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":82.86,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":82.86,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":82.86,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":82.86,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":82.86,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":102.8,"event":"checks","checks":{"total":20,"pending":17,"failed":0,"succeeded":3,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":102.8,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":102.8,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":102.8,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":102.8,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":102.8,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":122.88,"event":"checks","checks":{"total":20,"pending":17,"failed":0,"succeeded":3,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":122.88,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":122.88,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":122.88,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":122.88,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":122.88,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":142.63,"event":"checks","checks":{"total":20,"pending":17,"failed":0,"succeeded":3,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":142.63,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":142.63,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":142.63,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":142.63,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":142.63,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":162.78,"event":"checks","checks":{"total":20,"pending":17,"failed":0,"succeeded":3,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":162.78,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":162.78,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":162.78,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":162.78,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":162.78,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":182.57,"event":"checks","checks":{"total":24,"pending":21,"failed":0,"succeeded":3,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":182.57,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":182.57,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":182.57,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":182.57,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":182.57,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":202.66,"event":"checks","checks":{"total":24,"pending":21,"failed":0,"succeeded":3,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":202.66,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":202.66,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":202.66,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":202.66,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":202.66,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":222.97,"event":"checks","checks":{"total":24,"pending":20,"failed":0,"succeeded":4,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":222.97,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":222.97,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":222.97,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":222.97,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":222.97,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":243.32,"event":"checks","checks":{"total":24,"pending":18,"failed":0,"succeeded":6,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":243.32,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":243.32,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":243.32,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":243.32,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":243.32,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":262.92,"event":"checks","checks":{"total":24,"pending":18,"failed":0,"succeeded":6,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":262.92,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":262.92,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":262.92,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":262.92,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":262.92,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":282.97,"event":"checks","checks":{"total":24,"pending":7,"failed":11,"succeeded":6,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":282.97,"event":"check_note","note":"cache-maint (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":282.97,"event":"check_note","note":"release-guard (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":282.97,"event":"check_note","note":"perf (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":282.97,"event":"check_note","note":"init (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":282.97,"event":"check_note","note":"precheck / precheck (.github/workflows/ci.yml) reported by runs from events ['pull_request', 'workflow_dispatch']; the newest check counts"}
+{"v":1,"elapsed_sec":282.97,"event":"required_failure","check":{"name":"CI OK","state":"failure","link":"https://github.com/zackees/template-python-rust-cmd/actions/runs/36511708290/job/109225692634","workflow":".github/workflows/ci.yml"}}
+{"v":1,"elapsed_sec":285.42,"event":"cancel_item","mode":"runs","item_id":36511662757,"status":"cancelled"}
+{"v":1,"elapsed_sec":285.42,"event":"cancel","trigger":"fail","attempts":1,"mode":"runs"}
+{"v":1,"elapsed_sec":285.42,"event":"failure_diagnostic","check_name":"CI OK","first_error":"Process completed with exit code 1.","classifier":null}
+{"v":1,"elapsed_sec":285.42,"event":"EXIT","code":1,"reason":"fail"}

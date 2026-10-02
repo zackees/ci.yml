@@ -39,6 +39,30 @@ class ScanTest(unittest.TestCase):
         )
         self.assertEqual(self._where(src), [])
 
+    def test_complex_parameters_and_variables_are_reported(self) -> None:
+        # Owner directive 2026-10-02: dataclasses for complex types, no dictionaries.
+        src = (
+            "def f(jobs: dict[str, dict[str, dict[str, YamlValue]]]) -> None: ...\n"
+            "def g(pkg: dict[str, object], pairs: list[tuple[str, str]]) -> None: ...\n"
+            "def h() -> None:\n    triggers: dict[str, dict[str, int]] = {}\n    raw: Mapping[str, Any] = {}\n"
+        )
+        self.assertEqual(
+            self._where(src),
+            ["parameter f(jobs)", "parameter g(pkg)", "parameter g(pairs)", "variable triggers", "variable raw"],
+        )
+
+    def test_flat_maps_indexes_and_boundary_documents_are_allowed(self) -> None:
+        src = (
+            "def f(env: Mapping[str, str], counts: dict[str, int], by_id: dict[int, Entry],\n"
+            "      groups: dict[str, list[Entry]], raw: dict[str, TomlValue], opt: dict[str, Path | None]) -> None:\n"
+            "    seen: dict[str, Entry] = {}\n"
+        )
+        self.assertEqual(self._where(src), [])
+
+    def test_mapping_aliases_count_as_dicts_at_returns(self) -> None:
+        self.assertEqual(self._where("def f() -> Mapping[str, int]: ...\ndef g() -> defaultdict[str, int]: ..."),
+                         ["return of f()", "return of g()"])
+
     def test_plain_class_fields_are_not_scanned(self) -> None:
         self.assertEqual(self._where("class C:\n    a: dict[str, int]\n"), [])
 
