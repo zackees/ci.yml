@@ -69,5 +69,11 @@ Each declared skip job adds `needs.<verify>.outputs.trusted != 'true'` to its jo
 
 ## Measured on soldr
 
-- **Before:** median PR CI wall time 914 s (79 runs, 2026-09-25..10-02).
-- **After:** pilot results are recorded in the ledger's `pilot` section.
+| | Before | After |
+| --- | ---: | ---: |
+| Ordinary-PR CI wall time | median 914 s (79 runs, 2026-09-25..10-02); soldr#3531, not trusted: 858 s | **46 s** (soldr#3532, `trusted`) |
+| Linux x64 on `main` (still runs on every push) | median 692 s | **478 s** (run 36970591097, after H4) |
+| nextest stage | ~480 s | **207 s** |
+| Test-seconds (all / `cargo_front_door`) | 1,933 / 1,224 | **827 / 387** |
+
+Remote PR wait for an eligible PR fell about 20x. The remaining remote work (`main`, `ci-full`, release) is about 30% faster, because H4 removed a network fetch from every fixture.

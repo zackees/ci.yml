@@ -37,7 +37,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 | `PERF` | 001 | `PERF-002` | 001 (distinct from the implemented `ci-lint perf compare` runtime command -- see policy-general.md) |
 | `FLEET` | 001–003 | `FLEET-004` | 001, 002 (fleet-scan-only rules, live, `ci-lint fleet scan`); 003 candidate (default-branch CI burn with no verified reuse or live merge queue, #159) |
 | `REL` | 001–005 | `REL-006` | 001, 002, 003, 004, 005 (issue #8/#74) |
-| `GATE` | 001–008 | `GATE-009` | 001, 002, 003, 004, 005, 007, 008 (issues #166/#168/#177/#190; 006 candidate; a new family, so it cannot collide with the contested `GEN-022` -- see #154) |
+| `GATE` | 001–009 | `GATE-010` | 001, 002, 003, 004, 005, 007, 008 (issues #166/#168/#177/#190; 006 candidate; 009 candidate claimed by #196; a new family, so it cannot collide with the contested `GEN-022` -- see #154) |
 
 ## Working rules
 

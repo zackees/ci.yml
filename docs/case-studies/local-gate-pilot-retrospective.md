@@ -78,10 +78,36 @@ What didn't work:
 - bosn scopes volumes per workspace path, so a fresh worktree starts cold (bosn#327, which also covers seeding from ancestor commits).
 - The remote counterpart, setup-soldr's cache key, is still hand-built per caller. The proposed fix, an `auto` key with nearest-ancestor restore, is #185 / setup-soldr#552.
 
+## Phase 3: GATE-008, attested skip of the remote quick gate (#189, #190; soldr#3531, soldr#3532)
+
+The goal was to make ordinary-PR CI fast without losing coverage. Eight strategies were tried as experiments; [docs/designs/pr-critical-path.md](../designs/pr-critical-path.md) describes them, and [the ledger](../designs/pr-critical-path-ledger.json) records the pros and cons with sources. Three adversarial rounds then shaped the design.
+
+**Result on soldr:**
+
+| PR | GATE-008 decision | CI wall time |
+| --- | --- | ---: |
+| soldr#3531 (wiring; surfaces changed, base not opted in) | `not-opted-in` | 858 s |
+| soldr#3532 (first attested, in-policy PR) | `trusted`: Lint was a 3 s no-op, Linux x64 skipped | **46 s** |
+
+Both `main` push runs afterwards ran Lint and Linux x64 for real, and both passed. The #3532 change itself was strategy H4, the per-test toolchain-catalogue fetch. On its post-merge `main` run (36970591097), nextest took **207 s instead of ~480 s**, `ci-test` 381 s instead of 632 s, and `Linux x64` **478 s instead of a 692 s median**. Total test-seconds fell from 1,933 to 827, all 3,572 tests passing.
+
+What worked:
+- **Experiments before design.** History replay showed eligibility of 66% under the first design, rising to 78% once surfaces were defined as the closure of what the skipped jobs depend on. Two of the "obvious" levers turned out to be dead ends on soldr: crate-graph test selection (≥96% of test time is still selected) and smart cache inheritance (PRs already hit `main`'s cache at 100%).
+- **Real-runner probes on an experiment branch, through an existing `workflow_dispatch` workflow (no new workflow file).** Two runs found the remote-only per-test cost that months of `nextest.toml` tuning had attributed to "cold broker start": a network catalogue fetch, 5.2 → 0.17 s per test with it disabled.
+- **The pre-gate history made the catch-all argument.** Every one of the 9 `main` breakages on 2026-09-26 came from a PR merged with no green run, and the `main` push run caught each one. That made the post-merge run mandatory in GATE-008, not optional.
+- **GATE-007's partial-pass caching** made reruns cheap. After a host-linker failure, the next gate run reused 3 lanes, and after a bosn failure it reused 4.
+
+What didn't work:
+- **Host soldr 0.9.27 on NixOS** cannot link fresh build scripts with `reld` (soldr#3520, fixed upstream but not installed here). A fresh worktree's rust lane failed until it ran with `SOLDR_LINKER=default`, which is a key input of the lane, so this is legitimate.
+- **bosn reused a container across worktrees** (zackees/bosn#314): once bound to a deleted worktree (loud failure), and once nearly to a live sibling (silent wrong-tree test). The second case breaks the tree attestation that GATE-008 trusts, so it is filed as candidate GATE-009 (#196).
+- **My own GATE-008 code passed a nested dict parameter**, which the owner caught. PY-002 now covers parameters and variables of complex types (#194), and the remaining debt is tracked as a ratchet (#193).
+- **A `perf/**` branch prefix opts a PR into Perf Matrix** (~11 min, not part of the gate), and it hit an unrelated `soldr save` temp-file race (soldr#3533). Use `perf/**` only when you want the sweep.
+
 ## Still open
 
 - **The one-week measurement:** `ci-lint local-gate first-pass` over at least 5 PRs by other authors, target >= 80% (#166).
-- **GATE-007 implementation:** #177.
+- **GATE-008 follow-through:** read the audit-sample and `main`-run agreement after 20+ attested heads (#190); a ruleset requiring `CI mode` and `Lint` on soldr (owner action); candidate GATE-009 (#196).
+- **PY-002 burn-down:** #193.
 - **bosn → act execution:** zackees/bosn#302.
 - **The bosn version check in the other commands:** zackees/bosn#324.
 - **A host preflight for the gate:** proposed above, not filed.
