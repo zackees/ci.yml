@@ -1,0 +1,65 @@
+# Retrospective: the local-gate pilot (ci.yml#166), 2026-10-01
+
+The goal was for a PR to pass CI on its first push. CI must stay fast, the local run must catch failures before any push, and enforcement must be by machine, generic enough to roll out across the fleet. soldr was the pilot. Evidence for the incident itself is in [soldr-first-pass.md](soldr-first-pass.md). This document assesses the work: what worked, what didn't, and what to do differently next time.
+
+## Outcome
+
+| Metric | Before | After |
+| --- | --- | --- |
+| soldr PRs green on the first push | 3 of 7 (43%) | 3 of 3 since adoption, all attested (small sample, all pilot PRs) |
+| Lint checks | remote `Lint` job, 153-163 s, sequential | local lint lane, 62 s, parallel; the remote job runs the same command |
+| Linux build + tests | remote `Linux x64`, 504-555 s | local: rust lane 181 s cold (Clippy 16 s warm) plus bosn tests lane ~170 s warm |
+| A push that skipped the local gate | full CI fan-out, then a red run | `CI mode` fails in seconds; the fan-out never starts |
+| `main` cache-budget check | red on every push | green (soldr#3525) |
+| Lint-class defects that reached CI | 5 of the day's misses | caught locally: 5 unformatted files, 2 stale tests |
+
+## What was built
+
+- **ci_lint, GATE-001..005, plus RUST-001 on every gate surface** (ci.yml #167, #169, #171): the mirror rule, a verify-first job graph, the tree-bound `Local-Gate:` trailer, a pre-push hook, the `first-pass` metric, isolation for self-hosted tools, and no bare cargo. `uvx --from git+…ci.yml@<sha> ci-lint` makes it usable from any repo.
+- **Policy:**
+  - where checks run (GATE-006, #172);
+  - cache compression tiers measured on real payloads (CACHE-023, #173);
+  - lane result cache (GATE-007, #177, scoped, not built).
+- **soldr adoption:** #3524, then #3525 and #3526 shipped under the gate.
+- **Fixed along the way:**
+  - bosn #317 (v0.1.5) and #322 (v0.1.6);
+  - soldr #3521 (NixOS linker), #3522 (crash-safe cook), #3523 (test daemon leak, container `.venv`).
+
+## What worked
+
+1. **Starting from evidence.** Every run and job ID was read before deciding anything. The first-push failures fell into classes, and the largest class (Lint and guard tests) was cheap to move local. That set the target correctly.
+2. **Mirroring by construction rather than by convention.** The remote `Lint` job may run only the local gate's command, and `ci-lint local-gate lint`, itself a check in that lane, enforces it. On its first run it found four CI jobs that didn't depend on the verify job, and 28 bare `cargo`/`rustup` sites.
+3. **An attestation bound to the commit's tree.** It needs no server, token or status API, and works offline, under act, and for forks. A rebase correctly invalidated it: the trailer is still there, but `stale`. Squash merges kept it valid because the tree was identical.
+4. **Check mode, not `--fix`.** The old Lint job formatted in place and never failed. The gate failed on four test files, then on a script merged an hour earlier. Formatting drift is now visible.
+5. **"No stricter than CI."** A gate that `main` can't pass attests nothing. Swapping `soldr lint deps` (a full `cargo deny check`) for CI's exact commands made the rust lane pass and stay faithful.
+6. **Measuring before changing.**
+   - Duplicate `CI` runs cost 3-21 s each, so they were left alone.
+   - The cache-budget failure turned out to come from a `workflow_dispatch` run, not a PR run, and later from an allocation that was simply too small, not from eviction.
+   - zstd showed restore cost is the same at every level, which turned "low compression for local speed" into a precise rule.
+7. **Parallel sub-agents for independent fixes.** The bosn release and three soldr defects ran concurrently, each in its own sister worktree with explicit constraints (never run tests on the host, never bare cargo, never merge on red). All merged with regression tests while the main thread kept going.
+8. **Fixing the tool and cascading the version in the same session.** bosn was fixed, released, installed on the host, and set as the gate's `min_version` floor. The floor then fired correctly on a shadowed 0.1.3 install.
+
+## What didn't work, and the lesson
+
+| What happened | Cost | Lesson, and where it now lives |
+| --- | --- | --- |
+| The first retrospective said "cache budget fails PRs". It was a `workflow_dispatch` "CI full" run. | A corrected claim, a wrong first fix direction | Read the run's `event` before attributing a failure. |
+| `soldr ci-test` was run on the developer host to time it. A fixture leaked a daemon that held the real `~/.soldr`. | Every soldr build on the machine wedged, for every session | Tests of a self-hosted tool never run on the host: GATE-005, soldr#3516. |
+| An orphaned container `ci-test` was SIGKILLed mid-`dylint cook`. | `lib.rs` truncated to 0 bytes; misdiagnosed as a linker/profile problem for three runs | Check `git status` first when a build "loses" code. In-place source mutation must be crash-safe (soldr#3518). Stop tools gracefully. |
+| The isolated runner differed from CI in five ways: `cargo test` vs nextest, dev-loop profiles, job caps, `sh -lc` dropping PATH, doctest ordering after a relink | Five runs before parity | The isolated runner reproduces the remote job exactly (GATE-006 text). Diff its environment against the CI job before trusting a red result. |
+| Local infrastructure had rotted with no CI of its own: unpinned base images, a bosn output-reaping bug, a stale socket, a version mismatch | Hours of yak-shaving before the first green isolated run | Every local runner needs its own smoke test in CI. bosn#324 covers the remaining version-check gap. |
+| Host health decided the gate's result: two soldr installs fighting over one root, a NixOS linker regression, a root-owned `.venv`, another session's daemon | Several false reds unrelated to the change | The gate needs a host preflight ("doctor") that names the host problem instead of failing a lane. Not built yet. |
+| A soldr worktree was created against soldr's Working Location Rule, and `safe-rm` couldn't clean session-created paths | Policy friction; a forced worktree removal | The owner overruled the rule: sister repos are allowed (clud#1696). Doc and tool rules should be reconciled before work starts. |
+| A chained `git checkout -- .` wiped uncommitted bosn work | Recovered only because the patches were scripted | Never chain a tree-wide checkout. Script non-trivial patches so they can be replayed. |
+| The 28 RUST-001 sites were annotated as exceptions rather than converted | Exception debt in soldr's workflows | Owner review is pending. Convert where `setup-soldr` can run first. |
+| The compression timings were taken on a loaded host and had to be rerun (`bc` missing) | Approximate absolute times | Benchmark on an idle host with a harness that doesn't depend on optional tools. |
+| The full gate takes 338-659 s when Rust changes, and a rerun skips nothing | Slower than the remote critical path for small edits | The lane result cache (GATE-007, #177). Per-check exclusions next. |
+
+## Still open
+
+- **The one-week measurement:** `ci-lint local-gate first-pass` over at least 5 PRs by other authors, target >= 80% (#166).
+- **GATE-007 implementation:** #177.
+- **bosn → act execution:** zackees/bosn#302.
+- **The bosn version check in the other commands:** zackees/bosn#324.
+- **A host preflight for the gate:** proposed above, not filed.
+- **Native macOS, Windows and arm64 lanes:** remote-only by design. They remain the residual first-push risk; #3505's arm64 exec-bit bug is the type case.
