@@ -48,6 +48,9 @@ import pathlib, sys
 lane = sys.argv[sys.argv.index("--lane") + 1]
 log = pathlib.Path(sys.argv[sys.argv.index("--log") + 1])
 log.write_text(log.read_text() + lane + "\\n" if log.exists() else lane + "\\n")
+import time
+if pathlib.Path("sleep").exists():
+    time.sleep(float(pathlib.Path("sleep").read_text()))
 if pathlib.Path("fail-" + lane).exists():
     raise SystemExit(4)
 """
@@ -172,6 +175,53 @@ class LaneRunTest(LanedRepo):
         self.gate()
         self.assertTrue(str(cache_dir(self.repo)).endswith(".git/ci-lint/lane-cache"))
         self.assertEqual(len(list((cache_dir(self.repo) / "lint").glob("*.json"))), 1)
+
+
+class ParallelTest(LanedRepo):
+    """Light lanes run alongside the heavy chain (#177, soldr follow-up)."""
+
+    def _three_lanes(self, *, light: bool) -> None:
+        py = sys.executable
+        weight = 'weight = "light"\n' if light else ""
+        lanes = "".join(
+            f'[gate.lanes.{lane}]\nrun = ["{py}", "gate.py", "--lane", "{lane}", "--log", "{self.log}"]\n'
+            f'tools = ["git"]\n{weight if lane != "heavy" else ""}\n'
+            for lane in ("a", "b", "heavy")
+        )
+        (self.repo / "local-gate.toml").write_text(f'[gate]\nrun = ["{py}", "gate.py"]\n\n{lanes}', encoding="utf-8")
+        self.write("sleep", "1.5")
+        self.commit("three lanes")
+
+    def test_light_lanes_overlap_the_heavy_chain(self) -> None:
+        self._three_lanes(light=True)
+        start = time.monotonic()
+        self.assertEqual(self.gate(), "a:run,b:run,heavy:run")  # provenance keeps declared order
+        self.assertLess(time.monotonic() - start, 3.5)  # sequential would be >= 4.5 s
+
+    def test_heavy_lanes_stay_sequential(self) -> None:
+        self._three_lanes(light=False)
+        start = time.monotonic()
+        self.gate()
+        self.assertGreaterEqual(time.monotonic() - start, 4.4)
+
+    def test_passing_lanes_are_cached_even_when_another_lane_fails(self) -> None:
+        self._three_lanes(light=True)
+        self.write("fail-b", "")
+        self.write("sleep", "0")
+        self.commit("b fails")
+        self.log.unlink(missing_ok=True)
+        self.assertEqual(run_gate(self.repo, self.config()).exit_code, 4)
+        # Same tree, no cache bypass: a and heavy were recorded, so only b reruns.
+        self.log.unlink(missing_ok=True)
+        run_gate(self.repo, self.config())
+        self.assertEqual(self.runs(), ["b"])
+
+    def test_bad_weight(self) -> None:
+        text = (self.repo / "local-gate.toml").read_text(encoding="utf-8").replace(
+            'tools = ["git"]\n\n[gate.lanes.tests]', 'tools = ["git"]\nweight = "medium"\n\n[gate.lanes.tests]'
+        )
+        (self.repo / "local-gate.toml").write_text(text, encoding="utf-8")
+        self.assertEqual([f.rule for f in load_gate_config(self.repo).findings], ["GATE-007"])
 
 
 class KeyTest(LanedRepo):

@@ -47,6 +47,7 @@ from ci_lint.proc import run_captured
 from ci_lint.toml_cursor import Cursor, TomlValue
 
 KEY_VERSION = "gate-007/v1"
+LANE_WEIGHTS: tuple[str, ...] = ("heavy", "light")
 DEFAULT_MAX_AGE_HOURS = 24.0
 # Gate declarations: always a lane input, for every lane.
 DECLARATION_BASENAMES: frozenset[str] = frozenset({"local-gate.toml", "ci.toml"})
@@ -99,6 +100,10 @@ class LaneConfig:
     tools: tuple[str, ...] = ()
     env: tuple[str, ...] = ()
     max_age_hours: float = DEFAULT_MAX_AGE_HOURS
+    # `light` lanes run concurrently with each other and with the heavy
+    # chain; `heavy` lanes (the default: compilers, test suites) run one at a
+    # time, in declared order, so they do not fight over CPU.
+    weight: str = "heavy"
 
 
 def parse_lanes(raw: dict[str, TomlValue], *, path: str, source: str, findings: list[Finding]) -> tuple[LaneConfig, ...]:
@@ -118,7 +123,14 @@ def parse_lanes(raw: dict[str, TomlValue], *, path: str, source: str, findings: 
         tools = sub.list_str("tools", required=False)
         env = sub.list_str("env", required=False)
         max_age = sub.int_("max-age-hours", required=False)
+        weight = sub.str_("weight", required=False, default="heavy") or "heavy"
         sub.finish()
+        if weight not in LANE_WEIGHTS:
+            findings.append(
+                Finding(rule="GATE-007", path=source, message=f"'{lane_path}.weight' is {weight!r}",
+                        fix=f"set it to one of {', '.join(LANE_WEIGHTS)}")
+            )
+            weight = "heavy"
         if not run:
             continue
         lanes.append(
@@ -130,6 +142,7 @@ def parse_lanes(raw: dict[str, TomlValue], *, path: str, source: str, findings: 
                 tools=tools,
                 env=env,
                 max_age_hours=float(max_age) if max_age is not None else DEFAULT_MAX_AGE_HOURS,
+                weight=weight,
             )
         )
     return tuple(lanes)
@@ -278,6 +291,16 @@ def lane_key(
 
 
 # ── the cache itself ─────────────────────────────────────────────────────────
+
+
+def lane_log_dir(repo: Path) -> Path:
+    """Per-worktree (`git rev-parse --git-dir`), so two worktrees running the
+    gate at once never write the same log."""
+
+    git_dir = Path(_git(repo, "rev-parse", "--git-dir").strip())
+    if not git_dir.is_absolute():
+        git_dir = repo / git_dir
+    return git_dir / "ci-lint" / "lane-logs"
 
 
 def cache_dir(repo: Path) -> Path:

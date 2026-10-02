@@ -43,6 +43,7 @@ import subprocess
 import sys
 import time
 import tomllib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -53,6 +54,7 @@ from ci_lint.lane_cache import (
     ToolVersions,
     check_lanes_static,
     lane_key,
+    lane_log_dir,
     lookup,
     parse_lanes,
     record,
@@ -404,13 +406,76 @@ class LaneRun:
     spent_secs: int
 
 
+@dataclass(frozen=True)
+class LaneOutcome:
+    lane: LaneConfig
+    key: str
+    exit_code: int
+    secs: int
+    log: Path
+
+
+def _run_lane(repo: Path, lane: LaneConfig, key: str, log_dir: Path) -> LaneOutcome:
+    """Run one lane with its output written to a log file, never a pipe
+    (PY-003), so concurrent lanes cannot interleave or block on output."""
+
+    log = log_dir / f"{lane.id}.log"
+    start = time.monotonic()
+    with open(log, "wb") as fh:
+        proc = subprocess.run(
+            list(lane.run), cwd=repo, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT, check=False
+        )
+    return LaneOutcome(lane, key, proc.returncode, int(round(time.monotonic() - start)), log)
+
+
+@dataclass(frozen=True)
+class _Pending:
+    lane: LaneConfig
+    key: str
+
+
+def _heavy_chain(repo: Path, chain: list[_Pending], log_dir: Path) -> list[LaneOutcome]:
+    """Heavy lanes one at a time, in declared order; stop at the first failure."""
+
+    out: list[LaneOutcome] = []
+    for item in chain:
+        print(f"local-gate: lane {item.lane.id}: started (heavy)", file=sys.stderr, flush=True)
+        outcome = _run_lane(repo, item.lane, item.key, log_dir)
+        _report(outcome)
+        out.append(outcome)
+        if outcome.exit_code != 0:
+            break
+    return out
+
+
+def _report(outcome: LaneOutcome) -> None:
+    if outcome.exit_code == 0:
+        tail = [ln for ln in outcome.log.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()][-1:]
+        summary = f" -- {tail[0][:140]}" if tail else ""
+        print(f"local-gate: lane {outcome.lane.id}: passed in {outcome.secs}s{summary}", file=sys.stderr, flush=True)
+        return
+    lines = outcome.log.read_text(encoding="utf-8", errors="replace").splitlines()
+    print(
+        f"local-gate: lane {outcome.lane.id}: FAILED after {outcome.secs}s (exit {outcome.exit_code}); "
+        f"full log: {outcome.log}",
+        file=sys.stderr,
+    )
+    print("\n".join(lines[-150:]), file=sys.stderr, flush=True)
+
+
 def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache: bool) -> LaneRun:
-    """Run (or reuse) every declared lane in order (GATE-007)."""
+    """Run (or reuse) every declared lane (GATE-007). Cache hits are
+    resolved first; then `light` lanes run concurrently alongside the
+    `heavy` chain (heavy lanes one at a time, declared order). Every lane
+    that passed is recorded if the tree is still untouched -- even when
+    another lane failed, so fixing that one does not rerun these."""
 
     entries = tree_entries(repo, tree)
     versions = ToolVersions()
-    provenance: list[str] = []
-    spent = 0
+    log_dir = lane_log_dir(repo)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    reused: dict[str, str] = {}
+    pending: list[_Pending] = []
     for lane in config.lanes:
         key = lane_key(entries, lane, gate_run=config.run, gate_source=config.source, versions=versions)
         hit = lookup(repo, lane, key.key) if use_cache else None
@@ -421,23 +486,47 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
                 file=sys.stderr,
                 flush=True,
             )
-            provenance.append(f"{lane.id}:reused@{key.key[:12]}")
-            continue
-        print(f"local-gate: lane {lane.id}: {shlex.join(lane.run)}", file=sys.stderr, flush=True)
-        start = time.monotonic()
-        proc = subprocess.run(list(lane.run), cwd=repo, check=False)
-        secs = int(round(time.monotonic() - start))
-        spent += secs
-        if proc.returncode != 0:
-            print(f"local-gate: lane {lane.id}: FAILED after {secs}s (exit {proc.returncode})", file=sys.stderr)
-            return LaneRun(proc.returncode or 1, provenance, spent)
-        problem = _changed(repo, head)
-        if problem is not None:
-            print(f"local-gate: lane {lane.id}: {problem}", file=sys.stderr)
-            return LaneRun(1, provenance, spent)
-        record(repo, lane, key.key, secs=secs, head=head, tree=tree)
-        print(f"local-gate: lane {lane.id}: passed in {secs}s", file=sys.stderr, flush=True)
-        provenance.append(f"{lane.id}:run")
+            reused[lane.id] = key.key
+        else:
+            pending.append(_Pending(lane, key.key))
+    light = [p for p in pending if p.lane.weight == "light"]
+    heavy = [p for p in pending if p.lane.weight != "light"]
+    outcomes: list[LaneOutcome] = []
+    with ThreadPoolExecutor(max_workers=len(light) + 1) as pool:
+        futures = []
+        for p in light:
+            print(f"local-gate: lane {p.lane.id}: started (light)", file=sys.stderr, flush=True)
+            futures.append(pool.submit(_run_lane, repo, p.lane, p.key, log_dir))
+        chain = pool.submit(_heavy_chain, repo, heavy, log_dir) if heavy else None
+        for future in as_completed(futures):
+            outcome = future.result()
+            _report(outcome)
+            outcomes.append(outcome)
+        if chain is not None:
+            outcomes.extend(chain.result())
+    problem = _changed(repo, head)
+    if problem is not None:
+        print(f"local-gate: {problem}", file=sys.stderr)
+    else:
+        for outcome in outcomes:
+            if outcome.exit_code == 0:
+                record(repo, outcome.lane, outcome.key, secs=outcome.secs, head=head, tree=tree)
+    by_id = {o.lane.id: o for o in outcomes}
+    provenance: list[str] = []
+    for lane in config.lanes:
+        if lane.id in reused:
+            provenance.append(f"{lane.id}:reused@{reused[lane.id][:12]}")
+        elif lane.id in by_id and by_id[lane.id].exit_code == 0:
+            provenance.append(f"{lane.id}:run")
+    failed = [o for o in outcomes if o.exit_code != 0]
+    not_run = [p.lane.id for p in pending if p.lane.id not in by_id]
+    if not_run:
+        print(f"local-gate: not run after a heavy-lane failure: {', '.join(not_run)}", file=sys.stderr)
+    spent = sum(o.secs for o in outcomes)
+    if failed:
+        return LaneRun(failed[0].exit_code or 1, provenance, spent)
+    if problem is not None:
+        return LaneRun(1, provenance, spent)
     return LaneRun(0, provenance, spent)
 
 

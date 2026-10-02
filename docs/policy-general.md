@@ -100,7 +100,7 @@ Measured on a 16-core host (soldr):
 
 **Decision ([issue #177](https://github.com/zackees/ci.yml/issues/177), piloted in [soldr#3529](https://github.com/zackees/soldr/pull/3529)):** a local gate lane may be skipped only when **its inputs are byte-identical to a passing run of the same lane**, and every skip is recorded in the attestation.
 
-1. **Declare lanes** as `[gate.lanes.<id>]` (`run`, `exclude`, `keep`, `tools`, `env`, `max-age-hours`; [ci-toml.md](ci-toml.md)). Each lane is the gate command plus arguments. `local-gate run` runs them in order, cheapest first, and stops at the first failure.
+1. **Declare lanes** as `[gate.lanes.<id>]` (`run`, `exclude`, `keep`, `tools`, `env`, `max-age-hours`, `weight`; [ci-toml.md](ci-toml.md)). Each lane is the gate command plus arguments. Cache hits are resolved first. `light` lanes then run concurrently alongside the `heavy` chain, which runs one lane at a time in declared order and stops at its first failure. Every lane that passed is recorded, even when another failed, as long as the tree is untouched, so fixing the failing lane does not rerun the others.
 2. **Key** = sha256 over the lane's argv, the `--version` of its declared tools, its declared env values, and `(path, blob sha)` of its input set, read from `git ls-tree`.
 3. **Input set = the commit tree minus exclusions, never an include list.** A forgotten exclusion costs speed; a forgotten include silently skips required work. soldr's old include-list path scope did exactly that: it never listed `src/`, though the Rust build embeds `src/soldr/_bundle_bins.py`. These are always inputs, whatever the globs say:
    - the gate declaration;
@@ -116,6 +116,8 @@ Measured on a 16-core host (soldr):
 - tests: nextest + doctests in bosn, 29%.
 
 Two lanes that read everything stay cheap or unexcludable: guards (repository scanners and the Python tests) and ci-lint (`soldr lint ci` plus dependency policy).
+
+**Some lanes legitimately read everything.** An audit of soldr's guards lane showed its Python tests read dozens of `docs/*.md` files: doc-contract tests for release checklists, zccache guardrails and path policy. So a docs-only change rightly reruns them, and excluding `docs/**` would have been an unsafe skip. Finer reuse there needs per-test selection, not a broader exclusion.
 
 **Prove exclusions with a trace.** `ci-lint local-gate lanes --audit <lane>` runs the lane under `strace` (open/exec and the stat family, which catches cargo's dep-info freshness checks). It fails if the lane touches a tracked file its exclusions drop. On soldr it caught `pyproject.toml` excluded from the rust lane, though soldr reads `[tool.soldr]` from it. A grep over the code had suggested `**/*.py`, `**/*.md` and `tests/**` were safe Rust exclusions; the code actually embeds files of each kind. The audit cannot see reads by daemons or containers outside the traced process tree, so container lanes rely on compile dep-info and review.
 
