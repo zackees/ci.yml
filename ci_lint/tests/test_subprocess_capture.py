@@ -23,11 +23,10 @@ class ScanTest(unittest.TestCase):
     def test_banned_forms(self) -> None:
         src = (
             "subprocess.run(['a'], capture_output=True)\n"
-            "subprocess.Popen(['a'], stdout=subprocess.PIPE)\n"
+            "subprocess.call(['a'], stdout=subprocess.PIPE)\n"
             "subprocess.run(['a'], stderr=PIPE)\n"
             "subprocess.check_output(['a'])\n"
             "subprocess.getoutput('a')\n"
-            "asyncio.create_subprocess_exec('a', stdout=asyncio.subprocess.PIPE)\n"
         )
         self.assertEqual(
             self._reasons(src),
@@ -37,9 +36,17 @@ class ScanTest(unittest.TestCase):
                 "sets stderr=PIPE",
                 "always captures through a pipe",
                 "always captures through a pipe",
-                "sets stdout=PIPE",
             ],
         )
+
+    def test_iterating_a_pipe_while_the_child_runs_is_allowed(self) -> None:
+        # Streaming, not capture-then-wait (owner clarification 2026-10-01).
+        src = (
+            "proc = subprocess.Popen(['a'], stdout=subprocess.PIPE, text=True)\n"
+            "for line in proc.stdout:\n    print(line)\n"
+            "p2 = await asyncio.create_subprocess_exec('a', stdout=asyncio.subprocess.PIPE)\n"
+        )
+        self.assertEqual(self._reasons(src), [])
 
     def test_allowed_forms(self) -> None:
         src = (
@@ -47,7 +54,7 @@ class ScanTest(unittest.TestCase):
             "subprocess.run(['a'], stdout=fh, stderr=subprocess.STDOUT)\n"
             "subprocess.run(['a'], capture_output=False)\n"
             "pool.run(job, capture_output=True)\n"
-            "subprocess.Popen(['a'], stdin=PIPE)  # ci-lint: allow PY-003 interactive protocol, drained concurrently\n"
+            "subprocess.run(['a'], stdin=PIPE)  # ci-lint: allow PY-003 feeds a pipe the child reads to EOF\n"
         )
         self.assertEqual(self._reasons(src), [])
 
