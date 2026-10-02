@@ -1,0 +1,334 @@
+{
+  "schema": 1,
+  "title": "Ordinary-PR CI critical path: strategy experiment ledger",
+  "issue": "zackees/ci.yml#189",
+  "pilot": "zackees/soldr",
+  "recorded": "2026-10-02",
+  "method": "Each strategic hypothesis was tried as an experiment against real soldr evidence (GitHub run/job API, CI logs, local bosn runs, a real-runner probe on an experiment branch, and simulations calibrated against measured runs). Pros/cons are evidence, not opinion; every figure names its source.",
+  "baseline": {
+    "window": "soldr CI, 2026-09-25 .. 2026-10-02: 230 pull_request runs, 100 main push runs, 80 merged PRs",
+    "pr_ci_wall_seconds": {
+      "n": 79,
+      "median": 914,
+      "p75": 1696,
+      "source": "successful pull_request CI runs, first job start to last job end"
+    },
+    "linux_x64_seconds": {
+      "pr_median": 647,
+      "pr_p75": 725,
+      "main_median": 692
+    },
+    "lint_seconds": {
+      "pr_median": 162
+    },
+    "linux_x64_breakdown": {
+      "ci_test_step": 632,
+      "build_ci_test_driver": 38,
+      "cache_restores": 32,
+      "nextest_stage": 480,
+      "source": "12 PR runs' step timings; run 36954283026 log"
+    },
+    "jobs_on_an_ordinary_pr": [
+      "CI Pre",
+      "CI mode",
+      "CI path selection",
+      "Lint",
+      "Linux x64"
+    ],
+    "merge_discipline": {
+      "branch_protection": false,
+      "rulesets": 0,
+      "pre_gate_merged_prs": 75,
+      "merged_without_green_pr_run": 14,
+      "merged_red": 11,
+      "post_gate_merged_prs": 5,
+      "post_gate_green_and_attested": 5,
+      "main_real_failures_pre_gate": {
+        "Lint": 5,
+        "Linux x64": 4,
+        "every_one_merged_without_a_green_pr_run": true
+      },
+      "main_real_failures_post_gate": 0,
+      "infra_only_failures": {
+        "CI Pre cache budget, pr": 27,
+        "CI Pre cache budget, main": 25
+      }
+    }
+  },
+  "hypotheses": [
+    {
+      "id": "H1",
+      "name": "Trust the local gate's attestation (skip remote quick-gate jobs on attested PRs)",
+      "issue": "zackees/ci.yml#190",
+      "experiment": "E1: replay soldr's 80 merged PRs: eligibility by changed files, merge verdicts before/after the gate, main post-merge failures, and which steps of the would-be-skipped jobs ever failed.",
+      "results": {
+        "eligible_strict_all_workflows_are_surfaces": "53/80 (66%)",
+        "eligible_refined_only_skip_job_closure": "62/80 (78%); 18 ineligible touch ci.yml, _build-and-test.yml, actions, gate scripts or the CI-only probe scripts",
+        "docs_only_already_skipped": "0 of the 80 (docs-only PRs are rare; path-selection already handles them)",
+        "remote_only_steps_that_ever_failed": "none: all 4 Linux x64 failures were the ci-test step, all 5 Lint failures were lint-lane steps (Python tests, ruff, spawn-path guard) -- all covered locally",
+        "pre_gate_no_attestation": "9 main breakages in one day (2026-09-26), every one from a PR merged with a cancelled or red PR run",
+        "post_gate": "5/5 PRs attested and green on first push; 0 main failures",
+        "critical_path_if_trusted": "CI mode (~15 s + full-history fetch) and CI path selection (~14 s): ~14 min -> ~1 min"
+      },
+      "pros": [
+        "Removes the entire ~14 min wait for ~78% of PRs, with no extra runners",
+        "Remote jobs rerun the exact command the gate ran (GATE-001), so they add latency, not evidence, on an attested head",
+        "Cuts PR runner minutes (~11 runner-min per eligible PR)",
+        "Makes the cheap required check honest: merging no longer races a 14-min run (pre-gate: 14/75 merged without a green run)"
+      ],
+      "cons": [
+        "The trailer is an honesty contract, not a proof (anyone can type it)",
+        "PR head is tested, not the merge result: merge skew reaches main",
+        "Linux x64 is not a pure mirror: CI-only probes would only run post-merge",
+        "Local and CI environments differ (cores, env, network); timing-sensitive tests can pass locally and fail remotely",
+        "A PR could weaken its own gate and then attest against it"
+      ],
+      "verdict": "ADOPT, as GATE-008 with the round-3 safeguards (base-branch policy, surfaces, exact attestation, audit sample, mandatory post-merge run)."
+    },
+    {
+      "id": "H2",
+      "name": "Run only affected tests: crate-graph selection",
+      "issue": "zackees/ci.yml#191",
+      "experiment": "E2: map each of the 80 PRs' changed files to workspace packages (soldr cargo metadata), take reverse-dependency closures, weight by per-package CI test-seconds from run 36954283026; GATE-007's audited tests-lane exclusions decide what is irrelevant; anything unowned runs everything.",
+      "results": {
+        "no_rust_tests_needed": "22/80 (already skipped locally by the GATE-007 tests-lane cache)",
+        "run_everything": "27/80 (Cargo.toml/Cargo.lock/toolchain/unowned files)",
+        "subset": "31/80, but every subset selects >= 96% of test-seconds",
+        "mean_test_seconds_selected": "71% -- and 0% of the savings lands on a subset PR",
+        "why": "soldr-cli holds 1,846 of 1,933 test-seconds (95%) and reverse-depends on every other crate"
+      },
+      "pros": [
+        "Sound by construction, cheap (cargo metadata)",
+        "Would help a repository with independent crates"
+      ],
+      "cons": [
+        "~0 marginal benefit on soldr: the only PRs it saves are ones the lane cache already skips",
+        "Per-test selection (coverage + runtime file reads) is the only real lever and is expensive and unproven; soldr's slow tests spawn the whole soldr binary, so each covers most of it"
+      ],
+      "verdict": "DEFER for soldr. Keep #191 as a fleet option for multi-crate repositories; per-test recording only after shadow data justifies it."
+    },
+    {
+      "id": "H3",
+      "name": "Smart cache inheritance (setup-soldr key: auto, nearest-ancestor restore)",
+      "issue": "zackees/ci.yml#185 / zackees/setup-soldr#552",
+      "experiment": "E3: PR vs main Linux x64 step timings (12 runs each) and cache hit lines in the PR log.",
+      "results": {
+        "pr_linux_median_vs_main": "647 s vs 692 s (PRs are not slower)",
+        "cache_restores_total": "~30-40 s",
+        "pr_zccache_hit_rate": "100% (restore-key prefix already inherits main's newest entry)",
+        "latency_upside_on_pr_critical_path": "<= 30-60 s, and 0 once H1 skips the job"
+      },
+      "pros": [
+        "Correct ancestor (not merely newest) restore on divergent branches",
+        "Fewer, shared cache entries: the cache-budget verdict failed 52 runs in the window (27 PR, 25 main)",
+        "Helps main/ci-full/release runs, which still compile"
+      ],
+      "cons": [
+        "No measurable PR latency win today",
+        "Needs setup-soldr co-development"
+      ],
+      "verdict": "KEEP AS HYGIENE, not a latency lever: reframe #185 around cache-budget failures."
+    },
+    {
+      "id": "H4",
+      "name": "Make the tests themselves faster (remote-only per-test cost)",
+      "issue": "zackees/soldr#3530",
+      "experiment": "E4: local bosn probe (5 cheap cargo_front_door tests: as-is / CI env vars / 4 CPUs) then a real-runner probe on an experiment branch (run 36964344956) with environment variants and strace. Second real-runner probe (run 36965017158): SOLDR_MANIFEST_DISABLE=1 and 4-wide variants.",
+      "results": {
+        "local_bosn": "0.2-1.0 s per test in every variant (CI env vars and 4 CPUs change nothing)",
+        "real_runner_alone": "3.8-4.1 s per test (plain nextest, -j1); repeat run identical",
+        "real_runner_in_ci_test_dag": "10-15.6 s per test (run 36954283026)",
+        "tokens": "no effect (v2 identical to v1)",
+        "strace": "every test opens connections to zackees.github.io (toolchain catalogue) and raw.githubusercontent.com; no syscall >= 1 s; ~2.6 s summed clock_nanosleep",
+        "decomposition": "~5 s per test is the catalogue fetch; the remaining in-DAG excess (to 10-15 s) is contention while compile/Dylint stages overlap",
+        "real_runner_alone_run2": "5.1-5.4 s per cheap test; dylint test 11.6 s",
+        "manifest_disabled": "0.17-0.22 s per cheap test (30x); dylint test 6.6 s",
+        "four_wide": "5.6 s per cheap test with the catalogue lookup, 0.17-0.22 s without -- concurrency adds little once the lookup is gone",
+        "root_cause": "each fixture's fresh SOLDR_CACHE_DIR makes the soldr front door fetch the toolchain catalogue (zackees.github.io/soldr-toolchain/catalogue.v1.json + raw.githubusercontent.com parts) over the runner's network: ~5 s per test, x127 cargo_front_door tests = the ~604 s CI-vs-local gap"
+      },
+      "pros": [
+        "One-line class of fix: the shared test fixture disables the catalogue lookup (tests needing it opt back in), which also makes the suite hermetic (no live network per test)",
+        "Helps every remaining remote run: main push, ci-full, release gate, non-trusted PRs",
+        "Simulated: removing the per-test excess takes nextest 483 -> 240 s with no extra runners",
+        "Root cause, not a workaround"
+      ],
+      "cons": [
+        "Does not remove the PR wait by itself (Linux x64 ~11.5 -> ~7 min estimated)",
+        "Needs soldr changes"
+      ],
+      "verdict": "ADOPT as soldr#3530: disable the catalogue lookup in the shared fixture; measured 30x on the affected tests."
+    },
+    {
+      "id": "H5",
+      "name": "Shard nextest across runners",
+      "issue": null,
+      "experiment": "E5: nextest scheduling simulation with real per-test durations and test-group caps (docs/designs/experiments/pr_critical_path_shardsim.py), calibrated 483 s simulated vs ~480 s measured.",
+      "results": {
+        "N=1": 483,
+        "N=2": 283,
+        "N=3": 201,
+        "N=4": 145,
+        "with_per_test_excess_removed": {
+          "N=1": 240,
+          "N=2": 127,
+          "N=3": 91
+        },
+        "per_extra_shard_overhead_seconds": "~160 (setup + driver/test build or archive download)"
+      },
+      "pros": [
+        "~3 min off Linux x64 at N=2 for every remote run",
+        "No trust change"
+      ],
+      "cons": [
+        "Adds runners and ~1.5 runner-min of setup per shard per run",
+        "Hides H4's root cause",
+        "Irrelevant to trusted PRs"
+      ],
+      "verdict": "REJECT for now; revisit only if main/release test stages stay > ~4 min after H4."
+    },
+    {
+      "id": "H6",
+      "name": "Larger runners",
+      "issue": null,
+      "experiment": "Local 4-CPU probe (taskset -c 0-3) and the real-runner probe: the slow tests are not CPU-bound.",
+      "results": {
+        "4cpu_local": "0.26-1.05 s, same as 16 cores"
+      },
+      "pros": [
+        "Faster compile stage"
+      ],
+      "cons": [
+        "Paid (standard runners are free for a public repo)",
+        "Does not address the per-test cost"
+      ],
+      "verdict": "REJECT."
+    },
+    {
+      "id": "H7",
+      "name": "Raise the cold-build test-group concurrency cap",
+      "issue": null,
+      "experiment": "Evidence from .config/nextest.toml (soldr#3138/#3161): +19% total test-seconds when the group went 2-wide; route-ceiling races.",
+      "results": {},
+      "pros": [
+        "Config-only"
+      ],
+      "cons": [
+        "Treats the symptom of H4; contention tax; flake risk"
+      ],
+      "verdict": "REJECT; revisit the cap after H4."
+    },
+    {
+      "id": "H8",
+      "name": "Content-skip remote Rust jobs for PRs that cannot affect them",
+      "issue": null,
+      "experiment": "Reuses E2: 22/80 PRs touch no Rust-test input.",
+      "results": {},
+      "pros": [
+        "Cheap"
+      ],
+      "cons": [
+        "Subsumed by H1 for eligible PRs; for ineligible PRs the changed file is exactly what the remote job must validate"
+      ],
+      "verdict": "SUBSUMED by H1 (path-selection keeps the docs-only case)."
+    }
+  ],
+  "rounds": [
+    {
+      "round": 1,
+      "design": "#190 as filed: attested PR heads skip Lint and Linux x64; any change under .github/workflows/** or to the gate files is ineligible; post-merge run optional; audit sample keyed by PR number.",
+      "attacks": [
+        {
+          "attack": "Eligibility: how many PRs actually qualify?",
+          "evidence": "E1: only 53/80 (66%); 23 more are blocked by edits to workflows the skipped jobs never run (release-auto.yml, benchmark-stats.yml, cook-size-gate.yml ...), which the remote Lint/Linux x64 runs would not validate either.",
+          "change": "Surfaces become the closure of what the skipped jobs depend on: their workflow files, local reusable workflows/actions they reference (transitively), the gate declaration, files named in the gate's argv, and declared scripts. -> 62/80 (78%)."
+        },
+        {
+          "attack": "Linux x64 is not a GATE-001 mirror; skipping it drops CI-only probes.",
+          "evidence": "No CI-only step failed in 197 runs; all Linux x64 failures were the ci-test step, which the rust/ci-lint/tests lanes run locally.",
+          "change": "A non-mirror skip job must declare `covered-by` lanes (reviewable claim, statically checked) and its CI-only scripts become surfaces; the post-merge run keeps the probes."
+        },
+        {
+          "attack": "A PR can weaken its own gate and attest against the weaker one.",
+          "evidence": "Design flaw: verify reads local-gate.toml from the head checkout.",
+          "change": "Policy (opt-in, lanes, surfaces) is read from the base commit; lane provenance in the trailer must cover every base-declared lane."
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "design": "Round 1 + refined surfaces + base-branch policy + covered-by.",
+      "attacks": [
+        {
+          "attack": "Is the release gate alone an adequate catch-all?",
+          "evidence": "E1: before the gate, 9 main breakages in one day, each found by the main push run, not the release; releases are batched, so a release-only catch lets breakage accumulate across many merges.",
+          "change": "The default-branch push run is mandatory: verify never trusts a non-PR event, and the static check fails a skip workflow with no push trigger. Release stays the final gate."
+        },
+        {
+          "attack": "GEN-021 verified reuse would treat a skipped PR run as proof and skip main too.",
+          "evidence": "reuse-check requires every required job to conclude `success`; a skipped job concludes `skipped`.",
+          "change": "No change needed; documented and covered by reuse-check's existing `required-job-not-success`."
+        },
+        {
+          "attack": "GitHub's 'Update branch' merge commit is accepted by GATE-003 via its attested first parent.",
+          "evidence": "Its tree contains base changes the gate never ran together with this PR's changes.",
+          "change": "Trust requires state == attested (exact tree); attested-parent runs remotely."
+        },
+        {
+          "attack": "Audit sample keyed by PR number lets a PR be permanently in or out.",
+          "evidence": "Design.",
+          "change": "Key by head SHA: each push is a fresh 1-in-N draw; a rerun of the same head is stable."
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "design": "Round 2 + mandatory post-merge run + exact attestation + per-head audit.",
+      "attacks": [
+        {
+          "attack": "Blocking vs shadow audit?",
+          "evidence": "A disagreement in the sample is a real remote failure on that head.",
+          "change": "The audit sample simply runs the jobs (blocking). No separate shadow path; `mode = shadow` exists for rollout only."
+        },
+        {
+          "attack": "Fork or non-writer PRs; ci-full.",
+          "evidence": "Untrusted authors cannot be held to an honesty contract; ci-full asks for the full matrix.",
+          "change": "author_association must be OWNER/MEMBER/COLLABORATOR, head repo == base repo, and full labels force the run."
+        },
+        {
+          "attack": "What if the base history is not fetched?",
+          "evidence": "ci-mode used fetch-depth: 2.",
+          "change": "Fail closed (`base-unavailable`); the pilot fetches full history (fetch-depth: 0)."
+        },
+        {
+          "attack": "Without branch protection, nothing stops merging before CI mode finishes.",
+          "evidence": "soldr main has no protection or rulesets; 14/75 pre-gate merges had no green run.",
+          "change": "Out of scope for the rule, but with trust the decisive checks finish in ~1 min, so waiting for them is cheap; requiring `CI mode` + `Lint` via a ruleset is recommended (repository setting; owner action)."
+        },
+        {
+          "attack": "Does trust move the bottleneck to the developer?",
+          "evidence": "Local gate on a Rust change ~498 s (GATE-007 measured); the remote job it replaces is ~650 s plus queueing, after the local run.",
+          "change": "Net win on every eligible PR; H4/H2 remain the levers for the local tests lane."
+        }
+      ]
+    }
+  ],
+  "final_design": {
+    "rule": "GATE-008",
+    "summary": "On an opted-in repository, `ci-lint local-gate verify --trust` in the verify job outputs trusted=true only for a pull_request head that is attested for its exact tree, whose trailer covers every lane the BASE declaration names, from a same-repository author with write access, with no full label, not in the 1-in-N audit sample, and whose merge-base diff touches no trust surface; the declared skip jobs consume that output in their job-level if:. Pushes, schedules and dispatches never skip: the default-branch push runs the jobs for real, and the release candidate's exact-SHA full run is the final gate.",
+    "adopted": [
+      "H1 (as GATE-008)",
+      "H4 (soldr#3530)"
+    ],
+    "deferred": [
+      "H2 (#191, multi-crate repositories; per-test recording only with shadow evidence)",
+      "H3 (#185, as cache-budget hygiene)"
+    ],
+    "rejected": [
+      "H5 (sharding, unless main/release test stages stay > ~4 min after H4)",
+      "H6",
+      "H7",
+      "H8 (subsumed)"
+    ],
+    "expected_effect_soldr": "eligible ordinary PRs (~78%): critical path ~914 s median -> ~60 s; remaining PRs unchanged until H4 lands (~11.5 -> ~7 min estimated)"
+  }
+}

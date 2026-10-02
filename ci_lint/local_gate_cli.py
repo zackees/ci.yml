@@ -26,6 +26,8 @@ from ci_lint.finding import Status
 from ci_lint.first_pass import DEFAULT_MIN_PRS, DEFAULT_TARGET, collect, render_text
 from ci_lint.github_api import GitHubApiError, default_fetch
 from ci_lint.gate_bare_tools import check_no_bare_rust
+from ci_lint.gate_trust import TrustInput
+from ci_lint.gate_trust import decide as decide_trust
 from ci_lint.lane_cache import ToolVersions, lane_key, lookup, run_audit, simulate, tree_entries
 from ci_lint.local_gate import (
     GateConfig,
@@ -93,12 +95,50 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     print(outcome.message)
     if outcome.exit_code and os.environ.get("GITHUB_ACTIONS") == "true":
         print(f"::error title=GATE-003 local gate not run::{outcome.message.splitlines()[0]}")
+    lines = [f"attested={'true' if outcome.attested else 'false'}", f"state={outcome.state}"]
+    if args.trust:
+        decision = decide_trust(repo, _trust_input(args, payload, event, sha))
+        print(decision.render())
+        lines += [
+            f"trusted={'true' if decision.trusted else 'false'}",
+            f"would_trust={'true' if decision.would_trust else 'false'}",
+            f"trust_reason={decision.reason}",
+        ]
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a", encoding="utf-8") as fh:
+                fh.write(f"{decision.render()}\n")
     if args.github_output:
         target = os.environ.get("GITHUB_OUTPUT")
         if target:
             with open(target, "a", encoding="utf-8") as fh:
-                fh.write(f"attested={'true' if outcome.attested else 'false'}\nstate={outcome.state}\n")
+                fh.write("\n".join(lines) + "\n")
     return outcome.exit_code
+
+
+def _trust_input(args: argparse.Namespace, payload: dict[str, JsonValue], event: str, sha: str) -> TrustInput:
+    pr = payload.get("pull_request")
+    pr = pr if isinstance(pr, dict) else {}
+
+    def text(obj: JsonValue, *keys: str) -> str | None:
+        for key in keys:
+            obj = obj.get(key) if isinstance(obj, dict) else None
+        return obj if isinstance(obj, str) else None
+
+    raw_labels = pr.get("labels")
+    labels = tuple(
+        label["name"] for label in (raw_labels if isinstance(raw_labels, list) else [])
+        if isinstance(label, dict) and isinstance(label.get("name"), str)
+    )
+    return TrustInput(
+        event=event,
+        head_sha=sha,
+        base_sha=args.base_sha or text(pr, "base", "sha"),
+        author_association=args.author_association or text(pr, "author_association"),
+        head_repo=text(pr, "head", "repo", "full_name"),
+        base_repo=text(pr, "base", "repo", "full_name"),
+        labels=tuple(args.label) if args.label else labels,
+    )
 
 
 def _cmd_lanes(args: argparse.Namespace) -> int:
@@ -216,6 +256,12 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     ver.add_argument("--event", help="event name (default: GITHUB_EVENT_NAME)")
     ver.add_argument("--author", help="PR author login (default: from the event payload)")
     ver.add_argument("--github-output", action="store_true", help="append attested=/state= to $GITHUB_OUTPUT")
+    ver.add_argument("--trust", action="store_true",
+                     help="GATE-008: also decide whether the attested head may skip [gate.trust].skip jobs "
+                     "(outputs trusted / would_trust / trust_reason)")
+    ver.add_argument("--base-sha", help="PR base commit (default: from GITHUB_EVENT_PATH); its declaration is the policy")
+    ver.add_argument("--author-association", help="PR author association (default: from GITHUB_EVENT_PATH)")
+    ver.add_argument("--label", action="append", help="PR label (repeatable; default: from GITHUB_EVENT_PATH)")
     ver.set_defaults(func=_cmd_verify)
 
     hook = lg.add_parser("check-push", help="pre-push hook body: refuse unattested branch heads")

@@ -599,12 +599,20 @@ repo-root `local-gate.toml`; declaring both is `GATE-001`. Parsed strictly
 | `lanes.<id>.env` | array of strings | `GATE-007`: environment variables whose values are part of the key. |
 | `lanes.<id>.max-age-hours` | int (default 24) | `GATE-007`: a cached pass older than this is ignored. |
 | `lanes.<id>.weight` | `"heavy"` (default) or `"light"` | `GATE-007`: `light` lanes (linters, Python tests) run concurrently with each other and alongside the heavy chain; `heavy` lanes (compilers, test suites) run one at a time in declared order. Each lane's output goes to a log under the worktree's git dir (`ci-lint/lane-logs/`), shown on completion -- in full on failure. |
+| `trust.mode` | `"never"` (default), `"shadow"`, `"enforce"` | `GATE-008`: whether an attested PR head may stand in for the remote quick-gate jobs. Read from the PR's **base** commit, never the head. `shadow` reports `would_trust` and changes nothing. |
+| `trust.skip` | array of `<workflow>:<job>` | `GATE-008`: the remote jobs a trusted head skips. Each needs a job-level `if:` consuming `needs.<verify job>.outputs.trusted`, and its workflow must also trigger on default-branch pushes (the post-merge run). |
+| `trust.covered-by` | table `"<workflow>:<job>" = [lane ids]` | `GATE-008`: required for a skip job that is not a GATE-001 mirror: the lanes the owner asserts cover what it runs. |
+| `trust.surfaces` | array of globs | `GATE-008`: extra paths whose change forces the remote run (e.g. scripts only the skipped jobs execute). Always included: the declaration, files named in the gate's or a lane's argv, the skip and verify jobs' workflow files, and every local reusable workflow or action they reference. |
+| `trust.full-labels` | array of strings (default `["ci-full"]`) | `GATE-008`: a PR carrying one of these labels always runs remotely. |
+| `trust.audit-rate` | int (default 10; 0 = off) | `GATE-008`: 1 in N attested in-policy heads, chosen by a hash of the head SHA, still runs remotely to measure attestation honesty. |
 
 A repository with no `.github/workflows` that declares neither `mirrors`
 nor `verify` gets no `GATE-001`/`GATE-002` finding: its pre-push hook is
 the whole enforcement (this repository's own `local-gate.toml`).
 
 **Lane cache (GATE-007).** With `[gate.lanes]` declared, `local-gate run` computes each lane's key -- sha256 over the lane argv, its declared tools' versions and env values, and `(path, blob sha)` of its input set, read from `git ls-tree` -- and skips the lane when a pass with that key, younger than `max-age-hours`, is recorded under `<git common dir>/ci-lint/lane-cache/<lane>/` (shared by every worktree of the clone, never pushed). Only passes are recorded. `--no-cache` runs every lane; `ci-lint local-gate lanes` prints each lane's key, input count and hit/miss for HEAD. The trailer gains `lanes=<id>:run|<id>:reused@<key12>,...`.
+
+**Attested skip (GATE-008).** `ci-lint local-gate verify --trust --github-output` (in the verify job, with full history: `fetch-depth: 0`) writes `trusted`, `would_trust` and `trust_reason`. It is `true` only when **every** check holds: the event is `pull_request`; the base commit's declaration enables `[gate.trust]`; no full label; not a fork; author association is OWNER, MEMBER or COLLABORATOR; the head carries a trailer for its exact tree (not merely an attested first parent); the trailer's lane provenance covers every lane the base declares; no changed path (merge-base diff) matches a surface; and the head is not in the audit sample. Every other case is a reason code, and the jobs run as before. Pushes, schedules and dispatches never skip.
 
 **Attestation.** `Local-Gate: v1 tree=<40-hex tree sha> secs=<n>`, the last
 such trailer in the commit message. States: `attested` (tree matches),
@@ -773,6 +781,7 @@ when neither PyYAML nor `yq` is available).
 | `GATE-003` | (#166, runtime, `local-gate verify` / `check-push`) The PR head has no `Local-Gate:` trailer for its exact tree. | `ci-lint local-gate run`, then `git push --force-with-lease`. |
 | `GATE-004` | (#166, live, `local-gate first-pass`) First-push pass rate below target (default 80%) over >= `--min-prs` merged PRs; `needs_review`. | Move each recurring first-push failure class into the local gate, or fix the flaky remote lane. |
 | `GATE-005` | (#168, static, group 17 / `local-gate lint`) `[gate.isolation]` declared but its guard ignores `CI` or the marker, its bosn runner never sets the marker, or the gate never invokes the runner; a known self-hosted tool repo (soldr, zccache, clud, bosn) with no isolation is `needs_review`. |
+| `GATE-008` | (#190, static, group 17 / `local-gate lint`; runtime `local-gate verify --trust`) `[gate.trust]` enabled with no verify job; a `skip` job with no job-level `if:` consuming the verify job's `trusted` output; a non-mirror `skip` job with no `covered-by` lanes (or naming undeclared lanes); a skip job's workflow with no push trigger (no post-merge run); a bad `mode`/`audit-rate`. | Wire the `if:`, declare `covered-by`, keep the default-branch push run. |
 | `RUST-001` (gate surfaces) | (#170, static, `local-gate lint` / precheck group 17) In a repository with a root `Cargo.toml`: a bare `cargo`/`rustc`/`rustup`/`maturin`/`cargo-nextest` in a workflow or composite-action `run:` line (`local-gate lint` only; precheck's group-4 RUST-001 covers a ci.toml repo's workflows), in the local gate's `run` argv or a file it names (shell lines; Python string-literal argv), or in a `bosn.toml` task `cmd`. `"$soldr" rustup ...` (the tool as soldr's argument) is not bare. Excuse one line with `# ci-lint: allow RUST-001 <reason>`. |
 
 ## The planner
