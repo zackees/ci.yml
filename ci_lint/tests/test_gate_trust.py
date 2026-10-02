@@ -162,6 +162,15 @@ class DecideTest(TrustCase):
         reused = self.commit("again", {"src.txt": "three\n"}, lanes="lint:run,tests:reused@0123456789ab")
         self.assertReason(reused, "trusted")
 
+    def test_not_applicable_counts_only_for_optional_lanes(self) -> None:
+        head = self.commit("feature", {"src.txt": "two\n"}, lanes="lint:run,tests:n/a")
+        self.assertReason(head, "lanes-missing")  # tests is required on the base
+        _git(self.repo, "checkout", "-q", "-b", "opt", self.base)
+        gate = _gate(TRUST, lanes=True).replace('"--lane", "tests"]\ntools = ["git"]\n', '"--lane", "tests"]\ntools = ["git"]\noptional = true\n')
+        base = self.commit("tests optional", {"local-gate.toml": gate}, lanes=None)
+        head = self.commit("feature", {"src.txt": "three\n"}, lanes="lint:run,tests:n/a")
+        self.assertReason(head, "trusted", base_sha=base)
+
     def test_gate_surfaces_force_a_remote_run(self) -> None:
         for path in (
             "local-gate.toml",  # the declaration

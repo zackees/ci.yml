@@ -57,6 +57,7 @@ from ci_lint.finding import Finding, Status
 from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
 from ci_lint.gate_trust import TrustConfig, WorkflowFacts, WorkflowJob, check_trust_static, parse_trust
 from ci_lint.lane_cache import (
+    NOT_APPLICABLE_EXIT,
     LaneConfig,
     ToolVersions,
     check_lanes_static,
@@ -504,12 +505,22 @@ def _heavy_chain(repo: Path, chain: list[_Pending], log_dir: Path) -> list[LaneO
         outcome = _run_lane(repo, item.lane, item.key, log_dir)
         _report(outcome)
         out.append(outcome)
-        if outcome.exit_code != 0:
+        if outcome.exit_code != 0 and not _not_applicable(outcome):
             break
     return out
 
 
+def _not_applicable(outcome: LaneOutcome) -> bool:
+    return outcome.lane.optional and outcome.exit_code == NOT_APPLICABLE_EXIT
+
+
 def _report(outcome: LaneOutcome) -> None:
+    if _not_applicable(outcome):
+        tail = [ln for ln in outcome.log.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()][-1:]
+        reason = f" -- {tail[0][:160]}" if tail else ""
+        print(f"local-gate: lane {outcome.lane.id}: not applicable on this host (optional; not attested){reason}",
+              file=sys.stderr, flush=True)
+        return
     if outcome.exit_code == 0:
         tail = [ln for ln in outcome.log.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip()][-1:]
         summary = f" -- {tail[0][:140]}" if tail else ""
@@ -582,7 +593,9 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
         elif lane.id in by_id and by_id[lane.id].exit_code == 0:
             provenance.append(f"{lane.id}:run")
             passed.append(LanePass(lane.id, by_id[lane.id].key, "run", by_id[lane.id].secs))
-    failed = [o for o in outcomes if o.exit_code != 0]
+        elif lane.id in by_id and _not_applicable(by_id[lane.id]):
+            provenance.append(f"{lane.id}:n/a")
+    failed = [o for o in outcomes if o.exit_code != 0 and not _not_applicable(o)]
     not_run = [p.lane.id for p in pending if p.lane.id not in by_id]
     if not_run:
         print(f"local-gate: not run after a heavy-lane failure: {', '.join(not_run)}", file=sys.stderr)

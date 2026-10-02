@@ -53,6 +53,8 @@ if pathlib.Path("sleep").exists():
     time.sleep(float(pathlib.Path("sleep").read_text()))
 if pathlib.Path("fail-" + lane).exists():
     raise SystemExit(4)
+if pathlib.Path("na-" + lane).exists():
+    raise SystemExit(75)
 """
 
 
@@ -112,6 +114,33 @@ class LanedRepo(unittest.TestCase):
         att = parse_attestation(_git(self.repo, "log", "-1", "--format=%B"))
         assert att is not None and att.lanes is not None
         return att.lanes
+
+
+class OptionalLaneTest(LanedRepo):
+    """A lane that cannot run on every host (zackees/ci.yml#202: a local VM)."""
+
+    def _make_tests_optional(self) -> None:
+        text = (self.repo / "local-gate.toml").read_text(encoding="utf-8")
+        (self.repo / "local-gate.toml").write_text(
+            text.replace('keep = ["src/**"]\ntools = ["git"]\n', 'keep = ["src/**"]\ntools = ["git"]\noptional = true\n'),
+            encoding="utf-8")
+
+    def test_optional_lane_not_applicable_passes_unattested_and_uncached(self) -> None:
+        self._make_tests_optional()
+        self.write("na-tests", "")
+        self.commit("tests n/a here")
+        self.assertEqual(self.gate(), "lint:run,tests:n/a")
+        # Never cached: once the host can run it, it runs.
+        _git(self.repo, "rm", "-q", "na-tests")
+        self.commit("host gained the VM")
+        self.assertEqual(self.gate(), "lint:run,tests:run")
+        self.assertIn("tests", self.runs())
+
+    def test_exit_75_from_a_required_lane_is_a_failure(self) -> None:
+        self.write("na-tests", "")
+        self.commit("tests n/a but required")
+        self.log.unlink(missing_ok=True)
+        self.assertEqual(run_gate(self.repo, self.config()).exit_code, 75)
 
 
 class LaneRunTest(LanedRepo):

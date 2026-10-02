@@ -127,8 +127,9 @@ Measured on a 16-core host (soldr):
 2. **An entry must name a declared gate; omission means not run.** An undeclared, malformed, duplicate, re-stamped, rebased or content-changed entry is invalid and is never counted.
 3. **Per-job skip.** The verify job outputs `skip_<job>` for each GATE-008 skip job. It is `true` only when the head passes GATE-008's head-level policy **and** every gate the job lists has a valid attestation.
 4. **Stamp.** `sha256(tree, parents, canonical JSON)`: tamper-evident, bound to content and position, and not a signature.
-5. **Push and release.** Push events never skip. **Release always ignores attestations:** every gate runs remotely on the candidate's exact SHA.
-6. **Caching.** Valid attestations may be saved as tiny side cache entries. Cache keys carry the human-readable, ancestor-defining label `m<n>-<sha10>` (main) or `m<b>-c<k>-<sha10>-pr-<N>` (the PR tag is the fleet's existing `PR_CACHE_TAG` suffix), and `ci-lint attest resolve` hydrates the nearest attested ancestor.
+5. **Host-optional lanes.** A lane declared `optional = true` (for example a local Windows VM) may report "not applicable on this host" with exit 75. It is never cached and never attested, so its gates simply run in CI. GATE-008 accepts its `n/a` provenance only when the base declares the lane optional.
+6. **Push and release.** Push events never skip. **Release always ignores attestations:** every gate runs remotely on the candidate's exact SHA.
+7. **Caching.** Valid attestations may be saved as tiny side cache entries. Cache keys carry the human-readable, ancestor-defining label `m<n>-<sha10>` (main) or `m<b>-c<k>-<sha10>-pr-<N>` (the PR tag is the fleet's existing `PR_CACHE_TAG` suffix), and `ci-lint attest resolve` hydrates the nearest attested ancestor.
 
 ## Re-running the local gate: lane result cache (GATE-007)
 
