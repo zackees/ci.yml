@@ -32,7 +32,9 @@ The trailer is an honesty contract, not a cryptographic proof: anyone can
 type it. What keeps it honest is that the mirrored remote jobs still run
 the identical command (GATE-001), so a forged or stale attestation turns
 into a visible "attested but red remotely" run in `first-pass`, never into
-a silent pass.
+a silent pass. A repository that opts into GATE-008 (`ci_lint.gate_trust`)
+skips those jobs on attested in-policy PR heads; there the default-branch
+push run and a 1-in-N audit sample play that role.
 """
 
 from __future__ import annotations
@@ -43,12 +45,14 @@ import subprocess
 import sys
 import time
 import tomllib
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
 from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
+from ci_lint.gate_trust import TrustConfig, check_trust_static, parse_trust
 from ci_lint.lane_cache import (
     LaneConfig,
     ToolVersions,
@@ -125,6 +129,9 @@ class GateConfig:
     # GATE-007 (zackees/ci.yml#177): the gate split into cacheable lanes, in
     # declared order. Empty: `run` executes as one opaque command.
     lanes: tuple[LaneConfig, ...] = ()
+    # GATE-008 (zackees/ci.yml#190): when an attested head may stand in for
+    # the remote quick-gate jobs. None: never.
+    trust: TrustConfig | None = None
 
     @property
     def command(self) -> str:
@@ -147,7 +154,11 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
     mode = sub.str_("mode", required=False, default="enforce") or "enforce"
     isolation_raw = sub.table_("isolation", required=False)
     lanes_raw = sub.table_("lanes", required=False)
+    trust_raw = sub.table_("trust", required=False)
     sub.finish()
+    trust = (
+        parse_trust(trust_raw, path=f"{path}.trust", source=source, findings=findings) if trust_raw is not None else None
+    )
     lanes = (
         parse_lanes(lanes_raw, path=f"{path}.lanes", source=source, findings=findings) if lanes_raw is not None else ()
     )
@@ -189,6 +200,7 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
         source=source,
         isolation=isolation,
         lanes=lanes,
+        trust=trust,
     )
 
 
@@ -213,22 +225,42 @@ def load_gate_config(repo_root: Path) -> GateLoad:
     else no config -- the repository has not opted in. Declaring both is a
     GATE-001 violation: two declarations can drift apart."""
 
+    def read(name: str) -> str | None:
+        path = repo_root / name
+        return path.read_text(encoding="utf-8") if path.is_file() else None
+
+    return _load_gate_config(read)
+
+
+def load_gate_config_at(repo: Path, rev: str) -> GateLoad:
+    """The declaration as committed at `rev` (GATE-008 reads the PR's base)."""
+
+    def read(name: str) -> str | None:
+        try:
+            return _git(repo, "show", f"{rev}:{name}")
+        except GitError:
+            return None
+
+    return _load_gate_config(read)
+
+
+def _load_gate_config(read: Callable[[str], str | None]) -> GateLoad:
     findings: list[Finding] = []
     tables: list[_GateTable] = []
-    ci_toml = repo_root / "ci.toml"
-    if ci_toml.is_file():
+    ci_text = read("ci.toml")
+    if ci_text is not None:
         try:
-            doc = tomllib.loads(ci_toml.read_text(encoding="utf-8"))
+            doc = tomllib.loads(ci_text)
         except tomllib.TOMLDecodeError:
             doc = {}  # load_ci_toml reports the parse error itself
         local = doc.get("local")
         gate = local.get("gate") if isinstance(local, dict) else None
         if isinstance(gate, dict):
             tables.append(_GateTable(gate, "local.gate", "ci.toml"))
-    gate_file = repo_root / GATE_FILE
-    if gate_file.is_file():
+    gate_text = read(GATE_FILE)
+    if gate_text is not None:
         try:
-            doc = tomllib.loads(gate_file.read_text(encoding="utf-8"))
+            doc = tomllib.loads(gate_text)
         except tomllib.TOMLDecodeError as exc:
             return GateLoad(
                 None,
@@ -739,6 +771,7 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:
     findings: list[Finding] = check_isolation(config.isolation, config.run, repo_root, config.source)
     findings.extend(check_lanes_static(config.lanes, config.run, config.source, repo_root))
     wfs = _load_workflows(repo_root)
+    findings.extend(_check_trust(config, wfs))
     if not wfs.docs and not wfs.unreadable and not config.mirrors and config.verify is None:
         # No remote CI at all (e.g. zackees/ci.yml itself): nothing to mirror
         # or verify; the pre-push hook is the whole enforcement.
@@ -886,6 +919,24 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:
                 )
             )
     return findings
+
+
+def _check_trust(config: GateConfig, wfs: _Workflows) -> list[Finding]:
+    from ci_lint.workflow_scan import get_on_section, jobs_of  # noqa: PLC0415
+
+    if config.trust is None:
+        return []
+    jobs = {name: jobs_of(doc) for name, doc in wfs.docs.items()}
+    pushed = frozenset(name for name, doc in wfs.docs.items() if "push" in get_on_section(doc))
+    return check_trust_static(
+        config.trust,
+        verify_job=str(config.verify) if config.verify else None,
+        mirrors=tuple(str(m) for m in config.mirrors),
+        lane_ids=tuple(lane.id for lane in config.lanes),
+        source=config.source,
+        jobs_by_workflow=jobs,
+        push_triggered=pushed,
+    )
 
 
 def hook_installed(repo: Path) -> bool:
