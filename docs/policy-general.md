@@ -295,7 +295,7 @@ In one FastLED/fbuild session (2026-10-02), an orchestrating agent and two or th
 
 **Scope.** This governs machine-local tooling: agents, local gates, bosn → act runs and release automation driven from a developer machine. Hosted Actions jobs authenticate with the per-repository `GITHUB_TOKEN`, which has its own budget. They are in scope only where they run a query loop, which GATE-012's zero-wait rule already restricts.
 
-**Status.** Candidate. The broker is not implemented yet. The next step is a design under `docs/designs/` covering the cache schema (object store and per-resource high-water marks), the bound for each endpoint, and invalidation of edited content. A ci-lint static signal follows from it: a skill, tool or `ci/` script that re-reads a GitHub collection in a loop without a time or cursor bound, or that calls `gh api` / `gh pr checks` / `gh run view`/`watch` directly instead of through the broker.
+**Status.** Candidate. The broker is not implemented yet; its design is [docs/designs/ghapi-broker.md](designs/ghapi-broker.md) (implementation: zackees/clud#1743). A ci-lint static signal follows from it: a skill, tool or `ci/` script that re-reads a GitHub collection in a loop without a time or cursor bound, or that calls `gh api` / `gh pr checks` / `gh run view`/`watch` directly instead of through the broker.
 
 ## Performance rule
 
