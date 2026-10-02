@@ -55,6 +55,29 @@ The goal was for a PR to pass CI on its first push. CI must stay fast, the local
 | The compression timings were taken on a loaded host and had to be rerun (`bc` missing) | Approximate absolute times | Benchmark on an idle host with a harness that doesn't depend on optional tools. |
 | The full gate takes 338-659 s when Rust changes, and a rerun skips nothing | Slower than the remote critical path for small edits | The lane result cache (GATE-007, #177). Per-check exclusions next. |
 
+## Phase 2: GATE-007, the lane cache (#177, soldr#3529)
+
+A rerun of the gate used to skip nothing unless the commit was unchanged. GATE-007 caches lanes locally by content. Four design revisions came out of piloting it in soldr:
+
+1. **A broad exclusion that happens to match a mandatory input is harmless.** The runtime always re-includes mandatory inputs, so the static check reports only an exclusion that literally names one.
+2. **Split lanes by inputs, not by tool.** Replaying history showed tool-shaped lanes reusable 0-3% of the time and input-shaped lanes up to 48%.
+3. **Pins follow the lane's tools.** Every `Cargo.lock` bump was invalidating soldr's Python-lint lane, which cannot be affected by it.
+4. **Prove exclusions with `strace`.** The audit caught `pyproject.toml`, which soldr reads, excluded from the rust lane, after a grep-based review had already suggested three wrong exclusions.
+
+Result: docs-only change 748 → 76 s, Python/CI change → 104 s, revert to a passed tree → 0.7 s.
+
+Along the way:
+- Two owner directives became ratcheted ci_lint rules, both enforced in ci.yml's selftest and in soldr's gate:
+  - **PY-002:** records are typed dataclasses, never tuples or dicts.
+  - **PY-003:** no capture-then-wait subprocess output. Iterating a pipe is fine, and `running-process` is strongly encouraged.
+- PY-003's first remedy, `DEVNULL`, collided with soldr's own no-swallowed-stdio rule (soldr#3389). The remedy became "capture to a file and forward it on failure".
+
+What didn't work:
+- Reusing a branch after its squash-merge produced conflicting PRs twice. Always branch fresh from `origin/main`.
+- `strace` on a lane that leaves children running hung until killed. The audit now runs per lane.
+- bosn scopes volumes per workspace path, so a fresh worktree starts cold (bosn#327, which also covers seeding from ancestor commits).
+- The remote counterpart, setup-soldr's cache key, is still hand-built per caller. The proposed fix, an `auto` key with nearest-ancestor restore, is #185 / setup-soldr#552.
+
 ## Still open
 
 - **The one-week measurement:** `ci-lint local-gate first-pass` over at least 5 PRs by other authors, target >= 80% (#166).
