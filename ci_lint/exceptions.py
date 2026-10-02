@@ -3,6 +3,10 @@
 Section B of the round-1A brief: "Declared [[exceptions]] matching a finding
 turn it into status `approved_exception` (printed every run); an expired
 exception is itself a violation (`CT-005`)."
+
+A rule in UNWAIVABLE_RULES ignores `[[exceptions]]`: its findings stay
+violations, and each entry naming it is reported as a violation of that
+rule at ci.toml.
 """
 
 from __future__ import annotations
@@ -12,6 +16,11 @@ from dataclasses import dataclass, replace
 
 from ci_lint.finding import Finding, Status
 from ci_lint.schema import CiToml, ExceptionEntry
+
+
+# CACHE-025 (Swatinem/rust-cache ban): maintainer decision 2026-10-02, no
+# exceptions of any kind.
+UNWAIVABLE_RULES: frozenset[str] = frozenset({"CACHE-025"})
 
 
 @dataclass(frozen=True)
@@ -44,7 +53,7 @@ def apply_exceptions(
             (
                 e
                 for e in ci.exceptions
-                if e.rule == finding.rule and e.path == finding.path
+                if e.rule == finding.rule and e.path == finding.path and e.rule not in UNWAIVABLE_RULES
             ),
             None,
         )
@@ -58,6 +67,18 @@ def apply_exceptions(
             out.append(finding)
         else:
             out.append(replace(finding, status=Status.APPROVED_EXCEPTION))
+
+    for entry in ci.exceptions:
+        if entry.rule in UNWAIVABLE_RULES:
+            out.append(
+                Finding(
+                    rule=entry.rule,
+                    path="ci.toml",
+                    message=f"[[exceptions]] entry for {entry.rule} on '{entry.path}': {entry.rule} cannot be waived",
+                    fix=f"delete the [[exceptions]] entry and fix the {entry.rule} finding itself "
+                    "(maintainer decision 2026-10-02: no exceptions)",
+                )
+            )
 
     # CT-005: an expired exception is itself a violation, reported once per
     # exception entry (not once per finding it would have covered).

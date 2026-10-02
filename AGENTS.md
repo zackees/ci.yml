@@ -29,7 +29,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 | `LAYOUT` | 001 | `LAYOUT-002` | 001 |
 | `RUST` | 001–017 | `RUST-018` | 001, 002, 003, 004, 005, 006, 008, 009, 010, 011, 012, 013, 014, 015, 016, 017 (007 candidate) |
 | `PKG` | 001–007 | `PKG-008` | 001, 002, 003, 004, 005, 006, 007 |
-| `CACHE` | 001–025 | `CACHE-026` | 001–014, 025 (#209: `Swatinem/rust-cache` banned, `ci_lint.rules.swatinem_ban`; 015–022 claimed as candidates by open issues #110/#111/#120/#150/#153 -- see #154; 023 candidate, #173; 024 candidate, #185 smart ancestor-resolved setup-soldr cache, implementation zackees/setup-soldr#552) |
+| `CACHE` | 001–025 | `CACHE-026` | 001–014, 025 (#209: `Swatinem/rust-cache` banned, `ci_lint.rules.swatinem_ban`; no exceptions, maintainer decision 2026-10-02 -- no allow comment, unwaivable by `[[exceptions]]`; 015–022 claimed as candidates by open issues #110/#111/#120/#150/#153 -- see #154; 023 candidate, #173; 024 candidate, #185 smart ancestor-resolved setup-soldr cache, implementation zackees/setup-soldr#552) |
 | `ACT` | 001 | `ACT-002` | 001 |
 | `TEST` | 001–002 | `TEST-003` | all |
 | `BIN` | 001–002 | `BIN-003` | 001, 002 |
