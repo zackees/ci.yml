@@ -160,7 +160,7 @@ def automatic_surfaces(repo: Path, rev: str, config_source: str, gate_run: tuple
         tracked = set(_git(repo, "ls-tree", "-r", "--name-only", rev).splitlines())
     except GitError:
         tracked = set()
-    out: set[str] = {config_source}
+    out: set[str] = {config_source, "ci-attestations.yml"}
     for argv in (gate_run, *lane_runs):
         out.update(token for token in argv if token in tracked)
     todo = [f".github/workflows/{wf}" for wf in workflows]
@@ -292,10 +292,11 @@ def check_trust_static(trust: TrustConfig | None, *, verify_job: str | None, mir
                                fix=f"point [gate.trust].skip at a real job in {path}"))
             continue
         needle = f"needs.{verify_id}.outputs.{TRUSTED_OUTPUT}"
-        if job.condition is None or needle not in job.condition:
+        per_job = f"needs.{verify_id}.outputs.skip_{job_id}"  # GATE-010 per-job decision
+        if job.condition is None or (needle not in job.condition and per_job not in job.condition):
             out.append(Finding(rule="GATE-008", path=path,
-                               message=f"skip job '{job_id}' has no job-level if: consuming {needle}, so trust never skips it",
-                               fix=f"add `{needle} != 'true'` to its if:"))
+                               message=f"skip job '{job_id}' has no job-level if: consuming {per_job} (or {needle}), so trust never skips it",
+                               fix=f"add `{per_job} != 'true'` to its if:"))
         if ref not in mirrors:
             lanes = trust.lanes_for(ref)
             if lanes is None:

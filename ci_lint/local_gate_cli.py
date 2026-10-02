@@ -21,6 +21,10 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ci_lint.attestations import JobDecision, decide_jobs
+from ci_lint.attestations import load_definition as load_attestation_definition
+from ci_lint.attestations import output_name as attestation_output_name
+from ci_lint.attestations import verify_commit as verify_attestations
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.finding import Status
 from ci_lint.first_pass import DEFAULT_MIN_PRS, DEFAULT_TARGET, collect, render_text
@@ -36,6 +40,7 @@ from ci_lint.local_gate import (
     default_launcher,
     install_hook,
     load_gate_config,
+    load_gate_config_at,
     run_gate,
     verify,
 )
@@ -97,23 +102,46 @@ def _cmd_verify(args: argparse.Namespace) -> int:
         print(f"::error title=GATE-003 local gate not run::{outcome.message.splitlines()[0]}")
     lines = [f"attested={'true' if outcome.attested else 'false'}", f"state={outcome.state}"]
     if args.trust:
-        decision = decide_trust(repo, _trust_input(args, payload, event, sha))
+        trust_input = _trust_input(args, payload, event, sha)
+        decision = decide_trust(repo, trust_input)
         print(decision.render())
         lines += [
             f"trusted={'true' if decision.trusted else 'false'}",
             f"would_trust={'true' if decision.would_trust else 'false'}",
             f"trust_reason={decision.reason}",
         ]
+        report = [decision.render()]
+        for job in _job_decisions(repo, trust_input, decision.trusted):
+            lines.append(f"{attestation_output_name(job.job)}={'true' if job.skip else 'false'}")
+            report.append(f"[GATE-010] {job.job}: {'skip' if job.skip else 'run'} ({job.reason})")
+        for line in report[1:]:
+            print(line)
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
             with open(summary, "a", encoding="utf-8") as fh:
-                fh.write(f"{decision.render()}\n")
+                fh.write("\n\n".join(report) + "\n")
     if args.github_output:
         target = os.environ.get("GITHUB_OUTPUT")
         if target:
             with open(target, "a", encoding="utf-8") as fh:
                 fh.write("\n".join(lines) + "\n")
     return outcome.exit_code
+
+
+def _job_decisions(repo: Path, inp: TrustInput, head_trusted: bool) -> tuple[JobDecision, ...]:
+    """GATE-010: per [gate.trust].skip job, from the BASE commit's
+    declarations and the head's Ci-Attestation trailers."""
+
+    if not inp.base_sha:
+        return ()
+    base = load_gate_config_at(repo, inp.base_sha).config
+    if base is None or base.trust is None:
+        return ()
+    lanes = tuple(lane.id for lane in base.lanes)
+    loaded = load_attestation_definition(repo, rev=inp.base_sha, lanes=lanes)
+    definition = loaded.definition if loaded is not None else None
+    commit = verify_attestations(repo, inp.head_sha, definition) if definition is not None else None
+    return decide_jobs(definition, base.trust.skip, head_trusted=head_trusted, commit=commit)
 
 
 def _trust_input(args: argparse.Namespace, payload: dict[str, JsonValue], event: str, sha: str) -> TrustInput:
