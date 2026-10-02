@@ -2,7 +2,78 @@
   "schema": 1,
   "title": "Ordinary-PR CI critical path: strategy experiment ledger",
   "issue": "zackees/ci.yml#189",
-  "pilot": "zackees/soldr",
+  "pilot": {
+    "ci_lint": [
+      "zackees/ci.yml#192 (GATE-008)",
+      "zackees/ci.yml#194 (PY-002 extended to parameters/variables after owner review)"
+    ],
+    "soldr_prs": [
+      {
+        "pr": "zackees/soldr#3531",
+        "what": "GATE-008 wiring",
+        "gate008_decision": "not-opted-in (base had no [gate.trust]; also surfaces changed)",
+        "ci_wall_seconds": 858,
+        "first_push_green": true
+      },
+      {
+        "pr": "zackees/soldr#3532",
+        "what": "H4 fix: fixtures disable the catalogue fetch",
+        "gate008_decision": "trusted",
+        "ci_wall_seconds": 46,
+        "lint": "3 s no-op (lint-docs)",
+        "linux_x64": "skipped",
+        "first_push_green": true
+      }
+    ],
+    "post_merge_main_runs": [
+      {
+        "run": 36967826820,
+        "commit": "6f6b886 (#3531)",
+        "lint": "success",
+        "linux_x64_seconds": 610
+      },
+      {
+        "run": 36970591097,
+        "commit": "4b4f981 (#3532)",
+        "lint": "success",
+        "linux_x64_seconds": 478,
+        "ci_test_seconds": 381,
+        "nextest_seconds": 207,
+        "test_seconds_total": 827,
+        "cargo_front_door_test_seconds": 387,
+        "tests_passed": 3572
+      }
+    ],
+    "baseline_vs_after": {
+      "pr_ci_wall_seconds": [
+        914,
+        46
+      ],
+      "main_linux_x64_seconds": [
+        692,
+        478
+      ],
+      "nextest_seconds": [
+        480,
+        207
+      ],
+      "test_seconds_total": [
+        1933,
+        827
+      ]
+    },
+    "issues_found": [
+      "zackees/bosn#314: setup container reused across worktrees (bind-mount source not in the key); once bound to a deleted worktree, once nearly to a live sibling -> candidate GATE-009 (zackees/ci.yml#196: isolated lanes must prove the tree they tested)",
+      "zackees/soldr#3520 (fixed upstream, host still on 0.9.27): reld cannot find libgcc_s on NixOS for fresh build scripts; the rust lane ran with SOLDR_LINKER=default",
+      "zackees/soldr#3533: soldr save races the zccache metadata temp file (Perf Matrix, unrelated to the pilot)",
+      "zackees/ci.yml#193: PY-002 burn-down after the owner caught a nested-dict parameter in GATE-008's first version"
+    ],
+    "next": [
+      "Read audit-sample and main-run agreement after 20+ attested heads; on any disagreement switch to mode = shadow (policy step 5)",
+      "Owner action: a ruleset requiring CI mode + Lint on soldr main",
+      "Roll out to the next fleet repository via the design doc's rollout steps"
+    ]
+  },
   "recorded": "2026-10-02",
   "method": "Each strategic hypothesis was tried as an experiment against real soldr evidence (GitHub run/job API, CI logs, local bosn runs, a real-runner probe on an experiment branch, and simulations calibrated against measured runs). Pros/cons are evidence, not opinion; every figure names its source.",
   "baseline": {
