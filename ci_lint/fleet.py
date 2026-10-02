@@ -18,6 +18,8 @@ not require a repository to have adopted `ci.toml` schema 3 yet:
   - SEC-007 / GEN-006: the live settings checks from `ci-lint audit` that
     do not depend on `ci.toml` (reused verbatim from ci_lint.settings_audit;
     a 403 is `needs_review`, never a pass).
+  - CACHE-025: a `uses: Swatinem/rust-cache@...` step (reused verbatim from
+    ci_lint.rules.swatinem_ban; Rust build caching goes through setup-soldr).
   - FLEET-002: the repository's Actions cache usage is at or above
     FLEET_CACHE_WARN_FRACTION of GitHub's 10 GiB per-repository limit.
 
@@ -40,6 +42,7 @@ from pathlib import Path
 from ci_lint.finding import Finding, Status
 from ci_lint.github_api import FetchStatusFn, GitHubApiError
 from ci_lint.rules.setup_soldr_freshness import check_rust_014
+from ci_lint.rules.swatinem_ban import check_cache_025
 from ci_lint.rules.workflows import FLEET_RUNNERS
 from ci_lint.schema import load_ci_toml
 from ci_lint.settings_audit import _fetch_branch_protection, _fetch_rulesets, check_gen_006, check_sec_007
@@ -348,6 +351,7 @@ def scan_repo(fetch_status: FetchStatusFn, token: str, ref: RepoRef) -> RepoScan
         wf_count, pr_entrypoints, wf_findings = check_workflows(root)
         findings.extend(wf_findings)
         findings.extend(check_rust_014(fetch_status, token, root))
+        findings.extend(check_cache_025(root))
         if text is not None:
             (root / "ci.toml").write_text(text, encoding="utf-8")
             ci, _ = load_ci_toml(root)
