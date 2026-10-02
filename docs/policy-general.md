@@ -83,7 +83,17 @@ Rollout ([#213](https://github.com/zackees/ci.yml/issues/213)):
 
 **Exceptions are tracked, not silent.** A stock action that still needs a local workaround is an exception: an issue in zackees/ci.yml labelled for ACT-003, cross-referenced with zackees/act2 and zackees/bosn (and the action's own repository), naming the workaround's exact location and the change that removes it. The workaround carries a comment linking that issue. A workaround without a tracking issue is a violation once ACT-003 is enforced.
 
-Known exceptions at adoption: `zackees/setup-soldr`'s `save-cache: auto` skips every save on a `pull_request` event (setup-soldr#537), and local runs are `pull_request` on purpose, so repositories force `save-cache: ${{ env.ACT && 'true' || 'auto' }}`. The fix is a runner-aware `auto` in setup-soldr; tracked as [#216](https://github.com/zackees/ci.yml/issues/216).
+**Two signals, two jobs.** Runner parity and "is this local?" are separate questions with separate answers:
+
+- `RUNNER_ENVIRONMENT` / `runner.environment` answers **parity**. act2 sets `github-hosted` in a job container exactly as GitHub does (criterion 6), so a stock action's GitHub-hosted defaults (for example setup-uv's `enable-cache: auto`) engage with no override. It must never be repurposed to mean "local".
+- `ACT=true` (exported by act and act2 for every job) is **the local-runner signal**. A local runner has a different cache economy from GitHub: no 10 GB repository budget and no ref scoping, a slow refetch over the developer's network, and a fast local disk. An action **may and should** read `ACT` itself to tune its cache for that: save on every event, keep a larger cache, prune less, compress less (or faster). `zackees/setup-soldr`'s `save-cache: auto` does this (setup-soldr#537). Fleet-owned actions put such tuning behind `ACT` in the action, never behind a new variable or a per-repository input.
+
+A repository's workflow reads `ACT` only where a stock action exposes the right knob but has no runner-aware default. That is an exception: it carries a comment linking its tracking issue.
+
+Known exceptions:
+- `zackees/setup-soldr`'s `save-cache: auto` skipped every save on a `pull_request` event. Fixed by setup-soldr#563, and the repository overrides are removed once `v0` carries it ([#216](https://github.com/zackees/ci.yml/issues/216)).
+- `astral-sh/setup-uv` prunes wheels before saving, which empties a local cache. Repositories key `prune-cache` and `cache-suffix` on `ACT` ([#226](https://github.com/zackees/ci.yml/issues/226)).
+- bosn's rewritten workflows leaked into job checkouts ([#219](https://github.com/zackees/ci.yml/issues/219)), act job containers had no init ([#220](https://github.com/zackees/ci.yml/issues/220)), and bosn's default engine storage was too small for a multi-job Rust workflow ([#221](https://github.com/zackees/ci.yml/issues/221)). The first two are fixed in act2 `v0.2.89-act2.1` and bosn 0.1.8. None of the three needs repository workarounds.
 
 Enforcement is **candidate**. A static `ci_lint` check would flag `env.ACT`/`ACT` in a workflow or composite-action expression or `run:` condition, and a forced `enable-cache`/`save-cache` input, unless the line links an open ACT-003 exception issue.
 
