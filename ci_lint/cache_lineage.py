@@ -3,19 +3,23 @@
 Every cache entry a CI run saves for a commit carries that commit's
 *lineage label* in its key:
 
-    main-m<n>-<sha10>              a default-branch commit: n = its
+    m<n>-<sha10>                   a default-branch commit: n = its
                                    first-parent ordinal on main
                                    (`git rev-list --first-parent --count`)
-    pr-<N>-m<b>-c<k>-<sha10>       PR #N's head, k commits (first-parent)
+    m<b>-c<k>-<sha10>-pr-<N>       PR #N's commit, k commits (first-parent)
                                    above its merge base with main, whose
                                    own ordinal is b
 
-e.g. `att1-rust.x86_64-unknown-linux-gnu.test-pr-3532-m2189-c1-18204251ce`.
+e.g. `att1-rust.x86_64-unknown-linux-gnu.test-m2189-c1-18204251ce-pr-3532`.
+The PR component is a **suffix** on purpose: it is exactly the fleet's
+existing `PR_CACHE_TAG` (`-pr-<N>`, empty outside a PR; soldr's
+check_pr_cache_keys.py, CACHE-013), so a workflow writes
+`<stem>${{ env.PR_CACHE_TAG }}` and one key shape serves main and PRs.
 
 The label is **ancestor-defining**: from the keys alone, without git,
-`main-m<i>` precedes `main-m<j>` iff i < j (main is never rewritten), and
-an entry `pr-N-m<b>-c<i>` can precede `pr-N-m<b>-c<j>` only when i < j and
-the bases match. The 10-hex SHA lets git confirm it, which matters for the
+`m<i>` precedes `m<j>` iff i < j (main is never rewritten), and an entry
+`m<b>-c<i>-…-pr-N` can precede `m<b>-c<j>-…-pr-N` only when i < j and the
+bases match. The 10-hex SHA lets git confirm it, which matters for the
 17% of soldr PR pushes that rewrite history (12 rebases, which move `m`,
 and 4 amends, which keep it but change the SHA; experiment K1 in
 docs/designs/ci-attestations.md). `pr-<N>` is a delimited component, so
@@ -32,7 +36,7 @@ from ci_lint.proc import run_captured
 
 SHA_PREFIX_LEN = 10
 _LABEL = re.compile(
-    r"(?:^|-)(?:main-m(?P<mn>\d+)|pr-(?P<pr>\d+)-m(?P<pm>\d+)-c(?P<c>\d+))-(?P<sha>[0-9a-f]{10})(?=-|$)"
+    r"(?:^|-)m(?P<m>\d+)(?:-c(?P<c>\d+))?-(?P<sha>[0-9a-f]{10})(?:-pr-(?P<pr>\d+))?$"
 )
 
 
@@ -47,11 +51,17 @@ class Lineage:
     pr: int | None = None
     ordinal: int = 0
 
-    def label(self) -> str:
+    def stem(self) -> str:
+        """The label without its PR tag: what a workflow suffixes with
+        `${{ env.PR_CACHE_TAG }}`."""
+
         short = self.sha[:SHA_PREFIX_LEN]
         if self.pr is None:
-            return f"main-m{self.main_ordinal}-{short}"
-        return f"pr-{self.pr}-m{self.main_ordinal}-c{self.ordinal}-{short}"
+            return f"m{self.main_ordinal}-{short}"
+        return f"m{self.main_ordinal}-c{self.ordinal}-{short}"
+
+    def label(self) -> str:
+        return self.stem() if self.pr is None else f"{self.stem()}-pr-{self.pr}"
 
     def may_precede(self, later: Lineage) -> bool:
         """Key-only ancestry pre-check (no git): can `self` be an ancestor
@@ -76,17 +86,15 @@ class KeyedEntry:
 
 
 def parse_key(key: str) -> KeyedEntry | None:
-    match = None
-    for match in _LABEL.finditer(key):
-        pass  # the last label wins: a family name may itself contain digits
-    if match is None:
-        return None
+    match = _LABEL.search(key)
+    if match is None or (match.group("c") is None) != (match.group("pr") is None):
+        return None  # a PR label needs both its ordinal and its tag; main has neither
     family = key[: match.start()].rstrip("-")
     sha = match.group("sha")
-    if match.group("mn") is not None:
-        lineage = Lineage(main_ordinal=int(match.group("mn")), sha=sha)
+    if match.group("pr") is None:
+        lineage = Lineage(main_ordinal=int(match.group("m")), sha=sha)
     else:
-        lineage = Lineage(main_ordinal=int(match.group("pm")), sha=sha, pr=int(match.group("pr")),
+        lineage = Lineage(main_ordinal=int(match.group("m")), sha=sha, pr=int(match.group("pr")),
                           ordinal=int(match.group("c")))
     return KeyedEntry(key=key, family=family, lineage=lineage)
 

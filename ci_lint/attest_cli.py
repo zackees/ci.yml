@@ -112,8 +112,9 @@ def _cmd_keys(args: argparse.Namespace) -> int:
         path = out_dir / f"{index}.json"
         path.write_text(records[status.gate].compact() + "\n", encoding="utf-8")
         key = cache_key(gate_family(status.gate), lineage)
+        stem = f"{gate_family(status.gate)}-{lineage.stem()}"
         print(f"{key}  <- {path}")
-        lines += [f"key_{index}={key}", f"path_{index}={path}"]
+        lines += [f"key_{index}={key}", f"stem_{index}={stem}", f"path_{index}={path}"]
         index += 1
     lines.append(f"count={index}")
     lines.append(f"lineage={lineage.label()}")
@@ -187,7 +188,7 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     v.add_argument("--base", help="read the definition from this commit (a PR's base) instead of the work tree")
     v.set_defaults(func=_cmd_verify)
 
-    lin = at.add_parser("lineage", help="print the commit's ancestor-defining label (main-m<n>-<sha10> / pr-<N>-m<b>-c<k>-<sha10>)")
+    lin = at.add_parser("lineage", help="print the commit's ancestor-defining label (m<n>-<sha10> / m<b>-c<k>-<sha10>-pr-<N>)")
     common(lin)
     lineage_args(lin)
     lin.set_defaults(func=_cmd_lineage)
@@ -198,7 +199,8 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     k.add_argument("--base", help="read the definition from this commit (a PR's base)")
     k.add_argument("--out-dir", required=True)
     k.add_argument("--slots", type=int, default=8, help="max side entries (one cache-save step per slot)")
-    k.add_argument("--github-output", action="store_true", help="write key_<i>/path_<i>/count/lineage outputs")
+    k.add_argument("--github-output", action="store_true",
+                   help="write key_<i> (full), stem_<i> (append ${{ env.PR_CACHE_TAG }}), path_<i>, count, lineage")
     k.set_defaults(func=_cmd_keys)
 
     r = at.add_parser("resolve", help="the nearest ancestor cache entry of a family to hydrate (GET-only REST listing)")
