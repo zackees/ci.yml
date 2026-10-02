@@ -17,13 +17,16 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ci_lint.cargo_messages import JsonValue
 from ci_lint.finding import Status
 from ci_lint.first_pass import DEFAULT_MIN_PRS, DEFAULT_TARGET, collect, render_text
 from ci_lint.github_api import GitHubApiError, default_fetch
 from ci_lint.gate_bare_tools import check_no_bare_rust
+from ci_lint.lane_cache import ToolVersions, lane_key, lookup, tree_entries
 from ci_lint.local_gate import (
     GateConfig,
     check_gate_static,
@@ -37,8 +40,9 @@ from ci_lint.local_gate import (
 
 
 def _config(repo: Path, command: str) -> GateConfig | None:
-    config, findings = load_gate_config(repo)
-    for finding in findings:
+    loaded = load_gate_config(repo)
+    config = loaded.config
+    for finding in loaded.findings:
         print(finding.render(), file=sys.stderr)
     if config is None:
         print(
@@ -48,7 +52,7 @@ def _config(repo: Path, command: str) -> GateConfig | None:
     return config
 
 
-def _event_payload() -> dict[str, object]:
+def _event_payload() -> dict[str, JsonValue]:
     path = os.environ.get("GITHUB_EVENT_PATH")
     if not path or not Path(path).is_file():
         return {}
@@ -64,7 +68,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     config = _config(repo, "run")
     if config is None:
         return 2
-    outcome = run_gate(repo, config, stamp=not args.no_stamp, force=args.force)
+    outcome = run_gate(repo, config, stamp=not args.no_stamp, force=args.force, use_cache=not args.no_cache)
     print(outcome.message, file=sys.stderr if outcome.exit_code else sys.stdout)
     return outcome.exit_code
 
@@ -97,12 +101,34 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return outcome.exit_code
 
 
+def _cmd_lanes(args: argparse.Namespace) -> int:
+    """GATE-007: show each lane's key, input count and cache state for HEAD."""
+
+    repo = Path(args.repo).resolve()
+    config = _config(repo, "lanes")
+    if config is None:
+        return 2
+    if not config.lanes:
+        print("no [gate.lanes] declared: the gate runs as one command and nothing is cached")
+        return 0
+    entries = tree_entries(repo, "HEAD")
+    versions = ToolVersions()
+    for lane in config.lanes:
+        key = lane_key(entries, lane, gate_run=config.run, gate_source=config.source, versions=versions)
+        hit = lookup(repo, lane, key.key)
+        state = f"HIT (passed {hit.age_hours(time.time()):.1f} h ago in {hit.secs}s)" if hit else "miss"
+        tools = ", ".join(f"{t.tool}={t.version}" for t in key.tools) or "none declared"
+        print(f"{lane.id:10} {state:34} key={key.key[:12]} inputs={key.inputs} tools: {tools}")
+    return 0
+
+
 def _cmd_check_push(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
-    config, _findings = load_gate_config(repo)
+    config = load_gate_config(repo).config
     if config is None:
         return 0
-    code, problems = check_push(repo, sys.stdin.read())
+    push = check_push(repo, sys.stdin.read())
+    code, problems = push.exit_code, push.problems
     if code:
         print("ci-lint local-gate: push refused -- these heads have not passed the local gate (GATE-003):", file=sys.stderr)
         for problem in problems:
@@ -112,14 +138,15 @@ def _cmd_check_push(args: argparse.Namespace) -> int:
 
 
 def _cmd_install_hook(args: argparse.Namespace) -> int:
-    code, message = install_hook(Path(args.repo).resolve(), args.launcher or default_launcher(), force=args.force)
-    print(message, file=sys.stderr if code else sys.stdout)
-    return code
+    result = install_hook(Path(args.repo).resolve(), args.launcher or default_launcher(), force=args.force)
+    print(result.message, file=sys.stderr if result.exit_code else sys.stdout)
+    return result.exit_code
 
 
 def _cmd_lint(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
-    config, findings = load_gate_config(repo)
+    loaded = load_gate_config(repo)
+    config, findings = loaded.config, loaded.findings
     if config is None and not findings:
         print("ci-lint local-gate lint: no local gate declared (ci.toml [local.gate] or local-gate.toml [gate])", file=sys.stderr)
         return 1
@@ -161,6 +188,7 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     run.add_argument("--repo", default=".")
     run.add_argument("--no-stamp", action="store_true", help="run only; do not amend HEAD")
     run.add_argument("--force", action="store_true", help="run even when HEAD is already attested")
+    run.add_argument("--no-cache", action="store_true", help="GATE-007: run every lane, ignoring cached passes")
     run.set_defaults(func=_cmd_run)
 
     ver = lg.add_parser("verify", help="CI side (GATE-003): fail when the PR head is not attested")
@@ -181,6 +209,10 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     inst.add_argument("--launcher", help="command that runs ci-lint (default: this interpreter + this checkout)")
     inst.add_argument("--force", action="store_true", help="replace an existing non-ci-lint pre-push hook")
     inst.set_defaults(func=_cmd_install_hook)
+
+    lanes = lg.add_parser("lanes", help="GATE-007: each lane's cache key and hit/miss for HEAD")
+    lanes.add_argument("--repo", default=".")
+    lanes.set_defaults(func=_cmd_lanes)
 
     lint = lg.add_parser("lint", help="static GATE-001/002 for a repository with or without ci.toml")
     lint.add_argument("--repo", default=".")

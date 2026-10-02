@@ -573,7 +573,7 @@ a real local act `--cache-server-path` directory.
 | `cache` | string | e.g. `"machine"`. Informational in round 1A. |
 | `gate` | table | `[local.gate]`, the local gate (GATE-001..004, #166). See below. |
 
-### `[local.gate]` (GATE-001..005, zackees/ci.yml#166, #168)
+### `[local.gate]` (GATE-001..005, 007; zackees/ci.yml#166, #168, #177)
 
 The one local command the remote quick gate must be a subset of. A
 repository without `ci.toml` declares the identical table as `[gate]` in a
@@ -592,10 +592,18 @@ repo-root `local-gate.toml`; declaring both is `GATE-001`. Parsed strictly
 | `isolation.marker` | string (env var name) | `GATE-005`: set only by the isolated test environment, e.g. `SOLDR_TEST_ISOLATED`. |
 | `isolation.runner` | array of strings | `GATE-005`: how the local gate runs the suite isolated, e.g. `["bosn", "run", "--task", "test"]`. A `bosn` runner's task must exist in `bosn.toml`, and its command or stack Dockerfile (`ENV <marker>=1`) must set the marker; the gate's script (a repository file named in `run`) must invoke the runner. |
 | `isolation.guard` | path | `GATE-005`: the file every test process passes through (soldr: its nextest run-wrapper), which must check both `CI` and the marker and refuse otherwise. |
+| `lanes.<id>.run` | array of strings | `GATE-007`: one lane of the gate, run in declaration order by `local-gate run`. Must be the gate's `run` plus arguments (e.g. `[..., "ci/local_gate.py", "--lane", "lint"]`), so the lanes together are the gate the remote jobs mirror. With no lanes, `run` executes as one command and nothing is cached. |
+| `lanes.<id>.exclude` | array of globs | `GATE-007`: paths that cannot affect this lane. A lane's input set is the whole commit tree minus these (never an include list). Mandatory inputs -- the gate declaration, every repository file named in the gate's or lane's argv, lockfiles, toolchain pins -- are re-included whatever the globs say; an exclusion that *names* one literally is a violation. |
+| `lanes.<id>.keep` | array of globs | `GATE-007`: re-include paths an `exclude` glob would drop (e.g. exclude `**/*.py`, keep `.github/scripts/nextest*`). |
+| `lanes.<id>.tools` | array of strings | `GATE-007`: executables whose `--version` is part of the key, so an upgrade invalidates the cache. Empty is `needs_review`. |
+| `lanes.<id>.env` | array of strings | `GATE-007`: environment variables whose values are part of the key. |
+| `lanes.<id>.max-age-hours` | int (default 24) | `GATE-007`: a cached pass older than this is ignored. |
 
 A repository with no `.github/workflows` that declares neither `mirrors`
 nor `verify` gets no `GATE-001`/`GATE-002` finding: its pre-push hook is
 the whole enforcement (this repository's own `local-gate.toml`).
+
+**Lane cache (GATE-007).** With `[gate.lanes]` declared, `local-gate run` computes each lane's key -- sha256 over the lane argv, its declared tools' versions and env values, and `(path, blob sha)` of its input set, read from `git ls-tree` -- and skips the lane when a pass with that key, younger than `max-age-hours`, is recorded under `<git common dir>/ci-lint/lane-cache/<lane>/` (shared by every worktree of the clone, never pushed). Only passes are recorded. `--no-cache` runs every lane; `ci-lint local-gate lanes` prints each lane's key, input count and hit/miss for HEAD. The trailer gains `lanes=<id>:run|<id>:reused@<key12>,...`.
 
 **Attestation.** `Local-Gate: v1 tree=<40-hex tree sha> secs=<n>`, the last
 such trailer in the commit message. States: `attested` (tree matches),
