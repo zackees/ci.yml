@@ -1,20 +1,30 @@
-"""PY-003: no pipe-captured subprocess output (owner directive 2026-10-01).
+"""PY-003: no capture-then-wait subprocess output (owner directive 2026-10-01).
 
-Pipe capture hangs: a full pipe blocks the child, and a daemon or
-grandchild that inherits the pipe keeps the parent waiting for an EOF that
-never comes (see `ci_lint.proc`). Banned, per call, from the AST:
+The hazard is *collecting* a child's output through a pipe and only reading
+it after the child exits: a full pipe (~64 KiB) blocks the child, and a
+daemon or grandchild that inherits the pipe keeps the caller waiting for an
+EOF that never comes. Banned, per call, from the AST:
 
-- `capture_output=True` on `subprocess.run`/`call`/`check_call`/`Popen`;
-- `stdout=` / `stderr=` / `stdin=` set to `PIPE` (`subprocess.PIPE`,
-  `asyncio.subprocess.PIPE`, or a bare imported `PIPE`);
-- `subprocess.check_output`, `getoutput`, `getstatusoutput` (pipes by
-  construction).
+- `subprocess.run` / `call` / `check_call` with `capture_output=True` or a
+  `stdout=` / `stderr=` / `stdin=` of `PIPE`;
+- `subprocess.check_output`, `getoutput`, `getstatusoutput`.
 
-Use `ci_lint.proc.run_captured` (temporary files, no pipe), `stdout=` a
-file you opened, `subprocess.DEVNULL`, or inherit the parent's streams.
-A genuine exception (e.g. an interactive protocol over stdin/stdout that is
-drained concurrently) takes a same-line `# ci-lint: allow PY-003 <reason>`
-on the call's first line.
+**Not banned: iterating a pipe while the child runs.** `Popen(...,
+stdout=PIPE)` (or an asyncio subprocess pipe) whose stream is consumed as it
+is produced -- `for line in proc.stdout:` -- is streaming, not
+capture-then-wait, and is not reported.
+
+**Strongly encouraged: the `running-process` package** (zackees/running-
+process, `from running_process import RunningProcess, subprocess_run`): a
+Rust-backed process layer with concurrent stdout/stderr capture, bounded
+waits, typed exits and process-tree containment -- the boundary soldr itself
+uses. Without it, capture through temporary files (`ci_lint.proc.
+run_captured`, standard-library only) and forward what you captured when the
+call fails. `subprocess.DEVNULL` avoids the pipe but throws the evidence
+away; some repositories ban it (soldr#3389), so it is a last resort.
+
+A genuine exception takes a same-line `# ci-lint: allow PY-003 <reason>` on
+the call's first line.
 """
 
 from __future__ import annotations
@@ -24,7 +34,9 @@ import re
 from dataclasses import dataclass
 
 RULE = "PY-003"
-_CALLS = frozenset({"run", "call", "check_call", "Popen", "create_subprocess_exec", "create_subprocess_shell"})
+# Capture-then-wait entry points. Popen and asyncio subprocesses are left alone:
+# their pipes are meant to be iterated while the child runs.
+_CALLS = frozenset({"run", "call", "check_call"})
 _ALWAYS_PIPED = frozenset({"check_output", "getoutput", "getstatusoutput"})
 _STREAM_KWARGS = ("stdout", "stderr", "stdin")
 _ALLOW = re.compile(rf"ci-lint:\s*allow\s+{RULE}\s+\S")

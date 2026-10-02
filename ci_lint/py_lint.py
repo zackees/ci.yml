@@ -153,7 +153,7 @@ def _cmd_lint(args: argparse.Namespace) -> int:
               f"(ci-lint py lint --baseline {baseline_path} --write-baseline)")
     fix = {
         "PY-002": "return a frozen @dataclass instead of a tuple/dict record",
-        "PY-003": "capture through ci_lint.proc.run_captured-style temporary files, a file you opened, or DEVNULL -- never a pipe",
+        "PY-003": "use the running-process package (RunningProcess / subprocess_run), iterate a Popen pipe while the child runs, or capture to temporary files and forward on failure -- never capture-then-wait through a pipe",
     }
     if result.grown:
         for rule in sorted({g.rule for g in result.grown}):
