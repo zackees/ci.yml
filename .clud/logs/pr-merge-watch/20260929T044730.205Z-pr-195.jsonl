@@ -1,0 +1,16 @@
+{"v":1,"ts":"2026-09-29T04:47:30.205Z","elapsed_sec":0.0,"event":"START","repo":"zackees/soldr-toolchain","pr":195,"log_path":".clud/logs/pr-merge-watch/20260929T044730.205Z-pr-195.jsonl"}
+{"v":1,"elapsed_sec":3.85,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":3.85,"event":"coderabbit","coderabbit":{"state":"not_detected","sampled_merged_prs":5}}
+{"v":1,"elapsed_sec":23.46,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":45.05,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":64.21,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":84.16,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":103.27,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":123.3,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":143.18,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":163.28,"event":"checks","checks":{"total":2,"pending":2,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":183.31,"event":"checks","checks":{"total":2,"pending":0,"failed":1,"succeeded":1,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":183.78,"event":"required_failure","check":{"name":"pytest","state":"failure","link":"https://github.com/zackees/soldr-toolchain/actions/runs/36523192308/job/109260369592","workflow":".github/workflows/tests.yml"}}
+{"v":1,"elapsed_sec":185.55,"event":"cancel","trigger":"fail","attempts":0,"mode":"runs"}
+{"v":1,"elapsed_sec":185.55,"event":"failure_diagnostic","check_name":"pytest","first_error":"Process completed with exit code 1.","classifier":null}
+{"v":1,"elapsed_sec":185.55,"event":"EXIT","code":1,"reason":"fail"}

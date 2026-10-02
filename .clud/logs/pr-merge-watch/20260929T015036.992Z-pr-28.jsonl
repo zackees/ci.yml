@@ -1,0 +1,7 @@
+{"v":1,"ts":"2026-09-29T01:50:36.992Z","elapsed_sec":0.0,"event":"START","repo":"zackees/template-python-rust-cmd","pr":28,"log_path":".clud/logs/pr-merge-watch/20260929T015036.992Z-pr-28.jsonl"}
+{"v":1,"elapsed_sec":3.29,"event":"checks","checks":{"total":7,"pending":2,"failed":0,"succeeded":5,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":3.29,"event":"coderabbit","coderabbit":{"state":"not_detected","sampled_merged_prs":5}}
+{"v":1,"elapsed_sec":22.71,"event":"checks","checks":{"total":7,"pending":1,"failed":0,"succeeded":6,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":42.82,"event":"checks","checks":{"total":7,"pending":0,"failed":0,"succeeded":7,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"CLEAN"}
+{"v":1,"elapsed_sec":42.82,"event":"green","mergeable":"MERGEABLE","checks":{"total":7,"pending":0,"failed":0,"succeeded":7,"skipped":0}}
+{"v":1,"elapsed_sec":42.82,"event":"EXIT","code":0,"reason":"never"}

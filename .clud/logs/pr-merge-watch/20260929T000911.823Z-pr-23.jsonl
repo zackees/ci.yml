@@ -1,0 +1,12 @@
+{"v":1,"ts":"2026-09-29T00:09:11.823Z","elapsed_sec":0.0,"event":"START","repo":"zackees/template-python-rust-cmd","pr":23,"log_path":".clud/logs/pr-merge-watch/20260929T000911.823Z-pr-23.jsonl"}
+{"v":1,"elapsed_sec":3.62,"event":"checks","checks":{"total":1,"pending":1,"failed":0,"succeeded":0,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":3.62,"event":"coderabbit","coderabbit":{"state":"not_detected","sampled_merged_prs":5}}
+{"v":1,"elapsed_sec":33.33,"event":"checks","checks":{"total":3,"pending":2,"failed":0,"succeeded":1,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":64.19,"event":"checks","checks":{"total":3,"pending":2,"failed":0,"succeeded":1,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":93.66,"event":"checks","checks":{"total":3,"pending":1,"failed":0,"succeeded":2,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":123.22,"event":"checks","checks":{"total":3,"pending":1,"failed":0,"succeeded":2,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":153.13,"event":"checks","checks":{"total":4,"pending":1,"failed":0,"succeeded":3,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":183.18,"event":"checks","checks":{"total":4,"pending":1,"failed":0,"succeeded":3,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"UNSTABLE"}
+{"v":1,"elapsed_sec":213.01,"event":"checks","checks":{"total":4,"pending":0,"failed":0,"succeeded":4,"skipped":0},"mergeable":"MERGEABLE","merge_state_status":"CLEAN"}
+{"v":1,"elapsed_sec":213.01,"event":"green","mergeable":"MERGEABLE","checks":{"total":4,"pending":0,"failed":0,"succeeded":4,"skipped":0}}
+{"v":1,"elapsed_sec":213.01,"event":"EXIT","code":0,"reason":"never"}
