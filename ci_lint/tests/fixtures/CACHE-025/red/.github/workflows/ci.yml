@@ -1,0 +1,18 @@
+name: CI
+on: pull_request
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-workspace-v1
+      - run: soldr cargo clippy
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore cargo + target caches
+        uses: "swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32" # v2  # ci-lint: allow CACHE-025
+      - run: soldr cargo test

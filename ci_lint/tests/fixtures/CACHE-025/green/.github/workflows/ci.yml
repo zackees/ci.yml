@@ -1,0 +1,12 @@
+name: CI
+on: pull_request
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Swatinem/rust-cache used to live here; setup-soldr's cache replaced it.
+      # - uses: Swatinem/rust-cache@v2
+      - uses: zackees/setup-soldr@v0
+      - run: soldr cargo test --workspace
+      - run: echo "uses: Swatinem/rust-cache@v2 is only text here"

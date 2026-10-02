@@ -1,0 +1,10 @@
+name: Bench
+on: workflow_dispatch
+jobs:
+  swatinem-baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2  # ci-lint: allow CACHE-025 benchmark: Swatinem is the comparison baseline under test
+        with:
+          shared-key: bench
