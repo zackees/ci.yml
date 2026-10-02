@@ -15,7 +15,7 @@ An ordinary soldr PR waited a median of **914 s** (p75 1,696 s) for CI. Its crit
 | H1 | Trust the attestation | Replayed 80 merged PRs | 78% eligible; no remote-only step ever failed; the 9 pre-gate `main` breakages all came from PRs merged with **no** green run | **Adopt (GATE-008)** |
 | H2 | Run only affected tests (crate graph) | Package closure × per-package test-seconds | Every Rust PR still selects ≥96%: `soldr-cli` holds 95% of test time and depends on everything | Defer (#191, multi-crate repos) |
 | H3 | Smart cache inheritance | PR vs `main` step timings, hit rates | PRs already restore `main`'s cache at 100% hits; PR `Linux x64` (647 s) is no slower than `main` (692 s) | Hygiene (#185: cache-budget failures, not latency) |
-| H4 | Faster tests | Local bosn probe, plus a real-runner probe (run 36964344956) | Cheap tests: 0.2 s locally, 3.8 s alone on a runner, 10–15 s inside `ci-test`; not CPU, not tokens, not `CI` vars; each opens the toolchain catalogue over the network | **Adopt (soldr#3530)** |
+| H4 | Faster tests | Local bosn probe, then real-runner probes (runs 36964344956, 36965017158) | Cheap tests: 0.2 s locally, 4–5 s alone on a runner, 10–15 s inside `ci-test`. Not CPU, tokens or `CI` vars: each fixture fetches the toolchain catalogue over the network. `SOLDR_MANIFEST_DISABLE=1` brings them to **0.17 s (30x)** | **Adopt (soldr#3530)** |
 | H5 | Shard nextest | Calibrated scheduling simulation (483 s simulated vs 480 s measured) | 2 shards: 283 s, but about +160 s of setup per extra shard | Reject for now |
 | H6 | Larger runners | 4-CPU probe | Not CPU-bound | Reject |
 | H7 | Raise the cold-group concurrency cap | nextest.toml history | +19% contention tax | Reject |

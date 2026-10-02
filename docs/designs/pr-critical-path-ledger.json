@@ -133,16 +133,21 @@
       "id": "H4",
       "name": "Make the tests themselves faster (remote-only per-test cost)",
       "issue": "zackees/soldr#3530",
-      "experiment": "E4: local bosn probe (5 cheap cargo_front_door tests: as-is / CI env vars / 4 CPUs) then a real-runner probe on an experiment branch (run 36964344956) with environment variants and strace.",
+      "experiment": "E4: local bosn probe (5 cheap cargo_front_door tests: as-is / CI env vars / 4 CPUs) then a real-runner probe on an experiment branch (run 36964344956) with environment variants and strace. Second real-runner probe (run 36965017158): SOLDR_MANIFEST_DISABLE=1 and 4-wide variants.",
       "results": {
         "local_bosn": "0.2-1.0 s per test in every variant (CI env vars and 4 CPUs change nothing)",
         "real_runner_alone": "3.8-4.1 s per test (plain nextest, -j1); repeat run identical",
         "real_runner_in_ci_test_dag": "10-15.6 s per test (run 36954283026)",
         "tokens": "no effect (v2 identical to v1)",
         "strace": "every test opens connections to zackees.github.io (toolchain catalogue) and raw.githubusercontent.com; no syscall >= 1 s; ~2.6 s summed clock_nanosleep",
-        "decomposition": "~3.6 s runner-base cost (absent locally) + ~7-11 s added inside ci-test's concurrent DAG"
+        "decomposition": "~5 s per test is the catalogue fetch; the remaining in-DAG excess (to 10-15 s) is contention while compile/Dylint stages overlap",
+        "real_runner_alone_run2": "5.1-5.4 s per cheap test; dylint test 11.6 s",
+        "manifest_disabled": "0.17-0.22 s per cheap test (30x); dylint test 6.6 s",
+        "four_wide": "5.6 s per cheap test with the catalogue lookup, 0.17-0.22 s without -- concurrency adds little once the lookup is gone",
+        "root_cause": "each fixture's fresh SOLDR_CACHE_DIR makes the soldr front door fetch the toolchain catalogue (zackees.github.io/soldr-toolchain/catalogue.v1.json + raw.githubusercontent.com parts) over the runner's network: ~5 s per test, x127 cargo_front_door tests = the ~604 s CI-vs-local gap"
       },
       "pros": [
+        "One-line class of fix: the shared test fixture disables the catalogue lookup (tests needing it opt back in), which also makes the suite hermetic (no live network per test)",
         "Helps every remaining remote run: main push, ci-full, release gate, non-trusted PRs",
         "Simulated: removing the per-test excess takes nextest 483 -> 240 s with no extra runners",
         "Root cause, not a workaround"
@@ -151,7 +156,7 @@
         "Does not remove the PR wait by itself (Linux x64 ~11.5 -> ~7 min estimated)",
         "Needs soldr changes"
       ],
-      "verdict": "ADOPT as soldr#3530 (separate from the policy): fix the catalogue/first-use cost and the in-DAG contention."
+      "verdict": "ADOPT as soldr#3530: disable the catalogue lookup in the shared fixture; measured 30x on the affected tests."
     },
     {
       "id": "H5",
