@@ -99,6 +99,114 @@
         "lane keys are 64-hex; could be 16"
       ],
       "decision": "Keep full keys in v1 (audit value); revisit if gate counts grow."
+    },
+    {
+      "id": "W1",
+      "question": "Windows-MSVC tests under Wine (owner: wine for win-x86-msvc)",
+      "method": "Whole soldr workspace cross-built for x86_64-pc-windows-msvc on the Linux host (311 s), run under Wine 10 (debian:trixie) in a container.",
+      "result": {
+        "pass": "3415/3581 (95.4%); lib unit 2970/3015",
+        "full_pass": "soldr-platform 48/48, soldr-fetch 346/346, soldr-nextest-wrapper 6/6",
+        "failure_categories": [
+          "Wine API gaps: directory ACLs, named pipes, junctions, file locks, pwsh output",
+          "no Windows toolchain inside the prefix",
+          "Linux-assuming tests"
+        ]
+      },
+      "pros": [
+        "400 Windows unit tests in ~8 s, CI-portable"
+      ],
+      "cons": [
+        "emulation: not native fidelity for process/IPC suites"
+      ],
+      "decision": "wine lane attests rust/x86_64-pc-windows-msvc/unit for the fully-passing crates only (distinct check name)."
+    },
+    {
+      "id": "D1",
+      "question": "dockur/windows VM (owner: dockur)",
+      "method": "Windows 11 LTSC Evaluation in dockurr/windows with KVM, OEM install.bat enabling OpenSSH, host share \\\\host.lan\\Data.",
+      "result": {
+        "cold_install": "~22 min once",
+        "warm_boot_to_tests": "14.5-15.5 s",
+        "disk": "7.7 GB sparse; 7 GB zstd"
+      },
+      "pros": [
+        "real Windows",
+        "warm boot in seconds"
+      ],
+      "cons": [
+        "7 GB image ~ the whole 10 GB Actions cache",
+        "evaluation licence",
+        "Windows Update must be disabled"
+      ],
+      "decision": "local host-optional winvm lane; not a CI lane."
+    },
+    {
+      "id": "V1",
+      "question": "winvm lane replaying the Windows target-run partition",
+      "method": "soldr ci/winvm_lane.py reusing ci/windows_guest_probe tooling; the 168-test selection CI's native windows-2025 job runs.",
+      "result": {
+        "pass": "160/160 (5 VS-toolchain skips committed)",
+        "lane_seconds": "387-492"
+      },
+      "pros": [
+        "native-equivalent: broker/daemon/named-pipe suites Wine cannot run"
+      ],
+      "cons": [
+        "needs a prepared VM; licence"
+      ],
+      "decision": "attests rust/x86_64-pc-windows-msvc/test; optional lane (exit 75 = n/a, zackees/ci.yml#205)."
+    },
+    {
+      "id": "M1",
+      "question": "Darling for x86_64-apple-darwin (owner: darling for macos-x64)",
+      "method": "upstream Darling v0.1.20260608 debs in ubuntu:24.04, CAP_SYS_ADMIN, HOME on tmpfs.",
+      "result": {
+        "soldr-platform": "23/24",
+        "soldr-core": "234/240 (git); 2/8 runs hung after fork",
+        "soldr-cli lib": "aborts at 4 threads (rustix readdir misaligned dirent); 1720/1751 single-threaded",
+        "broker/daemon": "wedged / never ready"
+      },
+      "pros": [
+        "fast start (~1.3 s), no kernel module"
+      ],
+      "cons": [
+        "fails exactly the signal/daemon/copy/readdir/fork surface macOS lanes exist for; ignores SIGTERM"
+      ],
+      "decision": "never attests; advisory at most. macOS test evidence stays with the Recovery guest."
+    },
+    {
+      "id": "B1",
+      "question": "Isolation boundary of the tests lane",
+      "method": "Gate runs across sibling worktrees on bosn 0.1.6.",
+      "result": "bosn reused a warm container bound to another session's worktree; once loud (deleted path), once silent (ran a sibling's tests)",
+      "pros": [],
+      "cons": [
+        "a false Local-Gate/Ci-Attestation stamp was one passing run away"
+      ],
+      "decision": "GATE-009 nonce proof (zackees/ci.yml#204); root fix bosn#314 shipped in bosn 0.1.7 (owner-approved one-time legacy release)."
+    },
+    {
+      "id": "Q1",
+      "question": "bosn 0.1.7's CPU quota",
+      "method": "first gate run under bosn 0.1.7",
+      "result": "soldr test physical_cores_are_plausible_or_absent failed: available_parallelism() = 4 (quota) < physical cores 8; product code was correct (falls back to logical - 1)",
+      "pros": [
+        "the platform change exposed a wrong invariant in a test"
+      ],
+      "cons": [],
+      "decision": "test now asserts the derived job limit stays within 1..=logical (soldr#3548)."
+    },
+    {
+      "id": "R1",
+      "question": "Rebasing a stamped branch onto a moved main",
+      "method": "7 upstream commits, 4 pin-only conflicts resolved with --ours",
+      "result": "silently dropped two real changes (proves-tree, the whole winvm lane); caught by inspection, restored with a 3-way merge-file before push",
+      "pros": [],
+      "cons": [
+        "whole-file conflict resolution is unsafe even when the visible conflict is a pin"
+      ],
+      "decision": "resolve per hunk; re-run local-gate lint + wiring tests after any rebase (the gate itself caught nothing because the dropped lane simply did not exist)."
     }
   ],
   "rounds": [
@@ -168,6 +276,12 @@
       "ci_wall_seconds": 20,
       "side_entries": "7 x ~430 B: att1-<gate>-m2192-c1-59fd7786bc-pr-3541",
       "resolve": "ci-lint attest resolve --family att1-rust.x86_64-unknown-linux-gnu.test --require-gate .../clippy -> its own entry (live REST listing, GET only)"
+    },
+    {
+      "pr": "zackees/soldr#3548",
+      "what": "phases 2-3: cross lane, wine lane, winvm lane, GATE-009 proof",
+      "gate": "8 lanes passed in 1534 s on the rebased tree; 13/13 gates attested valid",
+      "decision": "surface-changed (runs remotely, as designed)"
     }
   ]
 }
