@@ -96,25 +96,40 @@ Measured on a 16-core host (soldr):
 - bosn tests lane (CI's nextest + doctest stages, 3,559 tests): 296 s after an image rebuild, ~106 s warm;
 - remote `Linux x64` (`ci-test`, warm cache): 504–555 s.
 
-## Re-running the local gate: lane result cache (candidate GATE-007)
+## Re-running the local gate: lane result cache (GATE-007)
 
-**Decision ([issue #177](https://github.com/zackees/ci.yml/issues/177)):** a local gate lane may be skipped only when **its inputs are byte-identical to a passing run of the same lane**, and the skip is recorded in the attestation.
+**Decision ([issue #177](https://github.com/zackees/ci.yml/issues/177), piloted in [soldr#3529](https://github.com/zackees/soldr/pull/3529)):** a local gate lane may be skipped only when **its inputs are byte-identical to a passing run of the same lane**, and every skip is recorded in the attestation.
 
-Today there is one fast path, and it is exact. `local-gate run` on a tree that already carries a valid `Local-Gate:` trailer does nothing. Any change reruns every selected lane, with only compile caches to help:
-- soldr's lint lane takes ~62 s every time;
-- Clippy goes from 80 s cold to 16 s warm;
-- the bosn tests lane goes from 518 s to ~170 s;
-- nextest reruns all 3,570 tests every time.
+1. **Declare lanes** as `[gate.lanes.<id>]` (`run`, `exclude`, `keep`, `tools`, `env`, `max-age-hours`; [ci-toml.md](ci-toml.md)). Each lane is the gate command plus arguments. `local-gate run` runs them in order, cheapest first, and stops at the first failure.
+2. **Key** = sha256 over the lane's argv, the `--version` of its declared tools, its declared env values, and `(path, blob sha)` of its input set, read from `git ls-tree`.
+3. **Input set = the commit tree minus exclusions, never an include list.** A forgotten exclusion costs speed; a forgotten include silently skips required work. soldr's old include-list path scope did exactly that: it never listed `src/`, though the Rust build embeds `src/soldr/_bundle_bins.py`. These are always inputs, whatever the globs say:
+   - the gate declaration;
+   - every repository file named in a lane's argv;
+   - the lockfiles and toolchain pins of the ecosystems the lane's tools use (unrecognized tools keep every pin).
+4. **Only passes are cached**, in `<git common dir>/ci-lint/lane-cache/`. That location is shared by every worktree of a clone and never pushed. Entries expire after 24 h by default; `--no-cache` bypasses the cache.
+5. **Provenance:** the trailer gains `lanes=<id>:run|<id>:reused@<key12>,...`.
+6. **Local only:** CI's mirrored jobs always run (GATE-001).
 
-The rule:
+**Split lanes along input boundaries, not by tool.** Replaying 150 soldr commits (`ci-lint local-gate lanes --simulate 150`), the three tool-shaped lanes (lint / rust / tests) were reusable only 0-3% of the time. Every commit touched `crates/` (which lint guards scan) or `.github/` (which `soldr lint ci` reads). Five input-shaped lanes reach:
+- py-static: Python linters, 48%;
+- rust: fmt/Clippy/Dylint, 33%;
+- tests: nextest + doctests in bosn, 29%.
 
-1. **Key.** A hash of the lane's argv, the gate declaration and script, the versions of the tools the lane invokes, an environment allowlist, and the git blob hashes of the lane's input set.
-2. **Input set = tracked tree minus declared exclusions** (`[gate.lanes.<id>].exclude`). Never an include list: a forgotten exclusion costs speed, while a forgotten include silently skips required work. The gate script, lockfiles and toolchain pins cannot be excluded. soldr's include-list path scope (`RUST_INPUTS`) is the pattern this replaces.
-3. **Only passes are cached**, locally under `.git/ci-lint/lane-cache/`, never pushed. Entries expire after 24 h by default (GEN-021's freshness bound); `--no-cache` bypasses the cache.
-4. **Provenance.** The trailer records each lane as `run` or `reused@<key>`, so a reused lane is never silent.
-5. **Local only.** The remote mirrored jobs always run (GATE-001). Skipping on the remote side remains GEN-021's verified reuse.
+Two lanes that read everything stay cheap or unexcludable: guards (repository scanners and the Python tests) and ci-lint (`soldr lint ci` plus dependency policy).
 
-The expected wins are docs-only edits, re-stamping after a rebase that didn't touch a lane's inputs, and edits that revert to an already-passed state. Lanes that read the whole crate graph still rerun on any source change. Per-check exclusions are the follow-up.
+**Prove exclusions with a trace.** `ci-lint local-gate lanes --audit <lane>` runs the lane under `strace` (open/exec and the stat family, which catches cargo's dep-info freshness checks). It fails if the lane touches a tracked file its exclusions drop. On soldr it caught `pyproject.toml` excluded from the rust lane, though soldr reads `[tool.soldr]` from it. A grep over the code had suggested `**/*.py`, `**/*.md` and `tests/**` were safe Rust exclusions; the code actually embeds files of each kind. The audit cannot see reads by daemons or containers outside the traced process tree, so container lanes rely on compile dep-info and review.
+
+**Measured on soldr** (16-core host; bosn tests lane):
+
+| Scenario | Time |
+| --- | --- |
+| first run | 748 s |
+| docs-only change | **76 s** |
+| Python/CI-script change, ~37% of soldr commits | **104 s** |
+| Rust change | 498 s |
+| revert to an already-passed tree | **0.7 s** |
+
+Without the cache, a warm full run takes ~525 s. The first run's tests lane was cold because bosn scopes volumes per workspace path; sharing them across worktrees and ancestor commits is [zackees/bosn#327](https://github.com/zackees/bosn/issues/327).
 
 ## Cache compression tiers (candidate CACHE-023)
 
@@ -228,7 +243,7 @@ The **Status** column below reflects what `ci_lint` actually checks today, verif
 | `GATE-004` | First-push pass rate below 80% over >= 5 merged PRs (`needs_review`). | Enforced by ci-lint (live audit, `ci-lint local-gate first-pass`) |
 | `GATE-005` | A declared `[gate.isolation]` whose guard file does not check both `CI` and the marker, whose bosn runner task/image never sets the marker, or whose local gate script never invokes the runner; a known self-hosted tool repository (soldr, zccache, clud, bosn) with no isolation declared is `needs_review`. | Enforced by ci-lint (static precheck, group 17; also `ci-lint local-gate lint`) |
 | `GATE-006` | A local-gate check placed against #172's table: a daemon-touching test lane on the host, or an isolated lane whose commands, profiles, or job caps differ from the remote job's. | Candidate |
-| `GATE-007` | A local lane skipped without a byte-identical passing run of its input set (#177): an include-list path scope, an exclusion of the gate script, a lockfile or a toolchain pin, a cached failure, or a reuse not recorded in the trailer. | Candidate |
+| `GATE-007` | A local lane skipped without a byte-identical passing run of its input set (#177): an exclusion naming a mandatory input (gate declaration, a file in a lane's argv, a relevant lockfile/toolchain pin), a lane that is not the gate command plus arguments, or a lane with no declared tools (`needs_review`). | Enforced by ci-lint (static: `local-gate lint` / precheck group 17; runtime: `local-gate run` keys, caches and records provenance; `local-gate lanes --simulate` / `--audit` for tuning and proving exclusions) |
 | `CACHE-023` | A cache save whose zstd level ignores its tier (#173): a PR-path save above level 3, or a long-lived default-branch family below the measured remote recommendation. | Candidate |
 
 An exception must name the repository, rule ID, reason, owner, compensating coverage, and review date. The documented Soldr dependency cycle in `zackees/running-process` is an example to evaluate for an exception. Exceptions are reviewed when their date arrives or the dependency changes; they do not erase historical findings. `ci.toml`'s `[[exceptions]]` array implements this mechanically for a `ci_lint`-checked repository (`rule`, `path`, `reason`, `issue`, `expires` -- `CT-005` fails an expired entry).
