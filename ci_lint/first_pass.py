@@ -123,8 +123,18 @@ def _ts(text: str) -> datetime:
     return datetime.fromisoformat(text.replace("Z", "+00:00"))
 
 
-def classify(runs: list[RunSample]) -> tuple[int, int, int, bool, bool]:
-    """(distinct head SHAs, failed runs, reruns, first_pass, final head attested)."""
+@dataclass(frozen=True)
+class PrClassification:
+    head_shas: int
+    failures: int
+    reruns: int
+    first_pass: bool
+    attested: bool
+
+
+def classify(runs: list[RunSample]) -> PrClassification:
+    """Distinct head SHAs, failed runs, reruns, first-pass verdict, and
+    whether the final head carried a Local-Gate trailer."""
 
     shas = {r.head_sha for r in runs}
     failures = sum(r.conclusion == "failure" for r in runs)
@@ -135,7 +145,7 @@ def classify(runs: list[RunSample]) -> tuple[int, int, int, bool, bool]:
         and any(r.conclusion == "success" and r.attempt == 1 for r in runs)
     )
     latest = max(runs, key=lambda r: r.created_at) if runs else None
-    return len(shas), failures, reruns, first_pass, bool(latest and latest.attested)
+    return PrClassification(len(shas), failures, reruns, first_pass, bool(latest and latest.attested))
 
 
 def _merged_prs(repo: str, since: datetime, fetch: FetchFn, token: str) -> list[dict[str, JsonValue]]:
@@ -184,17 +194,17 @@ def collect(repo: str, workflow: str, since: datetime, fetch: FetchFn, token: st
             )
         if not runs:
             continue
-        shas, failures, reruns, first_pass, attested = classify(runs)
+        verdict = classify(runs)
         number = pr.get("number")
         prs.append(
             PrSample(
                 number=number if isinstance(number, int) else 0,
                 title=_s(pr.get("title")),
-                head_shas=shas,
-                failures=failures,
-                reruns=reruns,
-                first_pass=first_pass,
-                attested=attested,
+                head_shas=verdict.head_shas,
+                failures=verdict.failures,
+                reruns=verdict.reruns,
+                first_pass=verdict.first_pass,
+                attested=verdict.attested,
             )
         )
     prs.sort(key=lambda p: p.number)

@@ -33,7 +33,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 | `ACT` | 001 | `ACT-002` | 001 |
 | `TEST` | 001–002 | `TEST-003` | all |
 | `BIN` | 001–002 | `BIN-003` | 001, 002 |
-| `PY` | 001 | `PY-002` | 001 (scoped to `[suites.perf].run`'s declared entry point(s); `ci_lint`'s own source follows the rule by construction too) |
+| `PY` | 001–002 | `PY-003` | 001 (scoped to `[suites.perf].run`'s declared entry point(s)), 002 (typed-dataclass records; ratchet over `ci_lint`'s own source, `ci_lint.typed_records`) |
 | `PERF` | 001 | `PERF-002` | 001 (distinct from the implemented `ci-lint perf compare` runtime command -- see policy-general.md) |
 | `FLEET` | 001–003 | `FLEET-004` | 001, 002 (fleet-scan-only rules, live, `ci-lint fleet scan`); 003 candidate (default-branch CI burn with no verified reuse or live merge queue, #159) |
 | `REL` | 001–005 | `REL-006` | 001, 002, 003, 004, 005 (issue #8/#74) |
@@ -43,6 +43,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 
 - Preserve required lint, test, platform, and artifact coverage when proposing a faster workflow. Confirm coverage from commands and runs, not from a runner label.
 - Represent Python benchmark inputs, results, and reports internally with dataclasses, never raw dictionaries. JSON and Protocol Buffers are allowed at serialization boundaries; type any boundary dictionary with concrete value types, never `Any`. A list of records must be typed at least as `list[dict[str, TypedData]]`, with `TypedData` replaced by a declared concrete type, before validation into dataclasses.
+- **Records are typed dataclasses, never tuples or dicts (PY-002, owner directive 2026-10-01).** No `-> tuple[int, list[str], int]`-style returns and no `dict[str, X]` records -- return a frozen `@dataclass`. `tuple[X, ...]` sequences are fine; dicts only at JSON/YAML/TOML boundaries typed with `JsonValue`/`YamlValue`/`TomlValue`. `python3 -m ci_lint selftest` enforces it as a ratchet (`ci_lint/tests/typed_records_baseline.json`): a module's count may only go down, new modules start at 0 -- lower the baseline when you convert one.
 - Treat a repo-specific deviation as either a documented exception or a finding requiring review; do not silently weaken the fleet policy.
 - Use deterministic checks and GitHub run/job evidence before spending agent context on diagnosis. Label unclear expressions, scripts, and cache states as unknown.
 - Do not add GitHub Actions workflow files unless the user specifically requests them.

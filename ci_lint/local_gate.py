@@ -48,6 +48,16 @@ from pathlib import Path
 
 from ci_lint.finding import Finding, Status
 from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
+from ci_lint.lane_cache import (
+    LaneConfig,
+    ToolVersions,
+    check_lanes_static,
+    lane_key,
+    lookup,
+    parse_lanes,
+    record,
+    tree_entries,
+)
 from ci_lint.toml_cursor import Cursor, TomlValue
 from ci_lint.yaml_io import YamlValue
 
@@ -109,6 +119,9 @@ class GateConfig:
     source: str
     # GATE-005 (zackees/ci.yml#168): how a self-hosted tool's suite runs isolated.
     isolation: IsolationConfig | None = None
+    # GATE-007 (zackees/ci.yml#177): the gate split into cacheable lanes, in
+    # declared order. Empty: `run` executes as one opaque command.
+    lanes: tuple[LaneConfig, ...] = ()
 
     @property
     def command(self) -> str:
@@ -130,7 +143,11 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
     exempt_authors = sub.list_str("exempt-authors", required=False, default=DEFAULT_EXEMPT_AUTHORS)
     mode = sub.str_("mode", required=False, default="enforce") or "enforce"
     isolation_raw = sub.table_("isolation", required=False)
+    lanes_raw = sub.table_("lanes", required=False)
     sub.finish()
+    lanes = (
+        parse_lanes(lanes_raw, path=f"{path}.lanes", source=source, findings=findings) if lanes_raw is not None else ()
+    )
     isolation = (
         parse_isolation(isolation_raw, path=f"{path}.isolation", source=source, findings=findings)
         if isolation_raw is not None
@@ -168,16 +185,33 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
         mode=mode,
         source=source,
         isolation=isolation,
+        lanes=lanes,
     )
 
 
-def load_gate_config(repo_root: Path) -> tuple[GateConfig | None, list[Finding]]:
+@dataclass(frozen=True)
+class GateLoad:
+    """`config` is None when the repository has not opted in (or the
+    declaration is unusable); `findings` are the declaration's own problems."""
+
+    config: GateConfig | None
+    findings: list[Finding]
+
+
+@dataclass(frozen=True)
+class _GateTable:
+    raw: dict[str, TomlValue]  # the TOML wire boundary, parsed by parse_gate_table
+    path: str
+    source: str
+
+
+def load_gate_config(repo_root: Path) -> GateLoad:
     """`ci.toml`'s `[local.gate]` wins; else `local-gate.toml`'s `[gate]`;
-    else `(None, [])` -- the repository has not opted in. Declaring both is
-    a GATE-001 violation: two declarations can drift apart."""
+    else no config -- the repository has not opted in. Declaring both is a
+    GATE-001 violation: two declarations can drift apart."""
 
     findings: list[Finding] = []
-    tables: list[tuple[dict[str, TomlValue], str, str]] = []
+    tables: list[_GateTable] = []
     ci_toml = repo_root / "ci.toml"
     if ci_toml.is_file():
         try:
@@ -187,22 +221,23 @@ def load_gate_config(repo_root: Path) -> tuple[GateConfig | None, list[Finding]]
         local = doc.get("local")
         gate = local.get("gate") if isinstance(local, dict) else None
         if isinstance(gate, dict):
-            tables.append((gate, "local.gate", "ci.toml"))
+            tables.append(_GateTable(gate, "local.gate", "ci.toml"))
     gate_file = repo_root / GATE_FILE
     if gate_file.is_file():
         try:
             doc = tomllib.loads(gate_file.read_text(encoding="utf-8"))
         except tomllib.TOMLDecodeError as exc:
-            return None, [
-                Finding(rule="GATE-001", path=GATE_FILE, message=f"invalid TOML: {exc}", fix="fix the TOML syntax")
-            ]
+            return GateLoad(
+                None,
+                [Finding(rule="GATE-001", path=GATE_FILE, message=f"invalid TOML: {exc}", fix="fix the TOML syntax")],
+            )
         top = Cursor(doc, "", findings, GATE_FILE)
         gate = top.table_("gate")
         top.finish()
         if gate is not None:
-            tables.append((gate, "gate", GATE_FILE))
+            tables.append(_GateTable(gate, "gate", GATE_FILE))
     if not tables:
-        return None, findings
+        return GateLoad(None, findings)
     if len(tables) > 1:
         findings.append(
             Finding(
@@ -212,8 +247,9 @@ def load_gate_config(repo_root: Path) -> tuple[GateConfig | None, list[Finding]]
                 fix="keep one declaration: ci.toml's [local.gate] when the repository has a ci.toml",
             )
         )
-    raw, path, source = tables[0]
-    return parse_gate_table(raw, path=path, source=source, findings=findings), findings
+    first = tables[0]
+    config = parse_gate_table(first.raw, path=first.path, source=first.source, findings=findings)
+    return GateLoad(config, findings)
 
 
 # ── git plumbing ─────────────────────────────────────────────────────────────
@@ -245,10 +281,14 @@ def tracked_changes(repo: Path) -> list[str]:
 class Attestation:
     tree: str
     secs: int | None
+    # GATE-007 provenance: `lint:run,rust:reused@<key12>,...`; None for an
+    # unlaned gate.
+    lanes: str | None = None
 
     def trailer(self) -> str:
         secs = f" secs={self.secs}" if self.secs is not None else ""
-        return f"{TRAILER_KEY}: {TRAILER_VERSION} tree={self.tree}{secs}"
+        lanes = f" lanes={self.lanes}" if self.lanes else ""
+        return f"{TRAILER_KEY}: {TRAILER_VERSION} tree={self.tree}{secs}{lanes}"
 
 
 def parse_attestation(message: str) -> Attestation | None:
@@ -269,7 +309,7 @@ def parse_attestation(message: str) -> Attestation | None:
     if not _SHA40.match(tree):
         return None
     secs_text = fields.get("secs", "")
-    return Attestation(tree=tree, secs=int(secs_text) if secs_text.isdigit() else None)
+    return Attestation(tree=tree, secs=int(secs_text) if secs_text.isdigit() else None, lanes=fields.get("lanes") or None)
 
 
 @dataclass(frozen=True)
@@ -338,7 +378,73 @@ class RunOutcome:
     head: str | None = None
 
 
-def run_gate(repo: Path, config: GateConfig, *, stamp: bool = True, force: bool = False) -> RunOutcome:
+def _changed(repo: Path, head: str) -> str | None:
+    """None when the tree is untouched and HEAD did not move, else a message."""
+
+    try:
+        after = tracked_changes(repo)
+        head_after = _git(repo, "rev-parse", "HEAD").strip()
+    except GitError as exc:
+        return str(exc)
+    if after or head_after != head:
+        return (
+            "the gate passed but changed the repository (a formatter rewrote files, or HEAD moved); "
+            "review and commit the result, then run the gate again:\n  " + "\n  ".join(after[:20])
+        )
+    return None
+
+
+@dataclass(frozen=True)
+class LaneRun:
+    """The outcome of `run_lanes`: `provenance` is one `<lane>:run` or
+    `<lane>:reused@<key12>` item per lane that passed, in order; `spent_secs`
+    counts only lanes that actually ran."""
+
+    exit_code: int
+    provenance: list[str]
+    spent_secs: int
+
+
+def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache: bool) -> LaneRun:
+    """Run (or reuse) every declared lane in order (GATE-007)."""
+
+    entries = tree_entries(repo, tree)
+    versions = ToolVersions()
+    provenance: list[str] = []
+    spent = 0
+    for lane in config.lanes:
+        key = lane_key(entries, lane, gate_run=config.run, gate_source=config.source, versions=versions)
+        hit = lookup(repo, lane, key.key) if use_cache else None
+        if hit is not None:
+            print(
+                f"local-gate: lane {lane.id}: reused (inputs unchanged since a pass {hit.age_hours(time.time()):.1f} h ago "
+                f"that took {hit.secs}s; key {key.key[:12]}, {key.inputs} inputs)",
+                file=sys.stderr,
+                flush=True,
+            )
+            provenance.append(f"{lane.id}:reused@{key.key[:12]}")
+            continue
+        print(f"local-gate: lane {lane.id}: {shlex.join(lane.run)}", file=sys.stderr, flush=True)
+        start = time.monotonic()
+        proc = subprocess.run(list(lane.run), cwd=repo, check=False)
+        secs = int(round(time.monotonic() - start))
+        spent += secs
+        if proc.returncode != 0:
+            print(f"local-gate: lane {lane.id}: FAILED after {secs}s (exit {proc.returncode})", file=sys.stderr)
+            return LaneRun(proc.returncode or 1, provenance, spent)
+        problem = _changed(repo, head)
+        if problem is not None:
+            print(f"local-gate: lane {lane.id}: {problem}", file=sys.stderr)
+            return LaneRun(1, provenance, spent)
+        record(repo, lane, key.key, secs=secs, head=head, tree=tree)
+        print(f"local-gate: lane {lane.id}: passed in {secs}s", file=sys.stderr, flush=True)
+        provenance.append(f"{lane.id}:run")
+    return LaneRun(0, provenance, spent)
+
+
+def run_gate(
+    repo: Path, config: GateConfig, *, stamp: bool = True, force: bool = False, use_cache: bool = True
+) -> RunOutcome:
     try:
         dirty = tracked_changes(repo)
         head = _git(repo, "rev-parse", "HEAD").strip()
@@ -353,6 +459,20 @@ def run_gate(repo: Path, config: GateConfig, *, stamp: bool = True, force: bool 
     if not force and check_commit(repo, head).state == "attested":
         return RunOutcome(0, f"local-gate run: HEAD {head[:12]} is already attested for its tree", head)
     tree = tree_of(repo, head)
+    if config.lanes:
+        start = time.monotonic()
+        lane_run = run_lanes(repo, config, head, tree, use_cache=use_cache)
+        secs = int(round(time.monotonic() - start))
+        lanes_field = ",".join(lane_run.provenance)
+        if lane_run.exit_code != 0:
+            return RunOutcome(lane_run.exit_code, f"local-gate run: FAILED after {secs}s ({lanes_field or 'no lane passed'})")
+        if not stamp:
+            return RunOutcome(0, f"local-gate run: passed in {secs}s [{lanes_field}] (not stamped)", head)
+        new_head = stamp_head(repo, Attestation(tree=tree, secs=secs, lanes=lanes_field))
+        return RunOutcome(
+            0, f"local-gate run: passed in {secs}s [{lanes_field}]; stamped {new_head[:12]} ({TRAILER_KEY} tree={tree[:12]})",
+            new_head,
+        )
     print(f"local-gate run: {config.command}", file=sys.stderr, flush=True)
     start = time.monotonic()
     proc = subprocess.run(list(config.run), cwd=repo, check=False)
@@ -382,7 +502,13 @@ ZERO_SHA = "0" * 40
 HOOK_MARKER = "# installed by: ci-lint local-gate hook install (zackees/ci.yml#166)"
 
 
-def check_push(repo: Path, stdin_text: str) -> tuple[int, list[str]]:
+@dataclass(frozen=True)
+class PushCheck:
+    exit_code: int
+    problems: list[str]
+
+
+def check_push(repo: Path, stdin_text: str) -> PushCheck:
     """git's pre-push stdin: `<local ref> <local sha> <remote ref> <remote sha>`
     per line. Every pushed branch head must be attested; tags and deletes
     pass."""
@@ -398,7 +524,7 @@ def check_push(repo: Path, stdin_text: str) -> tuple[int, list[str]]:
         result = check_commit(repo, local_sha)
         if not result.ok:
             problems.append(f"{local_ref} -> {remote_ref}: {result.detail}")
-    return (1 if problems else 0), problems
+    return PushCheck(exit_code=1 if problems else 0, problems=problems)
 
 
 def hook_script(launcher: str) -> str:
@@ -410,23 +536,30 @@ def default_launcher() -> str:
     return f"env PYTHONPATH={shlex.quote(str(package_parent))} {shlex.quote(sys.executable)} -m ci_lint"
 
 
-def install_hook(repo: Path, launcher: str, *, force: bool = False) -> tuple[int, str]:
+@dataclass(frozen=True)
+class HookInstall:
+    exit_code: int
+    message: str
+
+
+def install_hook(repo: Path, launcher: str, *, force: bool = False) -> HookInstall:
     try:
         hooks_dir = Path(_git(repo, "rev-parse", "--git-path", "hooks").strip())
     except GitError as exc:
-        return 2, f"local-gate hook install: {exc}"
+        return HookInstall(2, f"local-gate hook install: {exc}")
     if not hooks_dir.is_absolute():
         hooks_dir = repo / hooks_dir
     hook = hooks_dir / "pre-push"
     if hook.exists() and HOOK_MARKER not in hook.read_text(encoding="utf-8", errors="replace") and not force:
-        return 1, (
+        return HookInstall(
+            1,
             f"local-gate hook install: {hook} already exists and was not installed by ci-lint; "
-            "call `local-gate check-push` from it yourself, or pass --force to replace it"
+            "call `local-gate check-push` from it yourself, or pass --force to replace it",
         )
     hooks_dir.mkdir(parents=True, exist_ok=True)
     hook.write_text(hook_script(launcher), encoding="utf-8")
     hook.chmod(0o755)
-    return 0, f"local-gate hook install: wrote {hook}"
+    return HookInstall(0, f"local-gate hook install: wrote {hook}")
 
 
 # ── CI-side verify (GATE-003) ────────────────────────────────────────────────
@@ -513,6 +646,7 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:
     from ci_lint.workflow_scan import jobs_of, steps_of  # noqa: PLC0415
 
     findings: list[Finding] = check_isolation(config.isolation, config.run, repo_root, config.source)
+    findings.extend(check_lanes_static(config.lanes, config.run, config.source, repo_root))
     wfs = _load_workflows(repo_root)
     if not wfs.docs and not wfs.unreadable and not config.mirrors and config.verify is None:
         # No remote CI at all (e.g. zackees/ci.yml itself): nothing to mirror

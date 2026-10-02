@@ -16,7 +16,7 @@ from pathlib import Path
 
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.finding import Status
-from ci_lint.first_pass import RunSample, classify, collect
+from ci_lint.first_pass import PrClassification, RunSample, classify, collect
 from ci_lint.local_gate import (
     HOOK_MARKER,
     Attestation,
@@ -69,7 +69,8 @@ class TempRepoCase(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def config(self, repo: Path):  # type: ignore[no-untyped-def]
-        config, findings = load_gate_config(repo)
+        loaded = load_gate_config(repo)
+        config, findings = loaded.config, loaded.findings
         self.assertEqual(findings, [])
         assert config is not None
         return config
@@ -89,13 +90,15 @@ class AttestationTest(unittest.TestCase):
 
 class ConfigTest(TempRepoCase):
     def test_absent_means_not_opted_in(self) -> None:
-        self.assertEqual(load_gate_config(self.tmp), (None, []))
+        loaded = load_gate_config(self.tmp)
+        self.assertIsNone(loaded.config)
+        self.assertEqual(loaded.findings, [])
 
     def test_unknown_key_and_bad_mirror(self) -> None:
         (self.tmp / "local-gate.toml").write_text(
             '[gate]\nrun = ["x"]\nmirrors = ["lint"]\nbogus = 1\n', encoding="utf-8"
         )
-        _config, findings = load_gate_config(self.tmp)
+        findings = load_gate_config(self.tmp).findings
         self.assertEqual({f.rule for f in findings}, {"CT-001", "GATE-001"})
 
     def test_ci_toml_local_gate_parses_through_schema(self) -> None:
@@ -106,7 +109,7 @@ class ConfigTest(TempRepoCase):
         self.assertFalse([f for f in findings if "local" in f.message or f.rule == "GATE-001"], findings)
         assert ci is not None and ci.local.gate is not None
         self.assertEqual(ci.local.gate.run, ("python3", "ci/gate.py"))
-        config, _ = load_gate_config(self.tmp)
+        config = load_gate_config(self.tmp).config
         assert config is not None
         self.assertEqual(str(config.verify), "ci.yml:precheck")
 
@@ -114,7 +117,8 @@ class ConfigTest(TempRepoCase):
         text = EXAMPLE.read_text(encoding="utf-8") + '\n[local.gate]\nrun = ["a"]\n'
         (self.tmp / "ci.toml").write_text(text, encoding="utf-8")
         (self.tmp / "local-gate.toml").write_text('[gate]\nrun = ["b"]\n', encoding="utf-8")
-        config, findings = load_gate_config(self.tmp)
+        loaded = load_gate_config(self.tmp)
+        config, findings = loaded.config, loaded.findings
         self.assertIn("GATE-001", {f.rule for f in findings})
         assert config is not None
         self.assertEqual(config.run, ("a",))
@@ -192,22 +196,21 @@ class VerifyAndHookTest(TempRepoCase):
         repo = _repo(self.tmp, "print('ok')\n")
         head = _git(repo, "rev-parse", "HEAD")
         line = f"refs/heads/main {head} refs/heads/main {'0' * 40}\n"
-        self.assertEqual(check_push(repo, line)[0], 1)
+        self.assertEqual(check_push(repo, line).exit_code, 1)
         tag = f"refs/tags/v1 {head} refs/tags/v1 {'0' * 40}\n"
-        self.assertEqual(check_push(repo, tag)[0], 0)
+        self.assertEqual(check_push(repo, tag).exit_code, 0)
         run_gate(repo, self.config(repo))
         head = _git(repo, "rev-parse", "HEAD")
-        self.assertEqual(check_push(repo, f"refs/heads/main {head} refs/heads/main {'0' * 40}\n")[0], 0)
+        self.assertEqual(check_push(repo, f"refs/heads/main {head} refs/heads/main {'0' * 40}\n").exit_code, 0)
 
     def test_install_hook_refuses_foreign_hook(self) -> None:
         repo = _repo(self.tmp, "print('ok')\n")
-        code, _ = install_hook(repo, "ci-lint")
-        self.assertEqual(code, 0)
+        self.assertEqual(install_hook(repo, "ci-lint").exit_code, 0)
         hook = repo / ".git" / "hooks" / "pre-push"
         self.assertIn(HOOK_MARKER, hook.read_text(encoding="utf-8"))
         hook.write_text("#!/bin/sh\necho mine\n", encoding="utf-8")
-        self.assertEqual(install_hook(repo, "ci-lint")[0], 1)
-        self.assertEqual(install_hook(repo, "ci-lint", force=True)[0], 0)
+        self.assertEqual(install_hook(repo, "ci-lint").exit_code, 1)
+        self.assertEqual(install_hook(repo, "ci-lint", force=True).exit_code, 0)
 
 
 WORKFLOW_GREEN = """\
@@ -286,11 +289,11 @@ class FirstPassTest(unittest.TestCase):
     def test_classify(self) -> None:
         one = [RunSample("s1", "success", 1, "2026-10-01T00:00:00Z", True),
                RunSample("s1", "cancelled", 1, "2026-10-01T00:00:01Z", True)]
-        self.assertEqual(classify(one), (1, 0, 0, True, True))
+        self.assertEqual(classify(one), PrClassification(1, 0, 0, True, True))
         fixup = one + [RunSample("s2", "success", 1, "2026-10-01T01:00:00Z", False)]
-        self.assertFalse(classify(fixup)[3])
+        self.assertFalse(classify(fixup).first_pass)
         rerun = [RunSample("s1", "success", 2, "2026-10-01T00:00:00Z", False)]
-        self.assertFalse(classify(rerun)[3])
+        self.assertFalse(classify(rerun).first_pass)
 
     def test_collect_with_recorded_responses(self) -> None:
         pulls: JsonValue = [
@@ -367,7 +370,7 @@ class IsolationTest(TempRepoCase):
 
     def test_bad_marker_name(self) -> None:
         (self.tmp / "local-gate.toml").write_text(ISO_GATE.replace("TOOL_TEST_ISOLATED", "not a var"), encoding="utf-8")
-        _config, findings = load_gate_config(self.tmp)
+        findings = load_gate_config(self.tmp).findings
         self.assertEqual([f.rule for f in findings], ["GATE-005"])
 
     def test_self_hosted_tool_without_isolation_needs_review(self) -> None:
