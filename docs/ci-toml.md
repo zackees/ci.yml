@@ -598,6 +598,7 @@ repo-root `local-gate.toml`; declaring both is `GATE-001`. Parsed strictly
 | `lanes.<id>.tools` | array of strings | `GATE-007`: executables whose `--version` is part of the key, so an upgrade invalidates the cache. Empty is `needs_review`. |
 | `lanes.<id>.env` | array of strings | `GATE-007`: environment variables whose values are part of the key. |
 | `lanes.<id>.max-age-hours` | int (default 24) | `GATE-007`: a cached pass older than this is ignored. |
+| `lanes.<id>.weight` | `"heavy"` (default) or `"light"` | `GATE-007`: `light` lanes (linters, Python tests) run concurrently with each other and alongside the heavy chain; `heavy` lanes (compilers, test suites) run one at a time in declared order. Each lane's output goes to a log under the worktree's git dir (`ci-lint/lane-logs/`), shown on completion -- in full on failure. |
 
 A repository with no `.github/workflows` that declares neither `mirrors`
 nor `verify` gets no `GATE-001`/`GATE-002` finding: its pre-push hook is
