@@ -223,8 +223,14 @@ def decide(repo: Path, inp: TrustInput) -> TrustDecision:
         return _no("head-not-attested", f"{inp.head_sha[:12]} is {state.state}: {state.detail}")
     if base.lanes:
         att = parse_attestation(_git(repo, "log", "-1", "--format=%B", inp.head_sha))
-        provenance = {item.split(":", 1)[0] for item in (att.lanes or "").split(",") if item} if att else set()
-        missing = [lane.id for lane in base.lanes if lane.id not in provenance]
+        items = [item.split(":", 1) for item in (att.lanes or "").split(",") if item] if att else []
+        provenance = {i[0] for i in items if len(i) == 2 and i[1] != "n/a"}
+        not_applicable = {i[0] for i in items if len(i) == 2 and i[1] == "n/a"}
+        # An `optional` lane that could not run on the author's host counts
+        # as present for the head-level check; its gates simply carry no
+        # attestation (GATE-010: omission = not run, so CI runs them).
+        missing = [lane.id for lane in base.lanes
+                   if lane.id not in provenance and not (lane.optional and lane.id in not_applicable)]
         if missing:
             return _no("lanes-missing", f"the trailer lacks base-declared lane(s) {', '.join(missing)}")
     workflows = tuple(sorted({job.split(":", 1)[0] for job in trust.skip}

@@ -47,6 +47,8 @@ from ci_lint.proc import run_captured
 from ci_lint.toml_cursor import Cursor, TomlValue
 
 KEY_VERSION = "gate-007/v1"
+# EX_TEMPFAIL: an `optional` lane's way to say "cannot run on this host".
+NOT_APPLICABLE_EXIT = 75
 LANE_WEIGHTS: tuple[str, ...] = ("heavy", "light")
 DEFAULT_MAX_AGE_HOURS = 24.0
 # Gate declarations: always a lane input, for every lane.
@@ -104,6 +106,10 @@ class LaneConfig:
     # chain; `heavy` lanes (the default: compilers, test suites) run one at a
     # time, in declared order, so they do not fight over CPU.
     weight: str = "heavy"
+    # A lane that cannot run on every host (a local VM, an emulator): it may
+    # exit NOT_APPLICABLE_EXIT to say "not on this host". It is then never
+    # cached and never attested (omission = not run), and the gate passes.
+    optional: bool = False
 
 
 def parse_lanes(raw: dict[str, TomlValue], *, path: str, source: str, findings: list[Finding]) -> tuple[LaneConfig, ...]:
@@ -124,6 +130,7 @@ def parse_lanes(raw: dict[str, TomlValue], *, path: str, source: str, findings: 
         env = sub.list_str("env", required=False)
         max_age = sub.int_("max-age-hours", required=False)
         weight = sub.str_("weight", required=False, default="heavy") or "heavy"
+        optional = bool(sub.bool_("optional", required=False, default=False))
         sub.finish()
         if weight not in LANE_WEIGHTS:
             findings.append(
@@ -143,6 +150,7 @@ def parse_lanes(raw: dict[str, TomlValue], *, path: str, source: str, findings: 
                 env=env,
                 max_age_hours=float(max_age) if max_age is not None else DEFAULT_MAX_AGE_HOURS,
                 weight=weight,
+                optional=optional,
             )
         )
     return tuple(lanes)
