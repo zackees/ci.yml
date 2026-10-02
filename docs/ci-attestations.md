@@ -106,16 +106,23 @@ What makes the labels ancestor-defining:
 - `CI Pre › Publish ci-attestations` saved 7 entries of about 430 B each, e.g. `att1-rust.x86_64-unknown-linux-gnu.test-m2192-c1-59fd7786bc-pr-3541`. `ci-lint attest resolve` found them through the live REST listing (GET only).
 - **The squash commit can carry valid attestations.** #3537's `main` push (d17f707) published `att1-…-m2192-d17f7071c1` on `refs/heads/main`. The PR was up to date with main, so the squash commit had the attested head's exact tree and parent, and its stamps genuinely hold. These `main`-scoped entries are readable from every branch, so they are what later PRs hydrate from. When the PR is behind main, the stamps are rejected (`wrong-tree`/`wrong-parents`). Either way, `main` pushes run every job.
 
-## Roadmap
+## Roadmap and status
 
-1. **Phase 2:** a `cross` lane attests `rust/{x86_64-pc-windows-msvc,aarch64-apple-darwin}/{clippy,dylint}` from the Linux host (X2: 62 + 265 + 4 + 141 s; cached by GATE-007). No PR job runs these, so this is added coverage.
-2. **Phase 3:** Windows/macOS **unit-test** lanes that attest `rust/<target>/test` locally ([#202](https://github.com/zackees/ci.yml/issues/202), candidate GATE-011):
-   - Wine for `windows-gnu`;
-   - a warm dockur/windows guest for `windows-msvc` (soldr's guest probe already passes 220/220 tests; its cold boot is the blocker);
-   - the macOS Recovery guest, whose licensing is a constraint to verify.
+1. **Phase 2: done** (soldr#3548). The `cross` lane attests `rust/{x86_64-pc-windows-msvc,aarch64-apple-darwin}/{clippy,dylint}` from the Linux host. It passes 5/5 checks: 307 s warm, 815 s cold.
+2. **Phase 3: done** (soldr#3548), with platform test lanes chosen by fidelity ([#202](https://github.com/zackees/ci.yml/issues/202)):
 
-   Non-native lanes must run in a container or VM (GATE-005). Release still runs natively.
+   | Lane | Fidelity | Attests | Measured |
+   | --- | --- | --- | --- |
+   | `wine` (container) | emulation | `rust/x86_64-pc-windows-msvc/unit`, for the crates that pass in full | 400 tests, about 8 s |
+   | `winvm` (warm dockur/windows VM, optional) | native-equivalent | `rust/x86_64-pc-windows-msvc/test`, the target-run partition | 160/160, 400–492 s |
+   | Darling | emulation with process/IPC gaps | nothing (advisory) | broker/daemon wedge; `readdir`/`copy` gaps |
+   | macOS Recovery guest | native-equivalent | `rust/x86_64-apple-darwin/test` replay set (next) | kernal-api: 950 tests in 163 s |
+
+   - A `…/test` gate takes only a native or native-equivalent lane.
+   - Emulation lanes attest a distinct check name (`unit`) with an explicit crate scope.
+   - **Host-optional lanes** (`optional = true`, exit 75) are never attested where they cannot run.
 3. **Phase 4:** hydrate build caches (zccache store, Dylint trees) from the nearest **attested** ancestor through `attest resolve --require-gate`, with lineage-keyed saves.
+4. **Isolation:** the isolated runner proves which tree it tested (GATE-009, `.gate-nonce`; bosn 0.1.7 fixed the container reuse at the root).
 
 ## Commands
 
