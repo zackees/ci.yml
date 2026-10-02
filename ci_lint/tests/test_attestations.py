@@ -188,6 +188,41 @@ class VerifyTest(GitCase):
         self.assertNotEqual(changed.compute_stamp(), changed.stamp)
 
 
+class KeysPriorityTest(GitCase):
+    def test_job_mapped_gates_are_published_first_and_overflow_is_reported(self) -> None:
+        import contextlib
+        import io
+        import os
+
+        from ci_lint.attest_cli import register
+
+        self.commit("base")
+        self.commit("feature")
+        gates = [("rust/all/fmt", "rust"), ("rust/x86_64-unknown-linux-gnu/clippy", "rust"),
+                 ("rust/x86_64-unknown-linux-gnu/test", "tests"), ("rust/x86_64-pc-windows-msvc/clippy", "cross")]
+        definition = DEFINITION.replace("{lane: cross}", "{lane: cross}")
+        (self.repo / "ci-attestations.yml").write_text(definition, encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "def")
+        self.amend_with(*(self.attest(g, lane) for g, lane in gates))
+        import argparse
+        parser = argparse.ArgumentParser()
+        register(parser.add_subparsers(dest="cmd"))
+        out_dir = self.repo / "out"
+        args = parser.parse_args(["attest", "keys", "--repo", str(self.repo), "--main-ref", "main",
+                                  "--out-dir", str(out_dir), "--slots", "2"])
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(args.func(args), 0)
+        printed = out.getvalue()
+        # Both slots go to gates mapped to a job (fmt, linux clippy/test), never
+        # to the unmapped windows clippy gate.
+        self.assertNotIn("x86_64-pc-windows-msvc", printed)
+        self.assertIn("not published", err.getvalue())
+        self.assertIn("rust/x86_64-pc-windows-msvc/clippy", err.getvalue())
+        self.assertFalse(os.environ.get("GITHUB_ACTIONS") == "true" and "::warning" not in printed)
+
+
 class LineageTest(GitCase):
     def test_labels_parse_and_order_without_git(self) -> None:
         main = Lineage(main_ordinal=2189, sha="6f6b886c32" + "0" * 30)

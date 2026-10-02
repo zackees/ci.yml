@@ -103,12 +103,20 @@ def _cmd_keys(args: argparse.Namespace) -> int:
     records = {p.attestation.gate: p.attestation for p in parse_trailers(message) if p.attestation is not None}
     lines: list[str] = []
     index = 0
-    for status in sorted(result.statuses, key=lambda s: s.gate):
-        if status.state != VALID:
-            continue
-        if index >= args.slots:
-            print(f"ci-lint attest keys: more than {args.slots} valid gates; raise --slots", file=sys.stderr)
-            break
+    # Gates a remote job depends on (and therefore cache hydration, which
+    # requires e.g. the test gate) are published first; the rest after, in
+    # path order. Learned in the soldr pilot: 13 valid gates against 8 slots
+    # dropped `rust/x86_64-unknown-linux-gnu/test` alphabetically.
+    mapped = {gate for job in definition.jobs for gate in job.gates}
+    valid = sorted((s for s in result.statuses if s.state == VALID), key=lambda s: (s.gate not in mapped, s.gate))
+    dropped = [s.gate for s in valid[args.slots:]]
+    if dropped:
+        message = (f"{len(valid)} valid gates but only {args.slots} side-entry slots; not published: "
+                   f"{', '.join(dropped)} (add save slots and raise --slots)")
+        print(f"ci-lint attest keys: {message}", file=sys.stderr)
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            print(f"::warning title=ci-attestations side entries truncated::{message}")
+    for status in valid[: args.slots]:
         path = out_dir / f"{index}.json"
         path.write_text(records[status.gate].compact() + "\n", encoding="utf-8")
         key = cache_key(gate_family(status.gate), lineage)
