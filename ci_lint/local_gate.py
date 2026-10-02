@@ -50,6 +50,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ci_lint.attestations import load_definition as load_attestation_definition
+from ci_lint.attestations import make as make_attestation
+from ci_lint.attestations import strip_trailers as strip_attestation_trailers
 from ci_lint.finding import Finding, Status
 from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
 from ci_lint.gate_trust import TrustConfig, WorkflowFacts, WorkflowJob, check_trust_static, parse_trust
@@ -382,23 +385,38 @@ def check_commit(repo: Path, sha: str, *, _depth: int = 0) -> CommitCheck:
     return CommitCheck(sha, "missing", f"no {TRAILER_KEY} trailer on {sha[:12]}")
 
 
-def stamp_head(repo: Path, attestation: Attestation) -> str:
+def stamp_head(repo: Path, attestation: Attestation, gate_trailers: tuple[str, ...] = ()) -> str:
     """Rewrite HEAD's message with the trailer (replacing any older one) and
     return the new HEAD sha. The tree is untouched; `--no-verify` skips
-    commit hooks because nothing they inspect (the tree) has changed."""
+    commit hooks because nothing they inspect (the tree) has changed.
+    `gate_trailers` (GATE-010 `Ci-Attestation:` lines) replace every older
+    one."""
 
-    message = _git(repo, "log", "-1", "--format=%B", "HEAD")
-    new_message = _git(
-        repo,
-        "interpret-trailers",
-        "--if-exists",
-        "replace",
-        "--trailer",
-        attestation.trailer(),
-        stdin=message,
-    )
+    message = strip_attestation_trailers(_git(repo, "log", "-1", "--format=%B", "HEAD"))
+    args = ["interpret-trailers", "--if-exists", "replace", "--trailer", attestation.trailer()]
+    for trailer in gate_trailers:
+        args += ["--if-exists", "add", "--trailer", trailer]
+    new_message = _git(repo, *args, stdin=message)
     _git(repo, "commit", "--amend", "--allow-empty", "--no-verify", "--quiet", "-F", "-", stdin=new_message)
     return _git(repo, "rev-parse", "HEAD").strip()
+
+
+def gate_attestation_trailers(repo: Path, config: GateConfig, head: str, tree: str,
+                              passed: tuple[LanePass, ...]) -> tuple[str, ...]:
+    """One `Ci-Attestation:` trailer per declared gate whose lane passed
+    (GATE-010). Omitted gates were not run; no definition, no trailers."""
+
+    loaded = load_attestation_definition(repo, lanes=tuple(lane.id for lane in config.lanes))
+    if loaded is None or loaded.definition is None:
+        return ()
+    parents = tuple(_git(repo, "log", "-1", "--format=%P", head).split())
+    out: list[str] = []
+    for lane in passed:
+        for gate in loaded.definition.gates_of_lane(lane.lane):
+            att = make_attestation(gate.path, tree=tree, parents=parents, lane=lane.lane, key=lane.key,
+                                   via=lane.via, secs=lane.secs)
+            out.append(att.trailer())
+    return tuple(out)
 
 
 # ── local-gate run ───────────────────────────────────────────────────────────
@@ -428,6 +446,14 @@ def _changed(repo: Path, head: str) -> str | None:
 
 
 @dataclass(frozen=True)
+class LanePass:
+    lane: str
+    key: str
+    via: str  # "run" | "reused"
+    secs: int | None
+
+
+@dataclass(frozen=True)
 class LaneRun:
     """The outcome of `run_lanes`: `provenance` is one `<lane>:run` or
     `<lane>:reused@<key12>` item per lane that passed, in order; `spent_secs`
@@ -436,6 +462,9 @@ class LaneRun:
     exit_code: int
     provenance: list[str]
     spent_secs: int
+    # Per passed lane: its key, how it passed and how long it took, for the
+    # ci-attestations trailers (GATE-010, #198).
+    passed: tuple[LanePass, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -545,21 +574,24 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
                 record(repo, outcome.lane, outcome.key, secs=outcome.secs, head=head, tree=tree)
     by_id = {o.lane.id: o for o in outcomes}
     provenance: list[str] = []
+    passed: list[LanePass] = []
     for lane in config.lanes:
         if lane.id in reused:
             provenance.append(f"{lane.id}:reused@{reused[lane.id][:12]}")
+            passed.append(LanePass(lane.id, reused[lane.id], "reused", None))
         elif lane.id in by_id and by_id[lane.id].exit_code == 0:
             provenance.append(f"{lane.id}:run")
+            passed.append(LanePass(lane.id, by_id[lane.id].key, "run", by_id[lane.id].secs))
     failed = [o for o in outcomes if o.exit_code != 0]
     not_run = [p.lane.id for p in pending if p.lane.id not in by_id]
     if not_run:
         print(f"local-gate: not run after a heavy-lane failure: {', '.join(not_run)}", file=sys.stderr)
     spent = sum(o.secs for o in outcomes)
     if failed:
-        return LaneRun(failed[0].exit_code or 1, provenance, spent)
+        return LaneRun(failed[0].exit_code or 1, provenance, spent, tuple(passed))
     if problem is not None:
-        return LaneRun(1, provenance, spent)
-    return LaneRun(0, provenance, spent)
+        return LaneRun(1, provenance, spent, tuple(passed))
+    return LaneRun(0, provenance, spent, tuple(passed))
 
 
 def run_gate(
@@ -588,7 +620,8 @@ def run_gate(
             return RunOutcome(lane_run.exit_code, f"local-gate run: FAILED after {secs}s ({lanes_field or 'no lane passed'})")
         if not stamp:
             return RunOutcome(0, f"local-gate run: passed in {secs}s [{lanes_field}] (not stamped)", head)
-        new_head = stamp_head(repo, Attestation(tree=tree, secs=secs, lanes=lanes_field))
+        trailers = gate_attestation_trailers(repo, config, head, tree, lane_run.passed)
+        new_head = stamp_head(repo, Attestation(tree=tree, secs=secs, lanes=lanes_field), trailers)
         return RunOutcome(
             0, f"local-gate run: passed in {secs}s [{lanes_field}]; stamped {new_head[:12]} ({TRAILER_KEY} tree={tree[:12]})",
             new_head,
@@ -781,6 +814,7 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:
     from ci_lint.workflow_scan import jobs_of, steps_of  # noqa: PLC0415
 
     findings: list[Finding] = check_isolation(config.isolation, config.run, repo_root, config.source)
+    findings.extend(_check_attestation_definition(config, repo_root))
     findings.extend(check_lanes_static(config.lanes, config.run, config.source, repo_root))
     wfs = _load_workflows(repo_root)
     findings.extend(_check_trust(config, wfs))
@@ -932,6 +966,26 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:
                     "if it must run first (e.g. ci-pre)",
                 )
             )
+    return findings
+
+
+def _check_attestation_definition(config: GateConfig, repo_root: Path) -> list[Finding]:
+    """GATE-010 static half: a present ci-attestations.yml parses as
+    restricted YAML, names declared lanes, and maps every trusted skip job
+    (an unmapped one can never skip)."""
+
+    loaded = load_attestation_definition(repo_root, lanes=tuple(lane.id for lane in config.lanes))
+    if loaded is None:
+        return []
+    findings = list(loaded.findings)
+    definition = loaded.definition
+    if definition is not None and config.trust is not None:
+        for job in config.trust.skip:
+            if definition.job(job) is None:
+                findings.append(Finding(
+                    rule="GATE-010", path=definition.source, status=Status.NEEDS_REVIEW,
+                    message=f"[gate.trust] skip job '{job}' is not mapped to gates, so it never skips",
+                    fix=f"add `{job}: [<gate paths>]` under `jobs:`"))
     return findings
 
 

@@ -202,6 +202,38 @@ class DecideTest(TrustCase):
         self.assertFalse(any(audit_sampled(s, 0) for s in shas[:50]))
 
 
+class AttestedJobsTest(TrustCase):
+    """GATE-010: per-job skip from the base's ci-attestations.yml and the head's trailers."""
+
+    def test_job_skips_only_when_all_its_gates_are_attested(self) -> None:
+        from ci_lint.attestations import make
+        from ci_lint.local_gate_cli import _job_decisions
+
+        definition = (
+            "version: 1\ngates:\n  rust/all/lint: {lane: lint}\n  rust/x86_64-unknown-linux-gnu/test: {lane: tests}\n"
+            "jobs:\n  ci.yml:lint: [rust/all/lint]\n  ci.yml:tests: [rust/all/lint, rust/x86_64-unknown-linux-gnu/test]\n"
+        )
+        base = self.commit("definition", {"ci-attestations.yml": definition}, lanes=None)
+        self.commit("feature", {"src.txt": "two\n"})
+        tree = _git(self.repo, "rev-parse", "HEAD^{tree}")
+        parents = (base,)
+        lint = make("rust/all/lint", tree=tree, parents=parents, lane="lint", key="k", via="run", secs=1).trailer()
+        message = _git(self.repo, "log", "-1", "--format=%B")
+        _git(self.repo, "commit", "-q", "--amend", "-m", message + "\n" + lint)
+        head = _git(self.repo, "rev-parse", "HEAD")
+        decision = self.decide(head, base_sha=base)
+        self.assertTrue(decision.trusted, decision.detail)
+        inp = TrustInput("pull_request", head, base, "OWNER", "o/r", "o/r", ())
+        jobs = {j.job: j.skip for j in _job_decisions(self.repo, inp, decision.trusted)}
+        self.assertEqual(jobs, {"ci.yml:lint": True, "ci.yml:tests": False})  # test gate omitted = not run
+        untrusted = {j.job: j.skip for j in _job_decisions(self.repo, inp, False)}
+        self.assertEqual(untrusted, {"ci.yml:lint": False, "ci.yml:tests": False})
+
+    def test_definition_change_is_a_surface(self) -> None:
+        head = self.commit("touch definition", {"ci-attestations.yml": "version: 1\ngates:\n  rust/all/x: {lane: lint}\n"})
+        self.assertReason(head, "surface-changed")
+
+
 @requires_yaml_tooling
 class StaticTest(TrustCase):
     def findings(self) -> list[str]:
