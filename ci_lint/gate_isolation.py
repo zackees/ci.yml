@@ -47,11 +47,20 @@ SELF_HOSTED_TOOL_REPOS: frozenset[str] = frozenset(
 _ORIGIN_RE = re.compile(r"github\.com[:/](?P<slug>[^/]+/[^/]+?)(?:\.git)?/?$")
 
 
+NONCE_FILE = ".gate-nonce"
+NONCE_ECHO = "gate-nonce: "
+
+
 @dataclass(frozen=True)
 class IsolationConfig:
     marker: str
     runner: tuple[str, ...]
     guard: str
+    # GATE-009 (zackees/ci.yml#196): the gate writes a fresh nonce to
+    # NONCE_FILE in its worktree and the isolated entry script echoes
+    # `NONCE_ECHO<contents>` from its mounted tree, so a runner bound to
+    # another checkout (zackees/bosn#314) fails instead of attesting it.
+    proves_tree: bool = False
 
 
 def parse_isolation(raw: dict[str, TomlValue], *, path: str, source: str, findings: list[Finding]) -> IsolationConfig | None:
@@ -59,6 +68,7 @@ def parse_isolation(raw: dict[str, TomlValue], *, path: str, source: str, findin
     marker = sub.str_("marker")
     runner = sub.list_str("runner")
     guard = sub.str_("guard")
+    proves_tree = sub.bool_("proves-tree", required=False, default=False)
     sub.finish()
     if not marker or not runner or not guard:
         return None
@@ -68,7 +78,7 @@ def parse_isolation(raw: dict[str, TomlValue], *, path: str, source: str, findin
                     fix="use an upper-case variable name such as SOLDR_TEST_ISOLATED")
         )
         return None
-    return IsolationConfig(marker=marker, runner=runner, guard=guard)
+    return IsolationConfig(marker=marker, runner=runner, guard=guard, proves_tree=bool(proves_tree))
 
 
 def origin_slug(repo_root: Path) -> str | None:
@@ -165,6 +175,7 @@ def check_isolation(isolation: IsolationConfig | None, gate_run: tuple[str, ...]
     if iso.runner[0] == "bosn":
         findings.extend(_bosn_marker_findings(iso, repo_root, source))
     scripts = [repo_root / token for token in gate_run if (repo_root / token).is_file()]
+    findings.extend(_tree_proof_findings(iso, scripts, repo_root, source))
     if not any(_invokes(s.read_text(encoding="utf-8", errors="replace"), iso.runner) for s in scripts):
         findings.append(
             Finding(
@@ -174,4 +185,59 @@ def check_isolation(isolation: IsolationConfig | None, gate_run: tuple[str, ...]
                 fix="run the test suite from the gate script through the isolation runner",
             )
         )
+    return findings
+
+
+def _bosn_entry_scripts(iso: IsolationConfig, repo_root: Path) -> list[Path]:
+    """Repository files the bosn task's cmd runs (`/repo/<path>` tokens or
+    plain relative paths that exist)."""
+
+    tokens = list(iso.runner)
+    task = tokens[tokens.index("--task") + 1] if "--task" in tokens[:-1] else None
+    manifest = repo_root / "bosn.toml"
+    if task is None or not manifest.is_file():
+        return []
+    try:
+        doc = tomllib.loads(manifest.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError:
+        return []
+    tasks = doc.get("task")
+    spec = tasks.get(task) if isinstance(tasks, dict) else None
+    cmd = spec.get("cmd") if isinstance(spec, dict) else None
+    if not isinstance(cmd, str):
+        return []
+    out: list[Path] = []
+    for token in re.split(r"[\s;&|]+", cmd):
+        rel = token[len("/repo/"):] if token.startswith("/repo/") else token
+        if rel and (repo_root / rel).is_file():
+            out.append(repo_root / rel)
+    return out
+
+
+def _tree_proof_findings(iso: IsolationConfig, gate_scripts: list[Path], repo_root: Path, source: str) -> list[Finding]:
+    if not iso.proves_tree:
+        return [
+            Finding(
+                rule="GATE-009",
+                path=source,
+                status=Status.NEEDS_REVIEW,
+                message="the isolated runner does not prove it ran this worktree; a warm container bound to another "
+                "checkout (zackees/bosn#314) would let the gate attest a tree it never tested",
+                fix=f"set [gate.isolation] proves-tree = true: the gate writes a nonce to {NONCE_FILE}, the isolated "
+                f"entry script prints `{NONCE_ECHO}<contents>` from its mounted tree, and the gate requires a match",
+            )
+        ]
+    findings: list[Finding] = []
+    if not any(NONCE_FILE in s.read_text(encoding="utf-8", errors="replace") for s in gate_scripts):
+        findings.append(Finding(rule="GATE-009", path=source,
+                                message=f"proves-tree is set but the gate script never writes {NONCE_FILE}",
+                                fix=f"write a fresh nonce to {NONCE_FILE} before the isolated run and require its echo"))
+    entries = _bosn_entry_scripts(iso, repo_root) if iso.runner[0] == "bosn" else []
+    if iso.runner[0] == "bosn" and not any(
+        NONCE_FILE in e.read_text(encoding="utf-8", errors="replace")
+        and NONCE_ECHO in e.read_text(encoding="utf-8", errors="replace") for e in entries
+    ):
+        findings.append(Finding(rule="GATE-009", path="bosn.toml",
+                                message="proves-tree is set but the isolated task's entry script never echoes the nonce",
+                                fix=f"print `{NONCE_ECHO}<contents of {NONCE_FILE}>` from the mounted tree first thing"))
     return findings

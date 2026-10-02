@@ -338,6 +338,43 @@ ISO_BOSN = '[stack.dev]\ndockerfile = "docker/Dockerfile"\n\n[task.test]\nstack 
 ISO_SCRIPT = 'TESTS = ("bosn", "run", "--task", "test")\n'
 
 
+class TreeProofTest(TempRepoCase):
+    """GATE-009 -- the isolated runner proves it ran this worktree (zackees/ci.yml#196, zackees/bosn#314)."""
+
+    def _repo(self, *, proves: bool, gate_script: str, entry: str) -> Path:
+        gate = ISO_GATE + ("proves-tree = true\n" if proves else "")
+        files = {
+            "local-gate.toml": gate,
+            "scripts/test_wrapper.sh": ISO_GUARD,
+            "bosn.toml": ISO_BOSN.replace('cmd = "cargo nextest run"', 'cmd = "python3 /repo/ci/entry.py"'),
+            "docker/Dockerfile": "FROM rust@sha256:" + "0" * 64 + "\nENV TOOL_TEST_ISOLATED=1\n",
+            "ci/gate.py": ISO_SCRIPT + gate_script,
+            "ci/entry.py": entry,
+        }
+        for rel, text in files.items():
+            (self.tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.tmp / rel).write_text(text, encoding="utf-8")
+        return self.tmp
+
+    def _gate_009(self, repo: Path) -> list[str]:
+        return [f"{f.status.value}:{f.path}" for f in check_gate_static(self.config(repo), repo) if f.rule == "GATE-009"]
+
+    ECHO = 'print("gate-nonce: " + open("/repo/.gate-nonce").read())\n'
+
+    def test_proven(self) -> None:
+        repo = self._repo(proves=True, gate_script='NONCE = ".gate-nonce"\n', entry='p = ".gate-nonce"\n' + self.ECHO)
+        self.assertEqual(self._gate_009(repo), [])
+
+    def test_not_declared_is_needs_review(self) -> None:
+        repo = self._repo(proves=False, gate_script="", entry="")
+        self.assertEqual(self._gate_009(repo), [f"{Status.NEEDS_REVIEW.value}:local-gate.toml"])
+
+    def test_declared_but_not_wired(self) -> None:
+        repo = self._repo(proves=True, gate_script="", entry="print('hi')\n")
+        self.assertEqual(sorted(self._gate_009(repo)),
+                         sorted([f"{Status.VIOLATION.value}:local-gate.toml", f"{Status.VIOLATION.value}:bosn.toml"]))
+
+
 class IsolationTest(TempRepoCase):
     """GATE-005 -- ci_lint/gate_isolation.py (zackees/ci.yml#168)."""
 

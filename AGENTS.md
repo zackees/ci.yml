@@ -37,7 +37,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 | `PERF` | 001 | `PERF-002` | 001 (distinct from the implemented `ci-lint perf compare` runtime command -- see policy-general.md) |
 | `FLEET` | 001–003 | `FLEET-004` | 001, 002 (fleet-scan-only rules, live, `ci-lint fleet scan`); 003 candidate (default-branch CI burn with no verified reuse or live merge queue, #159) |
 | `REL` | 001–005 | `REL-006` | 001, 002, 003, 004, 005 (issue #8/#74) |
-| `GATE` | 001–011 | `GATE-012` | 001, 002, 003, 004, 005, 007, 008, 010 (issues #166/#168/#177/#190/#198; 006 candidate; 009 candidate claimed by #196; 010 is `ci-attestations.yml`, phase 1, co-developed with zackees/soldr#3534; 011 candidate claimed by #202 -- non-native platform test lanes); a new family, so it cannot collide with the contested `GEN-022` -- see #154) |
+| `GATE` | 001–011 | `GATE-012` | 001, 002, 003, 004, 005, 007, 008, 009, 010 (issues #166/#168/#177/#190/#196/#198; 006 candidate; 009 = isolated runner proves its tree (`[gate.isolation] proves-tree`, nonce echo); 010 is `ci-attestations.yml`, phase 1, co-developed with zackees/soldr#3534; 011 candidate claimed by #202 -- non-native platform test lanes); a new family, so it cannot collide with the contested `GEN-022` -- see #154) |
 
 ## Working rules
 
