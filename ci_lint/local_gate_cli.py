@@ -30,6 +30,7 @@ from ci_lint.finding import Status
 from ci_lint.first_pass import DEFAULT_MIN_PRS, DEFAULT_TARGET, collect, render_text
 from ci_lint.github_api import GitHubApiError, default_fetch
 from ci_lint.gate_bare_tools import check_no_bare_rust
+from ci_lint.remote_only import check_gate_012
 from ci_lint.gate_trust import TrustInput
 from ci_lint.gate_trust import decide as decide_trust
 from ci_lint.lane_cache import ToolVersions, lane_key, lookup, run_audit, simulate, tree_entries
@@ -238,7 +239,7 @@ def _cmd_lint(args: argparse.Namespace) -> int:
         print("ci-lint local-gate lint: no local gate declared (ci.toml [local.gate] or local-gate.toml [gate])", file=sys.stderr)
         return 1
     if config is not None:
-        findings = findings + check_gate_static(config, repo) + check_no_bare_rust(repo, config.run)
+        findings = findings + check_gate_static(config, repo) + check_no_bare_rust(repo, config.run) + check_gate_012(repo)
     for finding in findings:
         print(finding.render())
     violations = [f for f in findings if f.status == Status.VIOLATION]

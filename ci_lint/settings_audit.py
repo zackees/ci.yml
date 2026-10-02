@@ -26,6 +26,9 @@ Rules implemented:
   - GEN-011: the default branch's required status checks don't include the
     gate check name (default "CI OK"); reported `needs_review` (a policy
     decision, not a code defect) when branch protection itself is absent.
+  - GATE-012 (live half, ci.yml#206): a required status check (branch
+    protection or an active ruleset) names a GitHub App check or is bound
+    to an app other than GitHub Actions -- act cannot run it.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from pathlib import Path
 
 from ci_lint.finding import Finding, Status
 from ci_lint.github_api import FetchStatusFn, GitHubApiError
+from ci_lint.remote_only import check_required_checks as check_gate_012_required
 from ci_lint.rules.doc_claims import DocClaim, scan_repo_docs
 from ci_lint.rules.setup_soldr_freshness import check_rust_014
 from ci_lint.schema import CiToml
@@ -583,6 +587,9 @@ def run_audit(
     rulesets = _fetch_rulesets(fetch_status, token, repo)
     findings.extend(check_gen_006(branch_protection, rulesets, default_branch))
     findings.extend(check_gen_011(branch_protection, default_branch, gate_check_name))
+    protection_body = branch_protection[1] if branch_protection is not None and branch_protection[0] == 200 else None
+    ruleset_list = rulesets[1] if rulesets is not None and rulesets[0] == 200 else None
+    findings.extend(check_gate_012_required(protection_body, ruleset_list, default_branch))
 
     if repo_root is not None:
         claims = scan_repo_docs(repo_root)
@@ -605,7 +612,7 @@ def to_json_dict(report: AuditReport) -> dict[str, object]:
 
 def render_text(report: AuditReport) -> str:
     lines = [f"ci-lint audit: {report.repo} (default branch: {report.default_branch})"]
-    rules = ("SEC-005", "SEC-006", "SEC-007", "GEN-006", "GEN-010", "GEN-011", "RUST-014")
+    rules = ("SEC-005", "SEC-006", "SEC-007", "GEN-006", "GEN-010", "GEN-011", "GATE-012", "RUST-014")
     by_rule: dict[str, list[Finding]] = {r: [] for r in rules}
     for f in report.findings:
         by_rule.setdefault(f.rule, []).append(f)
