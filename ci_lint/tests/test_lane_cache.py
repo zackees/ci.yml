@@ -16,6 +16,8 @@ from ci_lint.lane_cache import (
     LaneConfig,
     ToolVersion,
     ToolVersions,
+    audit_trace,
+    run_audit,
     cache_dir,
     check_lanes_static,
     lane_key,
@@ -181,6 +183,24 @@ class KeyTest(LanedRepo):
         moved = LaneConfig(lane.id, (*lane.run, "--extra"), lane.exclude, lane.keep, lane.tools)
         self.assertNotEqual(k, lane_key(entries, moved, versions=v1, **base).key)
 
+    def test_pins_follow_the_lane_tools(self) -> None:
+        # Design revision 3 (#177): a Python-only lane is not invalidated by
+        # Cargo.lock; a Rust lane and an unrecognized-tool lane are.
+        cfg = self.config()
+        base = dict(gate_run=cfg.run, gate_source=cfg.source, versions=ToolVersions([ToolVersion("uv", "1"),
+                    ToolVersion("soldr", "1"), ToolVersion("git", "1")]))
+        before = tree_entries(self.repo, "HEAD")
+        self.write("Cargo.lock", "# lock 2\n")
+        self.commit("lock")
+        after = tree_entries(self.repo, "HEAD")
+        def lane(tools: tuple[str, ...]) -> LaneConfig:
+            return LaneConfig("x", cfg.run, exclude=("Cargo.lock",), tools=tools)
+        py = lane(("uv",))
+        self.assertEqual(lane_key(before, py, **base).key, lane_key(after, py, **base).key)
+        for tools in (("soldr",), ("git",)):
+            rs = lane(tools)
+            self.assertNotEqual(lane_key(before, rs, **base).key, lane_key(after, rs, **base).key)
+
     def test_expired_entry_is_ignored(self) -> None:
         lane = LaneConfig("lint", ("x",), max_age_hours=1.0)
         record(self.repo, lane, "k" * 64, secs=3, head="h", tree="t")
@@ -192,6 +212,33 @@ class KeyTest(LanedRepo):
         self.assertEqual(parse_attestation(f"s\n\n{att.trailer()}\n"), att)
         legacy = parse_attestation(f"s\n\nLocal-Gate: v1 tree={TREE} secs=5\n")
         assert legacy is not None and legacy.lanes is None
+
+
+class AuditTest(LanedRepo):
+    def test_trace_reads_of_excluded_files_are_reported(self) -> None:
+        cfg = self.config()
+        lane = cfg.lanes[1]  # tests: excludes docs/** and **/*.py, keeps src/**
+        root = str(self.repo.resolve())
+        trace = "\n".join(
+            [
+                f'123 openat(AT_FDCWD, "{root}/docs/readme.md", O_RDONLY) = 3',
+                f'123 openat(AT_FDCWD, "{root}/src/helper.py", O_RDONLY) = 3',
+                f'123 openat(AT_FDCWD, "{root}/tools/guard.py", O_RDONLY) = -1 ENOENT (No such file)',
+                f'123 openat(AT_FDCWD, "{root}/Cargo.lock", O_RDONLY) = 3',
+                f'123 openat(AT_FDCWD, "{root}/gate.py", O_RDONLY) = 3',
+            ]
+        )
+        audit = audit_trace(self.repo, lane, cfg.run, cfg.source, trace)
+        self.assertEqual(audit.excluded_reads, ("docs/readme.md",))
+        self.assertEqual(audit.opened, 4)
+
+    @unittest.skipUnless(shutil.which("strace"), "strace not on PATH")
+    def test_live_audit_of_a_clean_lane(self) -> None:
+        cfg = self.config()
+        audit = run_audit(self.repo, cfg.lanes[0], cfg.run, cfg.source)
+        assert audit is not None
+        self.assertEqual(audit.excluded_reads, ())
+        self.assertGreater(audit.opened, 0)
 
 
 class StaticTest(LanedRepo):

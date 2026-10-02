@@ -26,7 +26,7 @@ from ci_lint.finding import Status
 from ci_lint.first_pass import DEFAULT_MIN_PRS, DEFAULT_TARGET, collect, render_text
 from ci_lint.github_api import GitHubApiError, default_fetch
 from ci_lint.gate_bare_tools import check_no_bare_rust
-from ci_lint.lane_cache import ToolVersions, lane_key, lookup, tree_entries
+from ci_lint.lane_cache import ToolVersions, lane_key, lookup, run_audit, simulate, tree_entries
 from ci_lint.local_gate import (
     GateConfig,
     check_gate_static,
@@ -110,6 +110,25 @@ def _cmd_lanes(args: argparse.Namespace) -> int:
         return 2
     if not config.lanes:
         print("no [gate.lanes] declared: the gate runs as one command and nothing is cached")
+        return 0
+    if args.audit:
+        lane = next((ln for ln in config.lanes if ln.id == args.audit), None)
+        if lane is None:
+            print(f"no lane {args.audit!r}; declared: {', '.join(ln.id for ln in config.lanes)}", file=sys.stderr)
+            return 2
+        audit = run_audit(repo, lane, config.run, config.source)
+        if audit is None:
+            print("local-gate lanes --audit needs strace on PATH (Linux)", file=sys.stderr)
+            return 2
+        print(f"{audit.lane}: opened {audit.opened} tracked files; excluded but read: {len(audit.excluded_reads)}")
+        for path in audit.excluded_reads:
+            print(f"  UNSAFE EXCLUSION: {path}")
+        print("note: reads by daemons or containers outside the traced process tree are not visible")
+        return 1 if audit.excluded_reads else 0
+    if args.simulate:
+        for sim in simulate(repo, config.lanes, config.run, config.source, commits=args.simulate):
+            print(f"{sim.lane:10} reusable {sim.reusable}/{sim.commits} ({sim.rate:.0%})  most often forced by: "
+                  + (", ".join(sim.top_triggers) or "-"))
         return 0
     entries = tree_entries(repo, "HEAD")
     versions = ToolVersions()
@@ -212,6 +231,10 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
 
     lanes = lg.add_parser("lanes", help="GATE-007: each lane's cache key and hit/miss for HEAD")
     lanes.add_argument("--repo", default=".")
+    lanes.add_argument("--simulate", type=int, metavar="N",
+                       help="replay the last N first-parent commits: how often would each lane's inputs be unchanged?")
+    lanes.add_argument("--audit", metavar="LANE",
+                       help="run LANE under strace and fail if it reads a file its exclusions drop (Linux)")
     lanes.set_defaults(func=_cmd_lanes)
 
     lint = lg.add_parser("lint", help="static GATE-001/002 for a repository with or without ci.toml")
