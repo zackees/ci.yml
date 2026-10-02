@@ -19,7 +19,8 @@ not require a repository to have adopted `ci.toml` schema 3 yet:
     do not depend on `ci.toml` (reused verbatim from ci_lint.settings_audit;
     a 403 is `needs_review`, never a pass).
   - CACHE-025: a `uses: Swatinem/rust-cache@...` step (reused verbatim from
-    ci_lint.rules.swatinem_ban; Rust build caching goes through setup-soldr).
+    ci_lint.rules.swatinem_ban; Rust build caching goes through setup-soldr;
+    no exceptions, maintainer decision 2026-10-02).
   - FLEET-002: the repository's Actions cache usage is at or above
     FLEET_CACHE_WARN_FRACTION of GitHub's 10 GiB per-repository limit.
 

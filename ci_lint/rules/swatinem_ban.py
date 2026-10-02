@@ -17,10 +17,12 @@ ref, any letter case, quoted or not, `- uses:` or `uses:` -- in a workflow
 (`.github/workflows/*.yml|yaml`) or composite action is a violation. A
 commented-out line never matches.
 
-A same-line `# ci-lint: allow CACHE-025 <reason>` excuses that step, for
-exactly two cases (docs/policy-rust.md): a bootstrap job that builds soldr
-itself before any soldr exists, and a benchmark whose subject is
-Swatinem as a comparison baseline.
+No exceptions (maintainer decision 2026-10-02): a same-line
+`# ci-lint: allow CACHE-025 <reason>` does not excuse the step, and
+`ci_lint.exceptions.apply_exceptions` refuses a ci.toml `[[exceptions]]`
+entry for this rule (UNWAIVABLE_RULES). That covers the former carve-outs
+too -- a soldr bootstrap job and a benchmark using Swatinem as its
+comparison baseline both fail.
 """
 
 from __future__ import annotations
@@ -29,7 +31,6 @@ import re
 from pathlib import Path
 
 from ci_lint.finding import Finding
-from ci_lint.rules.test_invocations import allowed
 from ci_lint.workflow_scan import discover_composite_actions, discover_workflow_files
 
 RULE = "CACHE-025"
@@ -40,16 +41,15 @@ FIX = (
     "delete the Swatinem/rust-cache step: Rust build caching goes through zackees/setup-soldr@v0 "
     "(its zccache-backed build cache, on by default -- no `cache: false`, no ZCCACHE_DISABLE) or "
     "soldr itself (`soldr cargo ...`, `soldr cook`); a job not on soldr yet migrates to setup-soldr "
-    "+ `soldr cargo`. Only a bootstrap job building soldr before any soldr exists, or a benchmark "
-    "measuring Swatinem as a comparison baseline, may keep it with a same-line "
-    "`# ci-lint: allow CACHE-025 <reason>` (docs/policy-rust.md, zackees/ci.yml#209)"
+    "+ `soldr cargo`. There are no exceptions -- not a soldr bootstrap job, not a benchmark baseline "
+    "(maintainer decision 2026-10-02; docs/policy-rust.md, zackees/ci.yml#209)"
 )
 
 
 def scan_text(text: str, rel_path: str) -> list[Finding]:
     findings: list[Finding] = []
     for lineno, raw in enumerate(text.splitlines(), start=1):
-        if not _USES_SWATINEM.match(raw) or allowed(raw, RULE):
+        if not _USES_SWATINEM.match(raw):
             continue
         findings.append(
             Finding(
