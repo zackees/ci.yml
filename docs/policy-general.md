@@ -197,11 +197,13 @@ Measured on a 16-core host (soldr):
 | Class | Examples |
 | --- | --- |
 | GitHub Apps (vendor-side, webhook-triggered) | CodeRabbit (status `CodeRabbit`, bot `coderabbitai[bot]`), Dependabot, Codecov/SonarCloud/DeepSource/Snyk/GitGuardian apps |
-| GitHub-side services | `github/codeql-action/*`, `actions/dependency-review-action`, `actions/deploy-pages`, `actions/configure-pages`, `dependabot/fetch-metadata` |
+| GitHub-side services | `github/codeql-action/*`, `actions/dependency-review-action`, `actions/deploy-pages`, `actions/configure-pages` with `static_site_generator`/`generator_config_file`, `dependabot/fetch-metadata` |
 | OIDC / sigstore | `permissions: id-token: write`, `actions/attest-build-provenance`, `actions/attest`, `actions/attest-sbom`, `pypa/gh-action-pypi-publish` |
 | Hosted services that need tokens | `codecov/codecov-action`, `coverallsapp/github-action`, SonarCloud/SonarQube scan actions |
 | Run introspection (GitHub's record of the same run) | `github.run_id` passed to the Actions API: a queue-timing report, a full-coverage aggregator. Declared with `CI_REMOTE_ONLY` (item 5) |
 | Non-Linux hosted runners | `runs-on: macos-*`/`windows-*`: already governed by `GEN-002` (kept out of `ci.yml`) and the `GATE-011` candidate; GATE-012 adds nothing there |
+
+**Stubbed locally, not remote-only.** A plain `actions/configure-pages` only reads the site's Pages metadata. A Pages *build* job uses it, then builds, validates and uploads the site with `actions/upload-pages-artifact`, all of which is local work. A local runner therefore serves configure-pages with a stub that sets its outputs (`base_url`, `origin`, `host`, `base_path`) for the repository's `https://<owner>.github.io/<repo>` site. `upload-pages-artifact` runs against act's artifact server, so the build job runs locally and is local evidence. Only the deploy (`actions/deploy-pages`) stays confined. bosn ci is the reference implementation (`remote_only::classify`, `LOCAL_STUBS`). With `static_site_generator` or `generator_config_file`, configure-pages edits the generator's config from the live site, so it stays in the table above.
 
 The list is open. When a newly adopted action can't run under act, add it to this table and to `ci_lint.remote_only.REMOTE_ONLY_ACTIONS`/`APP_CHECK_NAMES` in the same change.
 
