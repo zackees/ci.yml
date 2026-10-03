@@ -297,6 +297,14 @@ class FirstPassTest(unittest.TestCase):
         rerun = [RunSample("s1", "success", 2, "2026-10-01T00:00:00Z", False)]
         self.assertFalse(classify(rerun).first_pass)
 
+    def test_rerun_after_an_attempt_one_success_is_not_first_pass(self) -> None:
+        runs = [
+            RunSample("s1", "success", 1, "2026-10-01T00:00:00Z", True),
+            RunSample("s1", "success", 2, "2026-10-01T00:00:01Z", True),
+        ]
+        self.assertFalse(classify(runs).first_pass)
+        self.assertEqual(classify(runs).reruns, 1)
+
     def test_collect_with_recorded_responses(self) -> None:
         pulls: JsonValue = [
             {"number": 7, "title": "t", "head": {"ref": "b7"}, "created_at": "2026-10-01T00:00:00Z",

@@ -142,6 +142,7 @@ def classify(runs: list[RunSample]) -> PrClassification:
     first_pass = (
         len(shas) == 1
         and failures == 0
+        and reruns == 0
         and any(r.conclusion == "success" and r.attempt == 1 for r in runs)
     )
     latest = max(runs, key=lambda r: r.created_at) if runs else None
