@@ -22,6 +22,14 @@ merged PRs and the report says so.
 - **attested** = the final head commit carries a `Local-Gate:` trailer
   (`ci_lint.local_gate`), read from the run's own `head_commit.message`.
 
+The companion `first_head` report answers a different question: whether the
+earliest observed workflow-run cohort on each scanned PR's first head passed
+on its first attempt. A green review revision can miss GATE-004 while that head
+passed. Missing/incomplete evidence and overwritten reruns remain unknown;
+the companion includes PRs without runs, which GATE-004 excludes. Its known
+outcome rate always accompanies evidence coverage, and never changes the
+GATE-004 target, verdict, or denominator.
+
 GATE-004 is `needs_review` when at least `min_prs` PRs were sampled and the
 first-pass rate is below `target` -- a trend signal for a human, never a
 merge blocker. Internally every record is a frozen dataclass; the only
@@ -36,6 +44,7 @@ from urllib.parse import quote
 
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.finding import Finding, Status
+from ci_lint.first_head import FirstHeadOutcome, FirstHeadSummary, PrFirstHead, classify_first_head, summarize
 from ci_lint.github_api import FetchFn
 from ci_lint.local_gate import parse_attestation
 
@@ -51,6 +60,9 @@ class RunSample:
     attempt: int
     created_at: str
     attested: bool
+    status: str = "completed"
+    attempt_known: bool = True
+    run_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +88,11 @@ class FirstPassReport:
     scanned: int = 0
     without_runs: int = 0
     limit: int = 0
+    first_heads: tuple[PrFirstHead, ...] = ()
+
+    @property
+    def first_head_summary(self) -> FirstHeadSummary:
+        return summarize(self.first_heads)
 
     @property
     def rate(self) -> float | None:
@@ -106,6 +123,10 @@ class FirstPassReport:
             "scanned": self.scanned,
             "without_runs": self.without_runs,
             "limit": self.limit,
+            "first_head": {
+                "summary": self.first_head_summary.to_json_dict(),
+                "prs": [sample.to_json_dict() for sample in self.first_heads],
+            },
             "prs": [
                 {
                     "number": p.number,
@@ -196,43 +217,50 @@ def _workflow_runs(repo: str, workflow: str, branch: str, fetch: FetchFn, token:
 def collect(repo: str, workflow: str, since: datetime, fetch: FetchFn, token: str,
             *, target: float = DEFAULT_TARGET, min_prs: int = DEFAULT_MIN_PRS, limit: int = 0) -> FirstPassReport:
     prs: list[PrSample] = []
+    first_heads: list[PrFirstHead] = []
     merged_prs = sorted(_merged_prs(repo, since, fetch, token), key=lambda p: _s(p.get("merged_at")), reverse=True)
     selected = merged_prs[:limit] if limit > 0 else merged_prs
     without_runs = 0
     for pr in selected:
+        number = pr.get("number")
+        pr_number = number if isinstance(number, int) else 0
+        title = _s(pr.get("title"))
         head = _d(pr.get("head"))
         branch = _s(head.get("ref"))
         if not branch:
+            first_heads.append(PrFirstHead(pr_number, title, FirstHeadOutcome("", "unknown", "missing-branch")))
             continue
         created, merged = _ts(_s(pr.get("created_at"))), _ts(_s(pr.get("merged_at")))
         runs: list[RunSample] = []
+        companion_runs: list[RunSample] = []
         for raw in _workflow_runs(repo, workflow, branch, fetch, token):
             run = _d(raw)
             # `name` is the run-name (often the PR title); `path` names the file.
             if _s(run.get("path")).split("@", 1)[0].rsplit("/", 1)[-1] != workflow:
                 continue
             at = _s(run.get("created_at"))
-            if not at or not (created <= _ts(at) <= merged):
+            sample = _run_sample(run)
+            if not at:
+                companion_runs.append(sample)
                 continue
-            attempt = run.get("run_attempt")
-            runs.append(
-                RunSample(
-                    head_sha=_s(run.get("head_sha")),
-                    conclusion=_s(run.get("conclusion")),
-                    attempt=attempt if isinstance(attempt, int) else 1,
-                    created_at=at,
-                    attested=parse_attestation(_s(_d(run.get("head_commit")).get("message"))) is not None,
-                )
-            )
+            try:
+                in_window = created <= _ts(at) <= merged
+            except (ValueError, TypeError):
+                companion_runs.append(sample)
+                continue
+            if not in_window:
+                continue
+            runs.append(sample)
+            companion_runs.append(sample)
+        first_heads.append(PrFirstHead(pr_number, title, classify_first_head(companion_runs)))
         if not runs:
             without_runs += 1
             continue
         verdict = classify(runs)
-        number = pr.get("number")
         prs.append(
             PrSample(
-                number=number if isinstance(number, int) else 0,
-                title=_s(pr.get("title")),
+                number=pr_number,
+                title=title,
                 head_shas=verdict.head_shas,
                 failures=verdict.failures,
                 reruns=verdict.reruns,
@@ -243,13 +271,28 @@ def collect(repo: str, workflow: str, since: datetime, fetch: FetchFn, token: st
     prs.sort(key=lambda p: p.number)
     return FirstPassReport(repo=repo, workflow=workflow, since=since.isoformat(), prs=tuple(prs),
                            target=target, min_prs=min_prs, merged_total=len(merged_prs),
-                           scanned=len(selected), without_runs=without_runs, limit=limit)
+                           scanned=len(selected), without_runs=without_runs, limit=limit,
+                           first_heads=tuple(sorted(first_heads, key=lambda sample: sample.number)))
+
+
+def _run_sample(run: dict[str, JsonValue]) -> RunSample:
+    attempt = run.get("run_attempt")
+    run_id = run.get("id")
+    return RunSample(
+        head_sha=_s(run.get("head_sha")), conclusion=_s(run.get("conclusion")),
+        attempt=attempt if isinstance(attempt, int) else 1,
+        created_at=_s(run.get("created_at")),
+        attested=parse_attestation(_s(_d(run.get("head_commit")).get("message"))) is not None,
+        status=_s(run.get("status")),
+        attempt_known=type(attempt) is int and attempt > 0,
+        run_id=run_id if type(run_id) is int else None,
+    )
 
 
 def render_text(report: FirstPassReport) -> str:
     capped = f" (--limit {report.limit}: newest {report.scanned} of {report.merged_total})" if report.limit else ""
     lines = [
-        f"first-pass: {report.repo} workflow '{report.workflow}' since {report.since}",
+        f"first-pass (single-head GATE-004): {report.repo} workflow '{report.workflow}' since {report.since}",
         f"  merged PRs: {report.merged_total} total, {report.scanned} scanned{capped}; "
         f"{report.without_runs} had no pull_request run of '{report.workflow}' (excluded); "
         f"{len(report.prs)} sampled",
@@ -269,4 +312,13 @@ def render_text(report: FirstPassReport) -> str:
     finding = report.finding()
     if finding is not None:
         lines.append(finding.render())
+    summary = report.first_head_summary
+    known_rate = "n/a" if summary.known_rate is None else f"{summary.known_rate:.1%}"
+    coverage = "n/a" if summary.coverage is None else f"{summary.coverage:.1%}"
+    lines.append(f"  earliest-head CI: pass={summary.passed} fail={summary.failed} unknown={summary.unknown}; "
+                 f"known-outcome rate={known_rate}, evidence coverage={coverage}")
+    for sample in report.first_heads:
+        evidence = sample.evidence
+        lines.append(f"  #{sample.number:<6} earliest={evidence.outcome} head={evidence.head_sha or 'unknown'} "
+                     f"reason={evidence.reason} attested={'yes' if evidence.attested else 'unobserved'}")
     return "\n".join(lines)
