@@ -652,6 +652,39 @@ at 120 seconds. This remains a test reliability investigation; do not waive it
 or claim the minimal Linux gate covers the full test graph.
 
 
+## Clud rollout evidence after the initial snapshot
+
+Clud's current source has a one-lane `bosn ci run` gate, seven per-gate
+attestations, and enforced trusted skips for the five routine Linux job
+groups. Its initial `19/34`, `0/34` trailer snapshot below predates this
+verified rollout example; it remains historical evidence.
+
+[PR #1782](https://github.com/zackees/clud/pull/1782) merged after its
+[remote run](https://github.com/zackees/clud/actions/runs/37110407536) passed
+in about 20 seconds. The exact head `7994e15ab06abed5ea9ce73d241f9ffea5a2b965`
+contains a `Local-Gate:` trailer for its actual tree
+`a23469681577136f11a81c9d6ae21569df674f57`, with a recorded local duration
+of 473 seconds and seven `Ci-Attestation:` trailers. The remote log confirms
+`GATE-003` accepted the tree, `GATE-008` trusted the unchanged gate surfaces,
+and `GATE-010` authorized all five skips. `CI OK` succeeded. The three Dylint
+target attestations are Linux-hosted checks, not native Windows/macOS tests.
+This example proves the trusted-skip path works; it does not establish a
+100% first-push rate or independently verify every local test from trailers.
+
+An unchanged current-source baseline on `89b7fb7214fd43836ee34c7d7c985059a873dd6f`
+is running with the privately installed PyPI Bosn 0.1.12 wheel and released
+act2.3 (`3789d32d-feea-4e75-9d16-2e601c06d86e`). Static checks passed; builds,
+Dylint, unit shards and the aggregator still need a terminal result. The fresh
+runner state contains compile misses, so this is a cold baseline. No Clud
+source, test selection, cache-writer arrangement or coverage has changed.
+
+Zccache's current source `b7ccf9f5e4814fc02b69f7d628ec62fad31ec60e` also has
+attestation and trusted-skip declarations, but its isolated test lane still
+uses `bosn run --task gate-test`, rather than the Actions plan through act2.
+Its workflow/cache guard explicitly allows ACT-specific save overrides.
+This is a remaining migration target, not evidence that a manifest is missing.
+No Zccache edits or new workflow files have been made.
+
 ## First-push PR measurement
 
 The [first-pass ledger](fleet-first-pass-ledger.json) records merged PRs since
