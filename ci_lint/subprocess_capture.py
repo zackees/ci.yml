@@ -81,7 +81,7 @@ def _is_pipe(value: ast.expr) -> bool:
     return isinstance(value, ast.Name) and value.id == "PIPE"
 
 
-def scan_source(path: str, source: str) -> list[CaptureViolation]:
+def scan_source(path: str, source: str) -> list[CaptureViolation]:  # noqa: C901
     try:
         tree = ast.parse(source)
     except SyntaxError:

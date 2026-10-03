@@ -31,6 +31,7 @@ jobs:
 
 - **Gate path:** `<ecosystem>/<platform>/<check>`. The ecosystem is `rust`, `python` or `general`. For Rust, the platform is a target triple or `all`.
 - **`lane`:** the local-gate lane (GATE-007) whose pass proves the gate.
+- **`fidelity`** (GATE-011): `native` (default), `vm` (the real OS in a local VM) or `emulation` (Wine, Darling). Only `native`/`vm` lanes may prove a `test` check; an emulation lane attests a scoped check such as `unit`.
 - **`jobs`:** maps a remote job (`<workflow>:<job id>`) to the gates it runs. A job can be skipped only when every one of its gates is attested.
 - **Restricted YAML** (`ci_lint.mini_yaml`, standard library only):
   - allowed: block mappings and sequences, flow `{..}`/`[..]` of scalars, and comments;
@@ -54,7 +55,7 @@ Ci-Attestation: {"at":1790917000,"gate":"rust/x86_64-unknown-linux-gnu/test","ho
 
 ## In CI
 
-1. **Verify job:** `ci-lint local-gate verify --trust --github-output`, with full history.
+1. **Verify job:** `ci-lint local-gate verify --trust --github-output`, with full history. Don't leave ci_lint inside the tree while repository checks run: a `.ci-lint/` directory trips repository-local static checks (zackees/clud's banned-imports check flagged ci_lint's subprocess use). `actions/checkout` refuses a `path` outside `GITHUB_WORKSPACE`, so either (a) check it out at `.ci-lint`, run the verify step, then remove it in an `if: always()` step (`rm -rf .ci-lint`; clud's `Drop ci_lint checkout`), or (b) skip `actions/checkout` and fetch the pinned SHA with `git` into `$RUNNER_TEMP/ci-lint`, invoking `PYTHONPATH=$RUNNER_TEMP/ci-lint`.
    - GATE-008's head-level policy applies first: base policy, surfaces, author, fork, `ci-full`, and the audit sample.
    - Then, per `[gate.trust].skip` job, it outputs **`skip_<job id>`**, which is `true` only when every gate the base definition maps to that job has a valid attestation.
    - Each skip job's `if:` consumes `needs.<verify>.outputs.skip_<job id>`.

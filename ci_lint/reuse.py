@@ -71,7 +71,7 @@ def _as_list(value: JsonValue) -> list[JsonValue]:
     return value if isinstance(value, list) else []
 
 
-def compute_reuse(
+def compute_reuse(  # noqa: C901
     *,
     repo: str,
     head_sha: str,

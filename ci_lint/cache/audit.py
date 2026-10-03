@@ -529,7 +529,7 @@ def _current_base_entries(classified: tuple[ClassifiedEntry, ...]) -> dict[str, 
     return out
 
 
-def _check_cache_008(
+def _check_cache_008(  # noqa: C901
     classified: tuple[ClassifiedEntry, ...],
     *,
     graphql: GraphQLFn | None,

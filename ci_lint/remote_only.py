@@ -68,10 +68,13 @@ CODERABBIT_SNIPPET = (
 
 @dataclass(frozen=True)
 class RemoteOnlyAction:
-    """A `uses:` prefix act cannot run, and why."""
+    """A `uses:` prefix act cannot run, and why. With `only_with`, the action
+    is act-impossible only when the step sets one of those inputs; without
+    them a local runner serves it with a stub (GATE-012)."""
 
     prefix: str
     why: str
+    only_with: tuple[str, ...] = ()
 
 
 # The registry of act-impossible actions. Extend it together with the table
@@ -80,7 +83,14 @@ REMOTE_ONLY_ACTIONS: tuple[RemoteOnlyAction, ...] = (
     RemoteOnlyAction("github/codeql-action/", "code scanning needs GitHub's code-scanning backend"),
     RemoteOnlyAction("actions/dependency-review-action", "needs GitHub's dependency graph API"),
     RemoteOnlyAction("actions/deploy-pages", "deploys to GitHub Pages"),
-    RemoteOnlyAction("actions/configure-pages", "needs a GitHub Pages site"),
+    # A plain configure-pages only reads Pages metadata, and bosn ci stubs its
+    # outputs locally, so a Pages build job runs under act; only a step that
+    # edits a site generator's config from the live site is act-impossible.
+    RemoteOnlyAction(
+        "actions/configure-pages",
+        "edits the site generator's config from the live Pages site",
+        only_with=("static_site_generator", "generator_config_file"),
+    ),
     RemoteOnlyAction("actions/attest-build-provenance", "needs an OIDC token and sigstore"),
     RemoteOnlyAction("actions/attest-sbom", "needs an OIDC token and sigstore"),
     RemoteOnlyAction("actions/attest", "needs an OIDC token and sigstore"),
@@ -169,9 +179,17 @@ def _app_check(text: str, names: tuple[str, ...] = APP_CHECK_NAMES) -> str | Non
     return next((name for name in names if name in low), None)
 
 
-def _remote_only(uses: str) -> RemoteOnlyAction | None:
+def _remote_only(uses: str, inputs: YamlValue = None) -> RemoteOnlyAction | None:
     low = uses.lower()
-    return next((a for a in REMOTE_ONLY_ACTIONS if low.startswith(a.prefix)), None)
+    given = as_dict(inputs)
+    return next(
+        (
+            a
+            for a in REMOTE_ONLY_ACTIONS
+            if low.startswith(a.prefix) and (not a.only_with or any(name in given for name in a.only_with))
+        ),
+        None,
+    )
 
 
 # ── .coderabbit.yaml ───────────────────────────────────────────────────────
@@ -265,7 +283,7 @@ def _job_findings(wf: ParsedYamlFile, document: YamlValue, context: Confinement)
                 findings.append(finding)
         for step in steps_of(job):
             uses = step.get("uses")
-            action = _remote_only(uses) if isinstance(uses, str) else None
+            action = _remote_only(uses, step.get("with")) if isinstance(uses, str) else None
             if action is None:
                 continue
             gate = _combine(job_gate, classify_if(step.get("if")))

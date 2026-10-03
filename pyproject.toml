@@ -21,3 +21,19 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["ci_lint*"]
+
+# PY-004 (zackees/ci.yml#229): the function-complexity ratchet, applied to
+# ci_lint itself. Only the ratchet's two rules are selected -- C901 at ruff's
+# default ceiling (max-complexity 10) and RUF100, which flags a `# noqa: C901`
+# left on a function that no longer needs it. Existing offenders carry a
+# line-level `# noqa: C901`; the selftest runs this check (test_complexity).
+[tool.ruff]
+line-length = 120
+# Fixture repositories are test data with their own configs, not ci_lint code.
+extend-exclude = ["ci_lint/tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["C901", "RUF100"]
+# Codes other linters (and ruff rules this file does not select) honour in
+# existing `# noqa` comments; RUF100 must not report those as unused.
+external = ["BLE001", "F401", "N802", "PLC0415", "S310"]

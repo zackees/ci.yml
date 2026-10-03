@@ -286,7 +286,7 @@ def _gate(jobs: dict[str, dict[str, YamlValue]]) -> tuple[str | None, set[str] |
     return None, None
 
 
-def check_gen_021(repo_root: Path, default_branch: str = "main") -> list[Finding]:
+def check_gen_021(repo_root: Path, default_branch: str = "main") -> list[Finding]:  # noqa: C901
     findings: list[Finding] = []
     for wf in load_workflows(repo_root):
         if wf.status != LoadStatus.OK:
@@ -409,7 +409,7 @@ def _consumption_findings(
     return out
 
 
-def _coverage_findings(
+def _coverage_findings(  # noqa: C901
     path: str, reuse_lines: list[str], bases: dict[str, str], skipped_on_reuse: list[str]
 ) -> list[Finding]:
     out: list[Finding] = []

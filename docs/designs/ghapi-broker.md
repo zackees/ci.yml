@@ -84,7 +84,7 @@ SQLite in the daemon state dir (`~/.clud/state/gh-broker.sqlite`) with two table
 1. **Read-through ETag cache for `gh api` GET.** It covers the shim classification, daemon endpoint, store, ETag/304, TTL, single-flight and the ledger. This is the largest saving for the least risk.
 2. Incremental rewrites (`since=`, `created>=`, stop-at-cached paging) and merge for comments, runs, jobs and check runs. Porcelain `run view` / `pr checks` go through REST projections.
 3. Subscriptions for `pr_merge_watch.py`, the budget floor and reconciliation.
-4. The ci-lint `GHAPI-001` static signal. Landed ahead of phases 1-3: `precheck` group 19, `ci_lint.rules.ghapi_reread` (see the policy's "Static signal" table).
+4. The ci-lint `GHAPI-001` static signal. Landed ahead of phases 1-3: `precheck` group 20, `ci_lint.rules.ghapi_reread` (see the policy's "Static signal" table).
 
 ## Acceptance (per phase, on a real machine)
 

@@ -292,7 +292,7 @@ def _associated_pr(api: _Api, req: ReuseRequest) -> tuple[int, str]:
     return number, head_sha
 
 
-def _select_run(
+def _select_run(  # noqa: C901
     runs: list[dict[str, JsonValue]],
     workflow: str,
     req: ReuseRequest,
@@ -336,7 +336,7 @@ def _select_run(
     raise _Stop("no-successful-run", f"no completed, successful {workflow} pull_request run on the PR head")
 
 
-def _check_jobs(api: _Api, req: ReuseRequest, runs: list[RunEvidence]) -> tuple[JobEvidence, ...]:
+def _check_jobs(api: _Api, req: ReuseRequest, runs: list[RunEvidence]) -> tuple[JobEvidence, ...]:  # noqa: C901
     by_name: dict[str, list[JobEvidence]] = {}
     for run in runs:
         for raw in _paged(api, f"/repos/{req.repo}/actions/runs/{run.run_id}/jobs?filter=latest", "jobs", "too-many-jobs"):

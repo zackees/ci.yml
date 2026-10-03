@@ -91,7 +91,7 @@ def _lane_keys_for_job(job_id: str, lane_digests: dict[str, JsonValue]) -> list[
     return []
 
 
-def _verify_reuse(
+def _verify_reuse(  # noqa: C901
     job_id: str,
     plan: dict[str, JsonValue],
     reuse: dict[str, JsonValue] | None,

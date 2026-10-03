@@ -297,6 +297,14 @@ class FirstPassTest(unittest.TestCase):
         rerun = [RunSample("s1", "success", 2, "2026-10-01T00:00:00Z", False)]
         self.assertFalse(classify(rerun).first_pass)
 
+    def test_rerun_after_an_attempt_one_success_is_not_first_pass(self) -> None:
+        runs = [
+            RunSample("s1", "success", 1, "2026-10-01T00:00:00Z", True),
+            RunSample("s1", "success", 2, "2026-10-01T00:00:01Z", True),
+        ]
+        self.assertFalse(classify(runs).first_pass)
+        self.assertEqual(classify(runs).reruns, 1)
+
     def test_collect_with_recorded_responses(self) -> None:
         pulls: JsonValue = [
             {"number": 7, "title": "t", "head": {"ref": "b7"}, "created_at": "2026-10-01T00:00:00Z",
@@ -373,6 +381,32 @@ class TreeProofTest(TempRepoCase):
         repo = self._repo(proves=True, gate_script="", entry="print('hi')\n")
         self.assertEqual(sorted(self._gate_009(repo)),
                          sorted([f"{Status.VIOLATION.value}:local-gate.toml", f"{Status.VIOLATION.value}:bosn.toml"]))
+
+
+class BosnCiRunnerTest(TempRepoCase):
+    """GATE-005/009 with bosn's act engine as the isolated runner (zackees/clud)."""
+
+    def _repo(self, script: str) -> Path:
+        files = {
+            "local-gate.toml": ISO_GATE.replace('runner = ["bosn", "run", "--task", "test"]',
+                                                'runner = ["bosn", "ci", "run"]') + "proves-tree = true\n",
+            "scripts/test_wrapper.sh": ISO_GUARD,
+            "ci/gate.py": 'RUNNER = ("bosn", "ci", "run")\n' + script,
+        }
+        for rel, text in files.items():
+            (self.tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.tmp / rel).write_text(text, encoding="utf-8")
+        return self.tmp
+
+    def _rules(self, repo: Path) -> list[str]:
+        return sorted(f.rule for f in check_gate_static(self.config(repo), repo) if f.rule in ("GATE-005", "GATE-009"))
+
+    def test_run_record_proof_satisfies_both(self) -> None:
+        script = 'ok = r["workspace"] == ROOT and r["sha"] == HEAD and r["dirty"] is None\n'
+        self.assertEqual(self._rules(self._repo(script)), [])
+
+    def test_missing_run_record_check(self) -> None:
+        self.assertEqual(self._rules(self._repo("print('trust the exit code')\n")), ["GATE-009"])
 
 
 class IsolationTest(TempRepoCase):

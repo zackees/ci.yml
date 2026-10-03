@@ -257,7 +257,7 @@ def cardinality(ci: CiToml, per: str | None) -> int:
     return _cardinality(ci, per)
 
 
-def check_cache_004(ci: CiToml) -> tuple[list[Finding], str]:
+def check_cache_004(ci: CiToml) -> tuple[list[Finding], str]:  # noqa: C901
     findings: list[Finding] = []
     budget = parse_size(ci.cache.budget)
     if budget is None:

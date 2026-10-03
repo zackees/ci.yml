@@ -305,7 +305,7 @@ def _resolve_publish_mode(ci: CiToml, flow_publish: str | None) -> str:
     return flow_publish
 
 
-def compute_plan(
+def compute_plan(  # noqa: C901
     ci: CiToml,
     *,
     event_name: str,

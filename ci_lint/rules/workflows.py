@@ -379,7 +379,7 @@ def _check_platform_runs_on(ci: CiToml) -> list[Finding]:
     return findings
 
 
-def check_run_001(ci: CiToml, workflows: list[ParsedYamlFile]) -> list[Finding]:
+def check_run_001(ci: CiToml, workflows: list[ParsedYamlFile]) -> list[Finding]:  # noqa: C901
     findings: list[Finding] = []
     platform_runs_on_checked = False
     for wf in workflows:
@@ -536,7 +536,7 @@ def check_wf_002(workflows: list[ParsedYamlFile]) -> list[Finding]:
     return findings
 
 
-def check_wf_003(
+def check_wf_003(  # noqa: C901
     workflows: list[ParsedYamlFile], actions: list[ParsedYamlFile]
 ) -> list[Finding]:
     findings: list[Finding] = []

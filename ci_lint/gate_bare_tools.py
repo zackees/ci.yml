@@ -29,6 +29,7 @@ import re
 import tomllib
 from pathlib import Path
 
+from ci_lint.yaml_io import YamlValue
 from ci_lint.finding import Finding
 from ci_lint.rules.test_invocations import allowed, raw_lines_of, with_yaml_comment
 from ci_lint.rules.tools import find_commands
@@ -41,6 +42,8 @@ def _bare(tokens: list[str]) -> str | None:
     if not tokens:
         return None
     cmd = tokens[0].rsplit("/", 1)[-1]
+    if len(tokens) > 1 and tokens[1].startswith(("=", "+=", ":=")):
+        return None  # `cargo = tomllib.loads(...)`: an assignment, not a command
     return cmd if cmd in BARE_RUST else None
 
 
@@ -93,6 +96,18 @@ def _python_findings(text: str, path: str) -> list[Finding]:
     return findings
 
 
+def _step_findings(step: dict[str, YamlValue], path: str, where: str, raw: list[str]) -> list[Finding]:
+    run = step.get("run")
+    if not isinstance(run, str):
+        return []
+    shell = step.get("shell")
+    if isinstance(shell, str) and shell.split()[0].rsplit("/", 1)[-1].startswith("python"):
+        # A Python step: argv lists, not shell words (clud's auto-release.yml
+        # `cargo = tomllib.loads(...)`).
+        return _python_findings(run, path)
+    return _shell_findings(run, path, where, raw)
+
+
 def _workflow_findings(repo_root: Path) -> list[Finding]:
     from ci_lint.workflow_scan import as_dict, jobs_of, load_composite_actions, load_workflows, steps_of  # noqa: PLC0415
     from ci_lint.yaml_io import LoadStatus  # noqa: PLC0415
@@ -104,9 +119,7 @@ def _workflow_findings(repo_root: Path) -> list[Finding]:
         raw = raw_lines_of(repo_root / wf.path)
         for job_id, job in jobs_of(as_dict(wf.document)).items():
             for step in steps_of(job):
-                run = step.get("run")
-                if isinstance(run, str):
-                    findings.extend(_shell_findings(run, wf.path, f"job '{job_id}'", raw))
+                findings.extend(_step_findings(step, wf.path, f"job '{job_id}'", raw))
     for action in load_composite_actions(repo_root):
         if action.status != LoadStatus.OK:
             continue

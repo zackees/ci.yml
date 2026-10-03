@@ -55,6 +55,7 @@ TRAILER_KEY = "Ci-Attestation"
 VERSION = 1
 STAMP_HEX = 32
 ECOSYSTEMS: tuple[str, ...] = ("rust", "python", "general")
+FIDELITIES: tuple[str, ...] = ("native", "vm", "emulation")
 _GATE = re.compile(r"^(?P<eco>[a-z]+)/(?P<platform>[A-Za-z0-9_.-]+)/(?P<check>[a-z0-9][a-z0-9-]*)$")
 _TRIPLE = re.compile(r"^[a-z0-9_]+(-[a-z0-9_]+){2,3}$")
 _TRAILER = re.compile(rf"^{TRAILER_KEY}:\s*(?P<body>\{{.*\}})\s*$", re.MULTILINE)
@@ -65,6 +66,12 @@ _JOB = re.compile(r"^[^/:]+:[^:]+$")
 class GateDef:
     path: str
     lane: str
+    # GATE-011 (zackees/ci.yml#202): how faithfully the lane reproduces the
+    # gate's platform. `native` (default): the real platform or the same
+    # host triple. `vm`: the real OS in a local VM (a dockur/windows guest,
+    # a macOS Recovery guest). `emulation`: a translation layer (Wine,
+    # Darling). Only native/vm may prove a `test` check.
+    fidelity: str = "native"
 
 
 @dataclass(frozen=True)
@@ -116,7 +123,7 @@ def validate_gate_path(path: str) -> str | None:
     return None
 
 
-def parse_definition(text: str, *, source: str = DEFINITION_FILE, lanes: tuple[str, ...] | None = None) -> DefinitionLoad:
+def parse_definition(text: str, *, source: str = DEFINITION_FILE, lanes: tuple[str, ...] | None = None) -> DefinitionLoad:  # noqa: C901
     findings: list[Finding] = []
 
     def bad(message: str, fix: str) -> None:
@@ -150,12 +157,26 @@ def parse_definition(text: str, *, source: str = DEFINITION_FILE, lanes: tuple[s
         if not isinstance(lane, str) or not lane:
             bad(f"gate '{path}' names no `lane`", "set `{lane: <local-gate lane id>}`")
             continue
-        if isinstance(body, dict) and set(body) - {"lane"}:
-            bad(f"gate '{path}' has unknown key(s) {', '.join(sorted(set(body) - {'lane'}))}", "only `lane` is defined")
+        if isinstance(body, dict) and set(body) - {"lane", "fidelity"}:
+            bad(f"gate '{path}' has unknown key(s) {', '.join(sorted(set(body) - {'lane', 'fidelity'}))}",
+                "only `lane` and `fidelity` are defined")
+        fidelity = body.get("fidelity", "native") if isinstance(body, dict) else "native"
+        if fidelity not in FIDELITIES:
+            findings.append(Finding(rule="GATE-011", path=source,
+                                    message=f"gate '{path}' declares fidelity {fidelity!r}",
+                                    fix=f"use one of {', '.join(FIDELITIES)}"))
+            fidelity = "native"
+        if fidelity == "emulation" and path.rsplit("/", 1)[-1] == "test":
+            findings.append(Finding(
+                rule="GATE-011", path=source,
+                message=f"gate '{path}' is a `test` check proven by an emulation lane; emulation (Wine, Darling) "
+                "cannot stand in for the platform's test suite",
+                fix="attest a narrower, distinctly named check (e.g. `.../unit` for the crates that pass in full) or "
+                "prove `test` with a native or vm lane"))
         if lanes is not None and lane not in lanes:
             bad(f"gate '{path}' names lane '{lane}', which the local gate does not declare",
                 f"use one of: {', '.join(lanes) or '(no lanes declared)'}")
-        gates.append(GateDef(path, lane))
+        gates.append(GateDef(path, lane, str(fidelity)))
     jobs: list[JobGates] = []
     raw_jobs = doc.get("jobs")
     if raw_jobs is not None and not isinstance(raw_jobs, dict):
@@ -314,7 +335,7 @@ class CommitAttestations:
         return tuple(s for s in self.statuses if s.state not in (VALID, MISSING))
 
 
-def verify_commit(repo: Path, sha: str, definition: Definition) -> CommitAttestations:
+def verify_commit(repo: Path, sha: str, definition: Definition) -> CommitAttestations:  # noqa: C901
     message = _git(repo, "log", "-1", "--format=%B", sha) or ""
     tree = (_git(repo, "rev-parse", f"{sha}^{{tree}}") or "").strip()
     parents = tuple((_git(repo, "log", "-1", "--format=%P", sha) or "").split())
