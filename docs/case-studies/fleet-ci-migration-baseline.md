@@ -1,6 +1,6 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
-## Latest validation: kernel shadow rollout merged; shared permission fix under review
+## Latest validation: kernel shadow rollout merged; shared runner corrections pending
 
 Kernal-api's full remote run `37101690833` passed Linux, Dylint and all five
 native platform build/test lanes. [PR #399](https://github.com/zackees/kernal-api/pull/399)
@@ -32,10 +32,34 @@ A live act2 Docker-execution regression in an owned harness reproduced
 `umask 0000`. The shared candidate sets `0022` only for emulated hosted runner
 images, using an argument-preserving `exec` wrapper. Its live regression
 passed mask, literal metacharacters, working-directory and exit-status checks.
-An actual workflow fixture passed in 9.801 seconds: hosted runner directories
-and files were `755` and `644`; an explicit job container retained `0000`.
-The non-image container regressions and focused runner regressions passed.
-The shared fix is not yet merged, released or pinned by bosn, and the kernel
+An initial workflow fixture passed in 9.801 seconds: hosted runner directories
+and files were `755` and `644`. Docker's native mask varies between daemons;
+the corrected live regression compares an explicit container with direct
+Docker execution instead of assuming `0000` universally.
+
+The first remote run `37106193075` failed Linux: the proposed `/bin/sh`
+wrapper dropped hyphenated action-input environment names, breaking stock
+artifact and composite actions. This is a real first-push regression.
+A live environment regression reproduced it before correction to
+`bash --noprofile --norc -p`, which preserves those names and ignores shell
+bootstrap hooks. All affected runner fixtures then passed locally in
+31.987 seconds; the full artifact package passed in 102.131 seconds.
+The complete local suite is not green: three remaining failures reproduced
+on unchanged act2 base `d3f33ec` in the same nested harness. The Git package
+passed in 72.055 seconds after configuring its test author identity.
+
+[Act2 #7](https://github.com/zackees/act2/issues/7) tracks the independently
+reproduced containerd image-store lookup bug: inspecting a multi-platform tag
+without a platform returns its default architecture, falsely reporting a
+locally present ARM variant absent. A separate shared draft turns the live
+regression green and covers missing variants, server errors, ignored query
+parameters and older APIs. Native execution and QEMU availability still need
+separate proof; image presence alone proves neither.
+
+[Act2 PR #6](https://github.com/zackees/act2/pull/6) was closed by the owner's
+account without a comment while its first checks ran. The correction is
+pushed, but reopening awaits clarification of that external closure.
+Neither shared fix is yet merged, released or pinned by bosn, and the kernel
 APE test has not yet passed on that runner. This is evidence for the next
 shared correction, not proof of a completed cache-policy migration.
 
