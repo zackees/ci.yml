@@ -68,9 +68,9 @@ _FILE_NOQA = re.compile(r"^\s*#\s*(?:ruff|flake8)\s*:\s*noqa\b\s*(?::(?P<codes>.
 _LINE_NOQA_C901 = re.compile(r"#\s*noqa\s*:[^#\n]*\bC901\b")
 
 RUST_FIX = (
-    "set `cognitive_complexity = \"warn\"` and `too_many_lines = \"warn\"` under `[workspace.lints.clippy]`, "
+    'set `cognitive_complexity = "warn"` and `too_many_lines = "warn"` under `[workspace.lints.clippy]`, '
     "give every member `[lints] workspace = true`, keep clippy.toml's thresholds at or below the defaults "
-    "(25 / 100), and mark each existing offender `#[expect(clippy::<lint>, reason = \"...\")]` -- never "
+    '(25 / 100), and mark each existing offender `#[expect(clippy::<lint>, reason = "...")]` -- never '
     "`allow` (docs/policy-rust.md, RUST-018)"
 )
 PY_FIX = (
@@ -147,7 +147,9 @@ def _member_dirs(repo_root: Path, workspace: dict[str, TomlValue]) -> list[Path]
     members = workspace.get("members")
     excluded_raw = workspace.get("exclude")
     excluded = {
-        (repo_root / e).resolve() for e in (excluded_raw if isinstance(excluded_raw, list) else []) if isinstance(e, str)
+        (repo_root / e).resolve()
+        for e in (excluded_raw if isinstance(excluded_raw, list) else [])
+        if isinstance(e, str)
     }
     dirs: list[Path] = []
     for pattern in members if isinstance(members, list) else []:
@@ -317,7 +319,7 @@ def _check_ruff_config(config: RuffConfig) -> list[Finding]:
                 Finding(rule=PY_RULE, path=config.path, message=f"ruff ignores `{code}` repo-wide", fix=PY_FIX)
             )
     per_file = config.lint.get("per-file-ignores")
-    for pattern, codes in (per_file.items() if isinstance(per_file, dict) else []):
+    for pattern, codes in per_file.items() if isinstance(per_file, dict) else []:
         listed = [c.strip().upper() for c in codes if isinstance(c, str)] if isinstance(codes, list) else []
         if _covers(listed, "C901"):
             findings.append(
@@ -447,15 +449,22 @@ def check_complexity(repo_root: Path) -> ComplexityReport:
 
 
 def _cmd_complexity(args: argparse.Namespace) -> int:
-    report = check_complexity(Path(args.repo).resolve())
+    repo_root = Path(args.repo).resolve()
+    report = check_complexity(repo_root)
     findings, debt = report.findings, report.debt
     if args.json:
         print(
             json.dumps(
                 {
                     "findings": [
-                        {"rule": f.rule, "status": f.status.value, "path": f.path, "line": f.line,
-                         "message": f.message, "fix": f.fix}
+                        {
+                            "rule": f.rule,
+                            "status": f.status.value,
+                            "path": f.path,
+                            "line": f.line,
+                            "message": f.message,
+                            "fix": f.fix,
+                        }
                         for f in findings
                     ],
                     "debt": {"rust_expects": debt.rust_expects, "py_noqas": debt.py_noqas},
@@ -472,11 +481,24 @@ def _cmd_complexity(args: argparse.Namespace) -> int:
         f"{debt.py_noqas} Python `noqa: C901`",
         file=sys.stderr,
     )
-    return 1 if violations else 0
+    runtime_exit = 0
+    if args.python_runtime:
+        from ci_lint.complexity_runtime import check_python_runtime
+
+        result = check_python_runtime(repo_root)
+        print(result.stdout, end="", file=sys.stderr if args.json else sys.stdout)
+        print(result.stderr, end="", file=sys.stderr)
+        runtime_exit = result.returncode
+    return max(1 if violations else 0, runtime_exit)
 
 
 def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     p = sub.add_parser("complexity", help="function-complexity ratchet: clippy and ruff ceilings (RUST-018, PY-004)")
     p.add_argument("--repo", default=".")
     p.add_argument("--json", action="store_true")
+    p.add_argument(
+        "--python-runtime",
+        action="store_true",
+        help="run installed Ruff on every tracked Python file, including discovery-excluded files",
+    )
     p.set_defaults(func=_cmd_complexity)
