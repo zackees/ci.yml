@@ -752,8 +752,25 @@ The [remote CI run](https://github.com/zackees/zccache/actions/runs/37140388351)
 accepted the exact tree (`GATE-003`). `GATE-008` correctly returned
 `surface-changed` because this PR edits workflow definitions, so all four
 covered jobs still run remotely. This confirms source proof and fail-closed
-trust, not the later ordinary-PR skip path. The rollout PR is still open
-at this observation; its complete remote first-push outcome remains pending.
+trust, not the later ordinary-PR skip path. [PR #1886](https://github.com/zackees/zccache/pull/1886) subsequently merged
+at `95b8f604ed8e7b35973b100a9e798cbd33d5389a` after all nine triggered
+workflows passed on the single pushed head: CI, Integration, Linux, macOS,
+Windows, Python Tests, Filesystem Matrix, Wrapper end-to-end and Perf Guard.
+The Windows x64/ARM Test jobs executed successfully. Existing intentional
+skipped checks are preserved; no failed run was rerun or discarded. This
+proves one successful attested rollout, not a fleet-wide 100% rate.
+
+The [refreshed Zccache GATE-004 scan](zccache-first-pass-2026-10-03.json),
+using the same start date and `ci.yml`, reports 10/14 (71.4%) under its strict
+single-head criterion, with trailers on 4/14; all four attested PRs meet
+that criterion. The four misses (#1868, #1872, #1874, #1876) have multiple
+pushed heads and zero recorded failed runs or reruns. They are revisions,
+not evidence of failed CI. GATE-004's binding single-head adoption definition
+and default 80% threshold remain unchanged; the user's fleet target is 100%.
+The old 5/9, 0/9 snapshot below remains historical. [Issue #270](https://github.com/zackees/ci.yml/issues/270)
+tracks companion earliest-head pass/fail/unknown reporting so the adoption
+metric is kept distinct from actual CI reliability. A single-workflow scan
+also remains distinct from all nine rollout workflows above.
 
 ## First-push PR measurement
 
