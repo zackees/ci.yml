@@ -1,5 +1,45 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
+## Failed Fbuild cache seed: caller status wiring proven
+
+The unchanged-main local run `6bd1f21d-9c65-4737-b779-a4e63f587502` failed the
+workspace test **link**, yet setup-soldr saved its build cache (`id=5`) and
+target cache (`id=6`). The pinned action at `d17a58eb2cea` has the
+setup-soldr#559 failed-job save gate, but its empty `job-status` input preserves
+legacy always-save behavior. Fbuild's two Ubuntu calls omitted that input.
+Later successful runs restored the failed job's immutable build-cache seed
+as an exact hit and could not update that generation with newly compiled
+content. This is evidence of an incomplete failed-build seed, not evidence
+that the cache's existing compiler objects are corrupt.
+
+The unpushed Fbuild correction `aa4096ae0ee7` passes `${{ job.status }}` to
+both calls and rotates only the workspace generation to
+`check-ubuntu-py312-v1`, retaining the facade job's valid existing cache.
+Twenty-one focused tests passed after a regression first failed on the
+missing input; code review passed. A private negative fixture compiled a
+small real Rust crate, exited 42, and completed as failure in local run
+`d1ef2cf2-1202-421d-be19-47f1b9a54100`: both build and target layers reported
+`failed-job-skip`. The fixture is not published or attested as a passing
+gate. The correction's full positive gate is still required before push.
+
+The action's whole-job status guard is conservative: it also suppresses a
+save after a pure test assertion failure, whereas the fleet's `CACHE-008`
+table distinguishes failed compilation from test failure alone. That
+distinction remains **needs review** in this migration; this case study
+does not silently redefine the binding table or claim a new checker signal.
+Further speed work must reuse permitted compilation inputs/intermediates:
+`CACHE-007` forbids linked test binaries, incremental directories and whole
+target trees in cross-run caches or persistent stores. A full target
+snapshot is not an acceptable shortcut around the measured compile cost.
+
+Bosn's runner-tools version PR
+[#442](https://github.com/zackees/bosn/pull/442) merged at `bacf665de6a1`.
+[Exact-SHA full CI 37114032741](https://github.com/zackees/bosn/actions/runs/37114032741)
+passed every required cell, including Docker tests and both hosted macOS
+wheel smokes. Release dry-run
+[37114605896](https://github.com/zackees/bosn/actions/runs/37114605896) is
+running; publication remains pending.
+
 ## Fbuild migration: local proof passes; runtime warm speed remains unproven
 
 The first remote run of [Fbuild draft PR #1636](https://github.com/FastLED/fbuild/pull/1636)
