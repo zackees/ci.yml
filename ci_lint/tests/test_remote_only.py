@@ -105,6 +105,21 @@ class PrWorkflowTest(_Repo):
                    "      - uses: codecov/codecov-action@v5\n        if: github.ref == 'refs/heads/main'\n")
         self.assertEqual(check_pr_workflows(self.tmp), [])
 
+    def test_pages_build_job_on_pr_passes_but_generator_config_does_not(self) -> None:
+        # A plain configure-pages only reads Pages metadata; a local runner
+        # stubs it (bosn ci), so the build job runs under act. Editing a
+        # generator's config from the live site is still act-impossible.
+        self.write(".github/workflows/ci.yml", WF_HEAD +
+                   "  build-site:\n    runs-on: ubuntu-24.04\n    permissions:\n      pages: write\n"
+                   "    steps:\n      - run: make site\n      - uses: actions/configure-pages@v5\n"
+                   "      - uses: actions/upload-pages-artifact@v3\n        with:\n          path: site\n"
+                   "  generated:\n    runs-on: ubuntu-24.04\n    steps:\n"
+                   "      - uses: actions/configure-pages@v5\n        with:\n          static_site_generator: next\n")
+        findings = check_pr_workflows(self.tmp)
+        self.assertEqual(self.statuses(findings), [Status.VIOLATION])
+        self.assertIn("job 'generated'", findings[0].message)
+        self.assertIn("generator", findings[0].message)
+
     def test_unknown_if_is_needs_review(self) -> None:
         self.write(".github/workflows/ci.yml", WF_HEAD + "  cov:\n    if: success()\n    runs-on: ubuntu-24.04\n"
                    "    steps:\n      - uses: codecov/codecov-action@v5\n")
