@@ -97,6 +97,25 @@ class DefinitionTest(unittest.TestCase):
         self.assertIn("undeclared gate(s) rust/all/nope", loaded.findings[0].message)
 
 
+class FidelityTest(unittest.TestCase):
+    """GATE-011 -- which lane kinds may prove which checks (zackees/ci.yml#202)."""
+
+    def rules(self, gates: str) -> list[str]:
+        return [f.rule + ":" + f.message for f in parse_definition("version: 1\ngates:\n" + gates).findings]
+
+    def test_emulation_may_prove_unit_but_not_test(self) -> None:
+        self.assertEqual(self.rules("  rust/x86_64-pc-windows-msvc/unit: {lane: wine, fidelity: emulation}\n"), [])
+        found = self.rules("  rust/x86_64-pc-windows-msvc/test: {lane: wine, fidelity: emulation}\n")
+        self.assertTrue(found and found[0].startswith("GATE-011:"), found)
+
+    def test_vm_and_native_may_prove_test(self) -> None:
+        self.assertEqual(self.rules("  rust/x86_64-pc-windows-msvc/test: {lane: winvm, fidelity: vm}\n"
+                                    "  rust/x86_64-unknown-linux-gnu/test: {lane: tests}\n"), [])
+
+    def test_unknown_fidelity(self) -> None:
+        self.assertTrue(any(r.startswith("GATE-011:") for r in self.rules("  rust/all/fmt: {lane: rust, fidelity: magic}\n")))
+
+
 class GitCase(unittest.TestCase):
     def setUp(self) -> None:
         if shutil.which("git") is None:
