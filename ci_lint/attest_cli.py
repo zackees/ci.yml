@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.parse
 from pathlib import Path
 
@@ -101,6 +102,23 @@ def _cmd_keys(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     message = run_captured(["git", "-C", str(repo), "log", "-1", "--format=%B", args.commit]).stdout
     records = {p.attestation.gate: p.attestation for p in parse_trailers(message) if p.attestation is not None}
+    if args.promote_merged_pr:
+        from ci_lint.attestation_promotion import PromotionInput, promote  # noqa: PLC0415
+        from ci_lint.attestations import CommitAttestations, GateStatus  # noqa: PLC0415
+
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
+        slug = args.github_repo or os.environ.get("GITHUB_REPOSITORY", "")
+        promoted = promote(repo, PromotionInput(
+            slug, lineage.sha, os.environ.get("GITHUB_EVENT_NAME", ""), os.environ.get("GITHUB_REF", ""),
+            args.main_ref.removeprefix("origin/"), int(time.time()), args.promotion_max_age_hours * 3600, args.fetch_promotion_source,
+        ), default_fetch, token)
+        print(f"ci-lint attest keys: promotion {promoted.reason}; source={promoted.source}")
+        for record in promoted.records:
+            records[record.gate] = record
+        statuses = {status.gate: status for status in result.statuses}
+        for record in promoted.records:
+            statuses[record.gate] = GateStatus(record.gate, VALID, f"promoted from {promoted.source}")
+        result = CommitAttestations(result.sha, tuple(statuses.values()), result.malformed)
     lines: list[str] = []
     index = 0
     # Gates a remote job depends on (and therefore cache hydration, which
@@ -209,6 +227,11 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     k.add_argument("--slots", type=int, default=8, help="max side entries (one cache-save step per slot)")
     k.add_argument("--github-output", action="store_true",
                    help="write key_<i> (full), stem_<i> (append ${{ env.PR_CACHE_TAG }}), path_<i>, count, lineage")
+    k.add_argument("--promote-merged-pr", action="store_true",
+                   help="on default-branch push, publish exact-tree trusted merged-PR evidence under main keys")
+    k.add_argument("--fetch-promotion-source", action="store_true", help="fetch missing merged PR head (bounded 60s read)")
+    k.add_argument("--github-repo", help="owner/name (default: GITHUB_REPOSITORY)")
+    k.add_argument("--promotion-max-age-hours", type=int, default=24)
     k.set_defaults(func=_cmd_keys)
 
     r = at.add_parser("resolve", help="the nearest ancestor cache entry of a family to hydrate (GET-only REST listing)")
