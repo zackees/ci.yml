@@ -69,17 +69,28 @@ remain unresolved; restoring user parity must precede attributing or
 weakening any product test. The separate hosted-VM umask proposal remains
 unresolved in closed act2 PR #6.
 
-A private act2 candidate now passes ordinary shell/Node identity, denied
-writes, real checkout/setup-python/setup-uv actions, an explicit root
-container, a root-owned completed tool-cache seed, and bound-checkout
-ownership checks. Review identified additional HOME, option-derived and
-account/sudo/mail mount protections; focused regressions and lint pass
-with those guards. These are candidate proofs, not a released runner.
-The broader Go run failed: copied workspace parents and implicitly created
-workflow directories remained root-owned, while legacy test fixtures used
-bare privileged package installs. Artifact-server networking and several
-platform/Docker-action failures also remain unclassified. No candidate PR
-has been pushed, and no running-process attestation has been issued.
+[Act2 PR #10](https://github.com/zackees/act2/pull/10), at
+`564233dfc72f53e4e489264a85f280847689dde1`, now passes ordinary shell/Node
+identity, denied writes, real checkout/setup-python/setup-uv actions, an
+explicit root container, a root-owned completed tool-cache seed, and
+bound-checkout ownership checks. Guards cover HOME, option-derived and
+account/sudo/mail mounts. Hosted checkouts have a private writable parent;
+generated-script directories belong to the ordinary runner. Native Docker
+actions retain their original destination mapping, and hosted networking
+fixtures use sudo with the stock Ubuntu image.
+
+The final local `go test ./... -skip '^TestRunDifferentArchitecture$'
+-count=1 -timeout=20m` passed, with the runner package taking 388.913
+seconds. The excluded ARM-emulation case is unsupported on this host;
+the existing remote QEMU check remains required. The normal CLI action
+smoke, artifact upload/download, short tests, Go vet, golangci-lint (zero
+findings), and WITHOUT_DOCKER build also pass. Earlier broader failures
+were resolved through workspace/generated-directory ownership, hosted
+fixture privilege commands, private-harness Git/loopback/image visibility,
+and native Docker-action mapping. Review is clean. The first remote checks
+are [running](https://github.com/zackees/act2/actions/runs/37126316306),
+including native macOS and Windows. The candidate is not merged or released,
+and no running-process attestation has been issued.
 
 The post action reported a build miss with save skipped by global
 `save-cache` policy. An unpushed focused regression is RED on the original
