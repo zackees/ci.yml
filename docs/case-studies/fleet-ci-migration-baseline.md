@@ -2,6 +2,24 @@
 
 ## Fbuild migration: local proof passes; runtime warm speed remains unproven
 
+The first remote run of [Fbuild draft PR #1636](https://github.com/FastLED/fbuild/pull/1636)
+is green: [ci-minimal run 37112762596](https://github.com/FastLED/fbuild/actions/runs/37112762596)
+completed the shadow verifier, both Ubuntu jobs, shared fbuild binary,
+Arduino Uno, ESP32 and Teensy builds, and `CI selected coverage` successfully.
+[Dylint run 37112761945](https://github.com/FastLED/fbuild/actions/runs/37112761945)
+also passed the full all-OS-target pass. Every ordinary static and
+board-definition workflow passed. Extended/full labeled coverage was not
+invoked. The PR remains draft pending the published runner dependency.
+
+The [local job-section timings](fbuild-local-runtime-timings-2026-10-03.json)
+locate the warm execution cost: workspace `Test`
+took 189.5 seconds, including roughly 140 seconds of test-profile compilation;
+Clippy took 49.6 seconds and setup-soldr 6.2 seconds. The facade test step
+took 67.4 seconds. Keeping valid compiled workspace test outputs is the
+larger optimization opportunity; reducing setup cannot explain or remove the
+140-second compile. These are runtime step timings, not inferred cache hit
+rates or a claim that every test execution is fast.
+
 [Fbuild draft PR #1636](https://github.com/FastLED/fbuild/pull/1636) carries
 the source-bound shadow gate. Its tree `97ec665f5af3` passed the declared
 local gate in 284 seconds (run `3bf730c2-b0c1-4ce4-baa5-74a21cfb015a`), then
