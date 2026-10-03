@@ -70,7 +70,7 @@ weakening any product test. The separate hosted-VM umask proposal remains
 unresolved in closed act2 PR #6.
 
 [Act2 PR #10](https://github.com/zackees/act2/pull/10), at
-`564233dfc72f53e4e489264a85f280847689dde1`, now passes ordinary shell/Node
+`8b3d4f3cb6b8a63406254be0da19192e8daa857b`, now passes ordinary shell/Node
 identity, denied writes, real checkout/setup-python/setup-uv actions, an
 explicit root container, a root-owned completed tool-cache seed, and
 bound-checkout ownership checks. Guards cover HOME, option-derived and
@@ -80,17 +80,30 @@ actions retain their original destination mapping, and hosted networking
 fixtures use sudo with the stock Ubuntu image.
 
 The final local `go test ./... -skip '^TestRunDifferentArchitecture$'
--count=1 -timeout=20m` passed, with the runner package taking 388.913
+-count=1 -timeout=20m` passed, with the runner package taking 400.415
 seconds. The excluded ARM-emulation case is unsupported on this host;
 the existing remote QEMU check remains required. The normal CLI action
 smoke, artifact upload/download, short tests, Go vet, golangci-lint (zero
 findings), and WITHOUT_DOCKER build also pass. Earlier broader failures
 were resolved through workspace/generated-directory ownership, hosted
 fixture privilege commands, private-harness Git/loopback/image visibility,
-and native Docker-action mapping. Review is clean. The first remote checks
-are [running](https://github.com/zackees/act2/actions/runs/37126316306),
-including native macOS and Windows. The candidate is not merged or released,
-and no running-process attestation has been issued.
+and native Docker-action mapping. Review is clean.
+
+The first remote run on `564233d` passed the runner package including QEMU
+in 523.534 seconds, but 14 new container fixtures failed because they assumed
+the pinned image was preloaded. Explicit image pulls made the fixtures pass
+against an initially empty owned engine in 30.132 seconds. Every required
+[remote check on `924e247`](https://github.com/zackees/act2/actions/runs/37127190934)
+then passed, including Linux/QEMU, native macOS/Windows, lint and snapshot.
+A further focused probe found Docker socket access denied for the ordinary
+user. The final addition grants membership in the socket's existing group
+through private account files; the bound UID 1000 regression verifies the
+socket's owner/group/mode remains unchanged and Docker access works. The
+normal CLI smoke now includes Docker access. Final-head checks are
+[running](https://github.com/zackees/act2/actions/runs/37128566156). The
+candidate remains draft, unmerged and unreleased; no running-process
+attestation has been issued. These milestones do not erase the first-push
+failure or replace the running-process sample.
 
 The post action reported a build miss with save skipped by global
 `save-cache` policy. An unpushed focused regression is RED on the original
