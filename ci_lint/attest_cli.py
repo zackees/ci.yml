@@ -87,7 +87,33 @@ def _cmd_lineage(args: argparse.Namespace) -> int:
     return 0
 
 
+def _configure_context(args: argparse.Namespace) -> int | None:
+    if args.github_context:
+        from ci_lint.attestation_context import publication_context  # noqa: PLC0415
+
+        try:
+            context = publication_context(os.environ)
+        except ValueError as exc:
+            print(f"ci-lint attest keys: {exc}", file=sys.stderr)
+            return 2
+        if not context.enabled:
+            if args.github_output:
+                _write_outputs(["count=0"])
+            return 0
+        args.commit, args.base, args.pr, args.main_ref = context.commit, context.base, context.pr, context.main_ref
+        args.promote_merged_pr = context.promote
+        args.fetch_promotion_source = context.promote
+    return None
+
+
 def _cmd_keys(args: argparse.Namespace) -> int:
+    contextual_exit = _configure_context(args)
+    if contextual_exit is not None:
+        return contextual_exit
+    return _publish_keys(args)
+
+
+def _publish_keys(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     definition = _definition(repo, args.base)
     if definition is None:
@@ -222,6 +248,7 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     k = at.add_parser("keys", help="write each valid gate attestation as a tiny side file and print its cache key")
     common(k)
     lineage_args(k)
+    k.add_argument("--github-context", action="store_true", help="derive publication inputs from the GitHub event")
     k.add_argument("--base", help="read the definition from this commit (a PR's base)")
     k.add_argument("--out-dir", required=True)
     k.add_argument("--slots", type=int, default=8, help="max side entries (one cache-save step per slot)")

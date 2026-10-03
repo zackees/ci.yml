@@ -52,7 +52,7 @@ class PublicationTest(unittest.TestCase):
         record = make("rust/all/fmt", tree="tree", parents=("main-parent",), lane="rust", key="key", via="run", secs=3)
         args = argparse.Namespace(repo=".", base=None, commit="HEAD", main_ref="origin/main", pr=None,
                                   out_dir="/tmp/promoted-records", slots=8, github_output=True, promote_merged_pr=True,
-                                  github_repo="zackees/soldr", promotion_max_age_hours=24, fetch_promotion_source=False)
+                                  github_repo="zackees/soldr", promotion_max_age_hours=24, fetch_promotion_source=False, github_context=False)
         with patch("ci_lint.attest_cli._definition", return_value=definition), patch("ci_lint.attest_cli._lineage", return_value=Lineage(5, "a" * 40)), patch("ci_lint.attest_cli.verify_commit", return_value=CommitAttestations("a" * 40, (), ())), patch("ci_lint.attestation_promotion.promote", return_value=Promotion((record,), "promoted", "source", 1)), patch("ci_lint.attest_cli._write_outputs") as outputs, patch.object(Path, "mkdir"), patch.object(Path, "write_text") as write, patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push", "GITHUB_REF": "refs/heads/main"}):
             self.assertEqual(_cmd_keys(args), 0)
         self.assertIn("key_0=att1-rust.all.fmt-m5-aaaaaaaaaa", outputs.call_args.args[0])
