@@ -1,0 +1,1281 @@
+{
+  "since": "2026-10-02T00:00:00+00:00",
+  "collected_at": "2026-10-03T03:54:09.217613+00:00",
+  "method": "ci_lint.first_pass.collect; GitHub REST GET via gh; branch runs bounded by PR creation and merge; ci-minimal.yml for fbuild, ci.yml elsewhere",
+  "limits": [
+    "Merged PRs with at least one matching workflow run only; unmerged PRs and merged PRs without matching runs are outside the denominator.",
+    "At most 100 branch runs per PR and ten pages of closed PR inventory; no claim of full fleet coverage.",
+    "Attested means trailer present, not a validated attestation."
+  ],
+  "reports": [
+    {
+      "repo": "FastLED/fbuild",
+      "workflow": "ci-minimal.yml",
+      "since": "2026-10-02T00:00:00+00:00",
+      "target": 1.0,
+      "rate": 0.4375,
+      "prs": [
+        {
+          "number": 1605,
+          "title": "fix(esp32): resolve unified toolchain by registry version for pioarduino 53.x/54.x",
+          "head_shas": 4,
+          "failures": 4,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1606,
+          "title": "fix(rp2040): do not infer Bluetooth-only Arduino-Pico libraries when Bluetooth is off",
+          "head_shas": 1,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1608,
+          "title": "refactor(nrf52): apply the GCC 7 registry toolchain fixup as a pure function",
+          "head_shas": 1,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1609,
+          "title": "refactor(ch32v): apply board ISA/ABI as a pure config -> config function",
+          "head_shas": 1,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1610,
+          "title": "refactor(esp8266): apply boards.txt menu props as pure config -> config rules",
+          "head_shas": 2,
+          "failures": 2,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1611,
+          "title": "ci: remove duplicated cache-key-suffix keys from check-ubuntu.yml",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1612,
+          "title": "chore(release): bump fbuild to 2.5.30",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1615,
+          "title": "fix(deploy): wait for timed-out native espflash ops to release the port (#1614)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1618,
+          "title": "fix(deploy): ESP32 deploy spawns the build-resolved esptool",
+          "head_shas": 4,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1619,
+          "title": "fix(serial): clear RTS before DTR at open so attach does not reset ESP chips (#1617)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1620,
+          "title": "chore(release): bump fbuild to 2.5.31",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1622,
+          "title": "feat(linux): install udev rules with an explained cross-distro root prompt",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1625,
+          "title": "chore(release): bump fbuild to 2.5.32",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1626,
+          "title": "fix(udev): host-independent elevation argv (unblocks 2.5.32 Windows check)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1631,
+          "title": "fix(process): fork contained children on a process-lifetime thread (#1628)",
+          "head_shas": 4,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1632,
+          "title": "chore(release): bump fbuild to 2.5.33",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        }
+      ]
+    },
+    {
+      "repo": "zackees/bosn",
+      "workflow": "ci.yml",
+      "since": "2026-10-02T00:00:00+00:00",
+      "target": 1.0,
+      "rate": 0.7346938775510204,
+      "prs": [
+        {
+          "number": 328,
+          "title": "feat(ci): bosn ci runs workflows on a daemon-owned isolated act engine (#323 step 1)",
+          "head_shas": 3,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 349,
+          "title": "feat: add supervised Act prerequisites and verified container reuse",
+          "head_shas": 5,
+          "failures": 4,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 360,
+          "title": "fix(setup): a stack that mounts its workspace gets a container per checkout (#359)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 363,
+          "title": "fix(run): a dead bosn run client cancels its job; cancel and deadline stop the task in its container (Fixes #357)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 364,
+          "title": "fix(dev-host): hermetic release-guard test, embedded-python rpath, sun_path-safe IPC endpoint",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 366,
+          "title": "fix(setup): sibling checkouts never share or adopt a setup container; show the verified workspace (#314)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 367,
+          "title": "ci: local gate first (GATE-001..007) in shadow; isolated test suites; verify supersedes GEN-021 (#361 phase 1)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 368,
+          "title": "ci: per-gate attestations, trusted skips in shadow, attestation side entries (#361 phase 2)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 370,
+          "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 371,
+          "title": "ci: drop the hand-keyed Swatinem rust-workspace-v1 cache (#361 phase 3)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 1,
+          "first_pass": false,
+          "attested": true
+        },
+        {
+          "number": 374,
+          "title": "ci: a superseded run never leaves FAILURE required checks (!cancelled() instead of always()) (#373)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 376,
+          "title": "feat(daemon): concurrent runner slots, runner accounting, stall teardown, Docker proxy with cache volumes for act jobs (#358, #369)",
+          "head_shas": 4,
+          "failures": 2,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": true
+        },
+        {
+          "number": 377,
+          "title": "Integrate bosn ci (#328\u2013#360) onto #349's owned Act engine layer (#362)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": true
+        },
+        {
+          "number": 381,
+          "title": "fix(ci): size each run's engine from its host, overridable in config.toml (#379)",
+          "head_shas": 2,
+          "failures": 1,
+          "reruns": 1,
+          "first_pass": false,
+          "attested": true
+        },
+        {
+          "number": 382,
+          "title": "feat(ci): bosn ci plan --adapter; bosn act plan --adapter is its deprecated spelling (#375)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 384,
+          "title": "fix(publish): the amalgamated crate's unit tests compile; synthetic_for_test is a cfg(test) seam too (#380)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 385,
+          "title": "ci(lint): list files without git when the checkout is a worktree in the isolated container",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 386,
+          "title": "fix(ci): one act acquisition path, pinned and verified in ci::pins (#378)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 387,
+          "title": "fix(setup): declared tasks start with umask 0022, not docker exec's 0000 (#365)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 388,
+          "title": "fix(ci): a checkout of another repository pinned to a commit needs no token (#335)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 389,
+          "title": "fix(setup): a retired generation stops before the next one's task runs (#383)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 390,
+          "title": "fix(service): test app-task coalescing while the job is in flight (#299)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 395,
+          "title": "fix(ci): save tool-cache installs stamped with an inner .complete (#391)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 396,
+          "title": "fix(ci): size engine storage for builds; a run on nearly full storage says so (#392)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 397,
+          "title": "fix(ci): a detached HEAD is a real repository; dirty work is a synthetic commit (#393, #394)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 399,
+          "title": "fix(ci): a step's last line without a trailing newline reaches the log (#398)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 401,
+          "title": "fix(ci): jobs only GitHub can run are reported remote_only, never a local failure (#400)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 407,
+          "title": "fix(ci): a pr run's snapshot carries origin/<base> and history to the merge base (#403)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 408,
+          "title": "release 0.1.7 (#314 fix via #366)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 411,
+          "title": "perf(ci): the isolated engine uses the overlayfs snapshotter, not native (#323)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 413,
+          "title": "ci: pin ci-lint to zackees/ci.yml@acde655 (CACHE-025 has no exceptions)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 414,
+          "title": "fix(ci): matrix legs are keyed by their matrix values, placed in their job's stage, and unsupported by their own runner (#404)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 415,
+          "title": "feat(widget): adopt kernal-api 0.1.24 window controls; fix the vanishing bubble (#402)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 416,
+          "title": "feat(widget): a Quit control in the panel, through the daemon (#409)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 419,
+          "title": "fix(ci): unnamed run: steps are named as written, without bosn's end-of-output trap (#405)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 420,
+          "title": "fix(runners): finish releases a cache lease's lock even while a forked child holds its fd (#406)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 421,
+          "title": "test(ci): ci::ui backpressure tests prove delivery by ordering, not wall-clock latency (#412, #417)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 422,
+          "title": "lint: rustfmt-check the widget crate and guard every Cargo manifest (#418)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 423,
+          "title": "perf(ci): keep one prepared spare engine so a run skips engine create and prepare (#410)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 426,
+          "title": "fix(ci): write workflow rewrites to an overlay, never into the snapshot (#424)",
+          "head_shas": 3,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 428,
+          "title": "fix(manifest): a Docker build context keeps each file's execute bit",
+          "head_shas": 3,
+          "failures": 2,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 429,
+          "title": "release 0.1.8 (act2 pin, workflow overlay #424)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 431,
+          "title": "fix(ci): back engine storage with a disk volume sized from free disk (#425)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 432,
+          "title": "fix(ci): pass --use-new-action-cache to act unconditionally (ci.yml#213)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 433,
+          "title": "ci(release): pretag release gate -- release only an exact main SHA whose full CI is green",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 434,
+          "title": "feat(ci): bosn ci run takes --event, --input, --matrix and --env (#430)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 435,
+          "title": "release 0.1.9 (act --use-new-action-cache, first pretag-gate release)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 437,
+          "title": "fix(lint): bring ci/engine.rs back under 1,000 lines",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 438,
+          "title": "feat(ci): Pages build jobs run locally; configure-pages becomes a local stub (GATE-012)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        }
+      ]
+    },
+    {
+      "repo": "zackees/clud",
+      "workflow": "ci.yml",
+      "since": "2026-10-02T00:00:00+00:00",
+      "target": 1.0,
+      "rate": 0.5588235294117647,
+      "prs": [
+        {
+          "number": 1707,
+          "title": "fix(terminal): split-sequence and terminal-restore follow-ups to #1697 (Fixes #1704)",
+          "head_shas": 4,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1709,
+          "title": "fix(session): undo a Ctrl+C-killed child's terminal modes; remove the out-of-process guard",
+          "head_shas": 3,
+          "failures": 0,
+          "reruns": 1,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1712,
+          "title": "fix(gc): repair corrupt uv-cache wheel entries under uv's locks (Fixes #1711)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1713,
+          "title": "fix(pr-watch): a concurrency-superseded run is never the PR's failure and never gets the live run cancelled (#1710)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1716,
+          "title": "docs(ci): local act is one pre-push check; the PR's CI is the record (Fixes #1715)",
+          "head_shas": 2,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1717,
+          "title": "docs+test(pty): per-platform terminal/PTY agent skills and an end-to-end input fidelity sweep",
+          "head_shas": 7,
+          "failures": 5,
+          "reruns": 1,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1719,
+          "title": "fix(soldr): a configured soldr version is a minimum; a launch never downgrades soldr",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1720,
+          "title": "fix(pr-watch): a protected check skipped by a run that succeeded is green, not pending forever",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1721,
+          "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1722,
+          "title": "fix(pr-watch): a missing or suppressed CodeRabbit never stalls green",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1723,
+          "title": "chore(release): prepare 2.8.22",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1725,
+          "title": "ci(build): no empty test harnesses; test = false on targets without tests (#1714)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1727,
+          "title": "ci(build): one integration harness; clud builds two test harnesses, not eight (#1726)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1733,
+          "title": "ci: cache uv wheels in static under act; pass job.status to setup-soldr",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1734,
+          "title": "fix(ci): CI reliability and doc debt from the cross-platform PTY baseline (Fixes #1728)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 1,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1735,
+          "title": "fix(ci): race-free act action cache under concurrent bosn; require bosn >= 0.1.7",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1736,
+          "title": "chore(release): prepare 2.8.23",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1737,
+          "title": "ci: under act keep uv's downloaded wheels in the static job's cache",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1744,
+          "title": "feat(gh-broker): route session gh api GETs through a daemon ETag cache (#1743 phase 1)",
+          "head_shas": 2,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1745,
+          "title": "chore(release): prepare 2.8.24",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1747,
+          "title": "feat(gh-broker): incremental since=/created>= merges, frozen listings, targeted invalidation (#1743 phase 2)",
+          "head_shas": 4,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1748,
+          "title": "ci: run local CI through bosn ci -> act2 with stock workflows (#1740)",
+          "head_shas": 3,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1749,
+          "title": "chore(release): prepare 2.8.25",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1750,
+          "title": "fix(windows): tree kills must not follow a recycled parent PID (#1738)",
+          "head_shas": 7,
+          "failures": 6,
+          "reruns": 1,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1751,
+          "title": "fix(pr-watch): watch origin's PR in a fork; gh shim and rollup never cancel the live run (#1741, #1742)",
+          "head_shas": 2,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1752,
+          "title": "lint: adopt the function-complexity ratchet (RUST-018, PY-004)",
+          "head_shas": 4,
+          "failures": 1,
+          "reruns": 1,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1753,
+          "title": "fix(gh-shim): resolve a branch or URL PR selector on origin, not the fork's parent (refs #1741)",
+          "head_shas": 2,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1754,
+          "title": "ci: attested PR heads skip the routine Linux lanes (zackees/ci.yml GATE-008/010)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1756,
+          "title": "fix(shim): running sessions pick up the gh read broker after an upgrade (#1743)",
+          "head_shas": 4,
+          "failures": 3,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1757,
+          "title": "fix(process): wait for capture EOF after exit instead of a fixed 5 ms drain",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1758,
+          "title": "ci(unit): refresh pytest shard weights (slow shard ~57 s -> ~49 s)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1759,
+          "title": "ci(build): drop the mold apt install (~8 s per build job, dead since soldr 0.9.20)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1762,
+          "title": "ci: run doc-tests in the Linux x64 Clippy job, off the critical path (~7 s)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1764,
+          "title": "refactor(main): split run() into ordered phase functions (complexity ratchet)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        }
+      ]
+    },
+    {
+      "repo": "zackees/kernal-api",
+      "workflow": "ci.yml",
+      "since": "2026-10-02T00:00:00+00:00",
+      "target": 1.0,
+      "rate": 0.375,
+      "prs": [
+        {
+          "number": 385,
+          "title": "feat(webview): widget window controls, first slice (#384)",
+          "head_shas": 2,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 387,
+          "title": "test(process): session_spawn_cost runs on every host (fixes main's boundary failure)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 2,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 388,
+          "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 391,
+          "title": "feat(webview): finish widget window controls -- position, navigate, typed best effort, real Windows/macOS (#384)",
+          "head_shas": 3,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 392,
+          "title": "release: kernal-api 0.1.24",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 394,
+          "title": "feat(fs): ContextPathMetadata reports whether a regular file is executable",
+          "head_shas": 3,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 396,
+          "title": "release: kernal-api 0.1.25",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 397,
+          "title": "feat(ape): kernal_api::ape endpoint on running-process 4.10.16",
+          "head_shas": 4,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        }
+      ]
+    },
+    {
+      "repo": "zackees/running-process",
+      "workflow": "ci.yml",
+      "since": "2026-10-02T00:00:00+00:00",
+      "target": 1.0,
+      "rate": 0.0,
+      "prs": [
+        {
+          "number": 1299,
+          "title": "ci: drop Swatinem/rust-cache; Rust build caching goes through setup-soldr (CACHE-025)",
+          "head_shas": 13,
+          "failures": 2,
+          "reruns": 1,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1300,
+          "title": "feat(ape): canonical Actually Portable Executable launcher (fbuild contract) for hosts without an APE binfmt",
+          "head_shas": 5,
+          "failures": 2,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1302,
+          "title": "release: prepare 4.10.16",
+          "head_shas": 1,
+          "failures": 1,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        }
+      ]
+    },
+    {
+      "repo": "zackees/soldr",
+      "workflow": "ci.yml",
+      "since": "2026-10-02T00:00:00+00:00",
+      "target": 1.0,
+      "rate": 1.0,
+      "prs": [
+        {
+          "number": 3529,
+          "title": "ci(local-gate): GATE-007 lane cache -- skip unchanged lanes locally; PY-002/PY-003 ratchets (zackees/ci.yml#177)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3531,
+          "title": "ci: GATE-008 pilot -- attested PRs skip the remote Lint and Linux x64 jobs (zackees/ci.yml#190)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3532,
+          "title": "perf(tests): fixtures skip the toolchain-catalogue fetch -- 5.2 s -> 0.17 s per cargo_front_door test on CI (#3530)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3536,
+          "title": "ci: bump ci_lint to efbd8b1 -- PY-002 covers parameters/variables of complex types",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3537,
+          "title": "ci: ci-attestations phase 1 -- per-job skips from per-gate commit attestations; lineage-keyed side entries (zackees/ci.yml#198)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3541,
+          "title": "fix(platform): Windows clippy -D warnings -- test-only items are cfg(test), drop an unused import",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3542,
+          "title": "fix: NixOS gcc-only hosts link through the host cc; a project's .cargo config dir is never CARGO_HOME",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3543,
+          "title": "ci: comply with the Swatinem/rust-cache ban (CACHE-025, zackees/ci.yml#209)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3544,
+          "title": "release: soldr 0.9.28",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3546,
+          "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3547,
+          "title": "ci: drop the last Swatinem/rust-cache steps -- CACHE-025 has no exceptions",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3548,
+          "title": "ci: ci-attestations phases 2-3 -- cross-target lint, Wine and Windows-VM test lanes, proven isolation (zackees/ci.yml#198, #202, #196)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3549,
+          "title": "ci: hydrate the Tier-2 zccache store from the nearest attested ancestor; lineage-keyed saves (zackees/ci.yml#198 phase 4)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3550,
+          "title": "ci: 16 attestation side-entry slots; ci_lint db7ec84 (job-mapped gates first) (zackees/ci.yml#198)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        },
+        {
+          "number": 3551,
+          "title": "release: soldr 0.9.29 (zccache =1.15.1)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": true
+        }
+      ]
+    },
+    {
+      "repo": "zackees/zccache",
+      "workflow": "ci.yml",
+      "since": "2026-10-02T00:00:00+00:00",
+      "target": 1.0,
+      "rate": 0.5555555555555556,
+      "prs": [
+        {
+          "number": 1866,
+          "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1868,
+          "title": "fix(ci): x86 Test keeps its own warm test-profile store (#1867)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1871,
+          "title": "ci: pass job.status to every setup-soldr step (setup-soldr#559)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1872,
+          "title": "feat(embedded): request-scoped --test harness admission, observable (#1550)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1873,
+          "title": "ci: admit --test harness links in Linux x64 Build test binaries (#1550)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1874,
+          "title": "chore(release): bump 1.15.0 -> 1.15.1",
+          "head_shas": 3,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1876,
+          "title": "fix(ci): retire same-lock soldr generations; a failed pre-prune no longer blocks cleanup (#1875)",
+          "head_shas": 2,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": false,
+          "attested": false
+        },
+        {
+          "number": 1877,
+          "title": "ci(cache): per-family one-generation budgets in the cache-budget check (#1875)",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        },
+        {
+          "number": 1880,
+          "title": "ci(cache): release builds save no Actions cache; retire the 1.15.1 release entries",
+          "head_shas": 1,
+          "failures": 0,
+          "reruns": 0,
+          "first_pass": true,
+          "attested": false
+        }
+      ]
+    }
+  ]
+}
