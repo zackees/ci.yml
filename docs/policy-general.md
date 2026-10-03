@@ -311,6 +311,50 @@ What the data says:
    - **PR-scoped delta saves:** zstd 3, because they are written on the critical path and short-lived.
 4. **The knobs today are compile-time constants:** soldr's `DEFAULT_ZSTD_LEVEL = 3` (cache save/load, mirrored by setup-soldr) and `COOK_ZSTD_LEVEL = 19`. Making the save level tier-selectable is the implementation follow-up.
 
+## GitHub API budget: one controlled query mechanism per machine (GHAPI-001)
+
+**Decision ([issue #224](https://github.com/zackees/ci.yml/issues/224)):** CI-supporting tooling on a machine reads GitHub state through one controlled query mechanism that keeps a durable local cache of everything already fetched.
+
+**Re-querying is allowed** as long as it is **incremental**: each query is tightly bounded by what the cache already holds, so it asks GitHub only for content newer than the cache's high-water mark. Re-reading content already held is what this rule forbids.
+
+**The primary challenge is the cache, not the polling interval.** Old content must be stored durably and indexed by resource and time, so that every follow-up query can carry a tight timestamp bound (or an equivalent cursor) and fetch only incremental new information.
+
+**Why.** The REST budget is **5,000 requests per hour per user token**, shared by everything that machine runs under that identity: agents and their subagents, merge watchers, landers, release pollers, cache audits, and the human's own `gh` commands. Nothing coordinates them.
+
+In one FastLED/fbuild session (2026-10-02), an orchestrating agent and two or three subagents exhausted it **twice in about two hours**, using `pr_merge_watch.py` on a 20 s interval, `gh run view` monitors on 113-job release matrices, and `gh pr checks` reads. Then every tool on the machine failed at once, including interactive commands. The waste came from unbounded re-reads: each poll fetched a run's full job list, a PR's full check set or a full comment thread again, although nearly all of it had not changed since the previous poll and was already held by another process on the same machine.
+
+**Requirements.**
+1. **One broker per (host, GitHub identity).** Agents, skills, watchers, landers and `ci/` scripts ask the broker for PR, run, job, check and comment state. They never query the API themselves.
+2. **A durable cache of old content, indexed by time.** The broker persists every fetched object with its `updated_at`/`created_at` (or `completed_at` for runs and jobs). It survives process and agent restarts and is shared by every caller on the machine. Terminal objects never need to be fetched again: a completed run or job with its conclusion, a merged or closed PR, a commit's check runs once all are complete, and posted review comments (until edited).
+3. **Incremental re-queries are allowed and expected.** A re-query is bounded by the cache's per-resource high-water mark, so the server returns only what changed after it. Examples:
+   - `since=` on issue and PR comment and review-comment listings;
+   - `created=>=<ts>` / `updated` filters on `actions/runs`;
+   - `per_page` with descending order, where pagination stops at the first already-cached item;
+   - `If-Modified-Since: <cached Last-Modified>` and `If-None-Match: <cached ETag>`, where a `304 Not Modified` returns no body and does not count against the primary rate limit.
+
+   An unbounded re-fetch of a collection the cache already holds is the violation, not the re-query itself.
+4. **Tight bounds.** The high-water mark is the newest `updated_at` (or `created_at`) the cache has *seen* for that resource, not wall-clock "now" minus a margin. Clock skew is covered by a small overlap window whose duplicates are de-duplicated by object id, never by widening the bound.
+5. **Single-flight.** Concurrent callers asking for the same resource share one in-flight incremental query. Ten watchers on one release run cost one bounded query per refresh, not ten full fetches.
+6. **Budget with a reserve.** The broker records `X-RateLimit-Remaining` and `X-RateLimit-Reset` from every response. It keeps a floor, initially 10% of the limit, for interactive and human use. Below the floor, background reads wait for the reset instead of spending the reserve. This never weakens a gate: under GEN-021/GATE-008, a deferred or failed read still means "no reuse", not "reuse".
+7. **Accounting.** The broker keeps a per-caller ledger (tool, repository, endpoint, bounded/unbounded, cache hit / 304 / incremental / full), so a runaway or unbounded poller can be named from evidence.
+8. **Push before poll.** A waiter subscribes to the broker's cached state for a resource, and the broker decides when to run the next incremental query. A waiter that needs only a terminal state is woken once, when that state lands in the cache.
+
+**Scope.** This governs machine-local tooling: agents, local gates, bosn → act runs and release automation driven from a developer machine. Hosted Actions jobs authenticate with the per-repository `GITHUB_TOKEN`, which has its own budget. They are in scope only where they run a query loop, which GATE-012's zero-wait rule already restricts.
+
+**Status.** The static signal is enforced by ci-lint (`precheck` group 20, `ci_lint.rules.ghapi_reread`). The broker itself is not implemented yet; its design is [docs/designs/ghapi-broker.md](designs/ghapi-broker.md) (implementation: zackees/clud#1743), and the broker-bypass and machine-shared-cache clauses stay candidate until it ships.
+
+**Static signal.** ci-lint scans every workflow/composite-action `run:` block, every script under `ci/`, and every `.py`/`.sh`/`.bash` file under a `skills/` or `tools/` directory or under `.claude/` (Markdown skill bodies are not parsed). Python is read by AST, following a loop's calls into same-module helpers and through a `gh(*args)` wrapper that builds `["gh", *args]`.
+
+| Shape | Result |
+| --- | --- |
+| A `while`/`until` loop that sleeps and reaches a GitHub read (`gh api` GET, `gh pr checks`, `gh pr view`, `gh run view`, `gh run list`, or curl/wget/requests/urllib against `api.github.com`) with no bound | violation |
+| `gh run watch`, `gh pr checks --watch`, or `watch ... gh ...` anywhere | violation |
+| Every read the loop reaches carries a bound: `since=`, `created>=`/`updated>=`/`--created`, or `If-None-Match`/`If-Modified-Since`/ETag | pass |
+| A counted `for` loop that sleeps around a read (a retry or a poll), or a sleeping `while` loop whose reads go through a non-literal command | `needs_review` |
+| A loop with no sleep (pagination, iteration over input), or a `gh api` write (`-X POST`, fields without `-X GET`, a GraphQL mutation) | not a finding |
+
+A same-line `# ci-lint: allow GHAPI-001 <reason>` on the loop's opening line or on the read excuses it. A loop whose own text names a GitHub App check, in a file GATE-012 scans, is left to GATE-012 so one wait is reported once.
+
 ## Performance rule
 
 The initial candidate threshold is **at least five completed ordinary PR samples in a rolling 30-day window**, with either a **75th-percentile required job execution time over 10 minutes** or a **75th-percentile required PR critical path over 15 minutes** on two successive scans. These are policy starting points to calibrate against fleet data, not claims about current fleet performance. A single severe outlier can be sent for review, but should not automatically become a confirmed timing violation. This rule (`PERF-001`) is distinct from `ci_lint perf compare` (round-5, [docs/ci-toml.md](ci-toml.md#perf-compare-round-5)): that command compares one repository's own benchmark numbers between two runs (non-gating unless a suite opts in with a threshold); it does not compute or enforce a fleet-wide PR-timing percentile, so it does not implement `PERF-001`.
@@ -409,6 +453,7 @@ The **Status** column below reflects what `ci_lint` actually checks today, verif
 | `GATE-012` | A check that cannot run under bosn → act gates or waits on a PR (#206): a missing `.coderabbit.yaml`, or one leaving `reviews.auto_review.enabled`/`commit_status` on or `request_changes_workflow`/`fail_commit_status` true; a job of a PR-triggered workflow (or a local reusable workflow it calls) using a registered act-impossible action (`github/codeql-action/*`, Pages deploys, attestations, PyPI trusted publish, Codecov/Coveralls/Sonar, dependency review) or `id-token: write` without an `if:` confining it to non-PR events or an opt-in label (unrecognized `if:` is `needs_review`); a wait-on-check action, `run:` or `ci/` script waiting on or polling for an app check such as `CodeRabbit`; live, a required status check naming an app check or bound to an app other than GitHub Actions. Item 5 (a job act cannot run declares `CI_REMOTE_ONLY: <reason>`; a local runner reports it `remote_only`, never a failure) is honoured by bosn ci (zackees/bosn#400) and not yet checked by ci-lint. | Enforced by ci-lint (static: `ci-lint remote-only`, `precheck` group 18, `local-gate lint`; live audit: `ci-lint audit`); item 5 is runner-side |
 | `CACHE-023` | A cache save whose zstd level ignores its tier (#173): a PR-path save above level 3, or a long-lived default-branch family below the measured remote recommendation. | Candidate |
 | `CACHE-026` | A cache guard that fails the run instead of disabling cache writes: a barrier, budget, pre-prune or freshness step (e.g. a wait on an exact-SHA pre-prune, a projected-peak forecast, `main advanced to <sha>`) that exits non-zero in a build/test workflow, so a cache-governance condition turns every workflow on the SHA red without any test failing. The guard must succeed and expose a `cache_writes` output consumed by every save. Evidence: zackees/zccache, 2026-09-25..10-02, ~93 of the last 100 failed `main` push runs failed only in `Cache pre-prune barrier / Wait for exact-SHA cache pre-prune` (push pass rate 53%); zackees/soldr's `Cache Budget` workflow: 53 of its 7-day failures. | Candidate |
+| `GHAPI-001` | Machine-local CI tooling (a skill, tool, watcher, lander or `ci/` script) re-reads a GitHub collection it already holds without a time or cursor bound, or bypasses the per-machine broker (#224). Incremental re-queries bounded by the cache's high-water mark (`since=`, `created>=`/`updated` filters, stop-at-cached pagination, `If-Modified-Since`/`If-None-Match`) are allowed; unbounded re-fetches, uncached terminal state, and per-process caches that are not shared across the machine are violations. | Enforced by ci-lint (static precheck, `precheck` group 19: unbounded GitHub re-read loops and gh watch loops in `run:`, `ci/` and skill/tool scripts); the broker-bypass and machine-shared-cache clauses are candidate until the broker ships (zackees/clud#1743) |
 
 An exception must name the repository, rule ID, reason, owner, compensating coverage, and review date. The documented Soldr dependency cycle in `zackees/running-process` is an example to evaluate for an exception. Exceptions are reviewed when their date arrives or the dependency changes; they do not erase historical findings. `ci.toml`'s `[[exceptions]]` array implements this mechanically for a `ci_lint`-checked repository (`rule`, `path`, `reason`, `issue`, `expires` -- `CT-005` fails an expired entry).
 
