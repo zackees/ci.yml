@@ -1,6 +1,45 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
-## Latest validation: shared action promoted; kernel runtime still incomplete
+## Latest validation: kernel shadow rollout merged; shared permission fix under review
+
+Kernal-api's full remote run `37101690833` passed Linux, Dylint and all five
+native platform build/test lanes. [PR #399](https://github.com/zackees/kernal-api/pull/399)
+merged as `d8046bd`. Its two-lane shadow-attestation follow-up
+[PR #400](https://github.com/zackees/kernal-api/pull/400) passed the minimal
+remote run `37104952792` and merged as `4c0b06f`. Rebase preserved the previously
+validated tree `f1f6329e2d5f`; the declared local gate reused that tree-bound
+attestation without allocating an engine. Remote skipping remains disabled.
+
+The cache-policy draft resolved `setup-soldr@v0` to the promoted
+`d17a58eb2cea17a89af0824fb7c6b24ee68f5083` and saved local caches even though
+the planner prohibits PR-context remote uploads. A subsequent changed-tree
+run restored the stable toolchain and compiled build cache. Failed Linux
+gates took 317 then 212 seconds; these are failure timings, not complete
+passing two-lane warm timings. The boundary scanner's separate nightly
+toolchain still downloads repeatedly. The draft now has 161 passing fast
+guards. A pinned YAML parser rejects malformed workflow syntax before engine
+allocation; the previous trailing-colon scalar was rejected and its folded
+replacement parsed successfully.
+
+The newly included default APE test still found no filesystem loader directory.
+Moving the cache beside the executable and copying executable permissions
+did not fix it. A proposed private-directory helper then failed to compile
+because it requires the optional `fs` feature; that gate failed in 145 seconds.
+Those fixture edits are removed, preserving the original default-feature
+test and its assertions.
+
+A live act2 Docker-execution regression in an owned harness reproduced
+`umask 0000`. The shared candidate sets `0022` only for emulated hosted runner
+images, using an argument-preserving `exec` wrapper. Its live regression
+passed mask, literal metacharacters, working-directory and exit-status checks.
+An actual workflow fixture passed in 9.801 seconds: hosted runner directories
+and files were `755` and `644`; an explicit job container retained `0000`.
+The non-image container regressions and focused runner regressions passed.
+The shared fix is not yet merged, released or pinned by bosn, and the kernel
+APE test has not yet passed on that runner. This is evidence for the next
+shared correction, not proof of a completed cache-policy migration.
+
+## Earlier checkpoint: shared action promoted; kernel runtime still incomplete
 
 The exact-main fbuild canary `37101793881` passed all full platform and board
 jobs, `CI selected coverage`, and `full / Full coverage`.
