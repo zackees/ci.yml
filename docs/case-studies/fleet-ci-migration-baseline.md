@@ -1,6 +1,42 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
-## Latest validation: kernel shadow rollout merged; shared runner corrections pending
+## Latest validation: nightly cache reuse proven; kernel permission correction pending
+
+The unpushed kernal-api cache-policy tree `5839aa5acbc5` moves the unconditional
+source-wide platform-boundary scan into the existing Dylint lane, where
+setup-soldr already prepares the matching nightly. Its test scope stays
+`--locked --lib -- --skip ui`; the workspace Dylint pass still checks all
+features and target kinds. The attestation names the source scan explicitly.
+All 162 fast guards passed in 0.526 seconds, and review was clean.
+
+Local run `f32f9be5-9910-4de4-894d-098df8af653c` passed in 444.5 seconds and
+saved the Dylint foundation and output layers as cache IDs 7 and 8. A fresh
+engine on the same committed tree, run `2f246faa-18a4-4346-bb8d-f7c8ccadeb5c`,
+restored both exact keys, passed in 207.3 seconds, and skipped redundant saves
+because of those exact hits. That is a 53% reduction in total local duration;
+the engine itself took 434.6 then 167.7 seconds. The warm source scan passed
+21 tests in 25.6 seconds including compilation. Both runs also executed the
+lint libraries' own tests. These are successful Dylint-lane timings, not a
+passing combined Linux-and-Dylint gate or proof of other native platforms.
+
+[Act2 #8](https://github.com/zackees/act2/pull/8) passed every remote check in
+run `37108887269` and merged as `b7edfa48520c`. Its platform-aware image lookup
+avoids unnecessary pulls on Docker's containerd store. The permission
+correction was rebased locally onto that fix. Its complete local Go suite
+passed every test except `TestRunDifferentArchitecture`, which also fails
+on unchanged master because this machine lacks a host binfmt registration.
+The nested host Docker-action fixture now passes after placing its temporary
+workspace in a cache path visible to the daemon (1.104 seconds). No product
+or consumer assertion was weakened. The permission PR remains closed pending
+clarification; it is not merged, released or pinned by bosn.
+
+The refreshed [kernal-api first-push sample](kernal-first-pass-2026-10-03.json)
+contains 11 merged PRs since October 2 UTC: 5 first-pass successes (45.5%).
+Migration PR #399 needed a full-CI correction despite its narrower local
+attestation; shadow PR #400 passed first push. Two attested PRs do not prove
+100% reliability, and the sample's explicitly requested target remains 100%.
+
+## Earlier checkpoint: kernel shadow rollout merged; shared runner corrections pending
 
 Kernal-api's full remote run `37101690833` passed Linux, Dylint and all five
 native platform build/test lanes. [PR #399](https://github.com/zackees/kernal-api/pull/399)
