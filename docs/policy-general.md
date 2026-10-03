@@ -121,6 +121,8 @@ Rollout ([#213](https://github.com/zackees/ci.yml/issues/213)):
 
 A repository's workflow reads `ACT` only where a stock action exposes the right knob but has no runner-aware default. That is an exception: it carries a comment linking its tracking issue.
 
+Keep a planner's **remote write permission** separate from an explicit **cache disable**. A read-only PR flow must continue to prohibit remote uploads while the shared action can retain compatible local artifacts under act2. An explicit disable still disables every save, including local saves. Implement that distinction in the shared action's input contract; do not override a planner's `false` with an `ACT` expression in each repository. The proposed `save-cache-remote` contract is being validated in [setup-soldr#565](https://github.com/zackees/setup-soldr/pull/565); it is not yet a promoted `v0` capability.
+
 Known exceptions:
 - `zackees/setup-soldr`'s `save-cache: auto` skipped every save on a `pull_request` event. Fixed by setup-soldr#563, and the repository overrides are removed once `v0` carries it ([#216](https://github.com/zackees/ci.yml/issues/216)).
 - `astral-sh/setup-uv` prunes wheels before saving, which empties a local cache. Repositories key `prune-cache` and `cache-suffix` on `ACT` ([#226](https://github.com/zackees/ci.yml/issues/226)).
