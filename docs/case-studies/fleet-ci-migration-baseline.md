@@ -131,16 +131,27 @@ Dylint passed, and nextest executed 1549 of 2346 tests (1545 passed, including
 one retry; four APE tests failed). The unexecuted remainder prevents attestation.
 A separate diagnostic using the released act2.3 binary observed umask `0000`
 and default directory mode `0777`; a diagnostic-only `0022` control produced
-`0755` and passed the directory-permission assertion. This isolates a runner
-permission gap, but does not prove that all four APE failures share that cause.
+`0755` and passed the directory-permission assertion. At that stage this isolated a runner
+permission gap, but did not prove that all four APE failures shared that cause.
 No production umask change or repository workaround was applied. The published-wheel run `675e97ac-ce35-4b7c-abe8-db9bb7416ea3`
 then failed in 920.297 seconds against the identical snapshot and payload.
 Dylint and both targeted permission/fallback tests passed. Nextest executed
 1531/2346 tests: 1530 passed (one flaky), one final APE nested-spawn failure,
 nine skipped. The other three APE cases failed earlier attempts, but fail-fast
 interrupted their remaining retries; this does not prove they passed. The
-aggregate correctly failed. No running-process attestation has been issued. These milestones do not erase failed attempts or replace its first-push
-sample.
+aggregate correctly failed. No running-process attestation has been issued. A subsequent controlled diagnostic on the same source and released
+act2.3 ran the entire Linux APE test module: default umask `0000` produced
+14 passes and exactly the four APE failures above; a diagnostic-only `0022`
+step reused the same source/build and passed all 18 tests, with zero failures
+or ignored tests (202 unrelated tests filtered in both steps). The fixture
+asserted baseline failure and control success. Its initial checkout attempt
+stopped before testing because a token was required; the corrected fixture
+fetched public Git source and checked the exact SHA. This is stronger causal
+evidence for the runner permission mismatch, not a successful full gate.
+[The umask PR remains closed](https://github.com/zackees/act2/pull/6), awaiting
+clarification of its closure; no production change or repository workaround
+was applied. These milestones do not erase failed attempts or replace its
+first-push sample.
 
 The post action reported a build miss with save skipped by global
 `save-cache` policy. An unpushed focused regression is RED on the original
