@@ -16,6 +16,22 @@ Resolve the planner/cache contract centrally with regression evidence, preservin
 explicit cache-disable inputs and remote cache policy, rather than adding local
 runner workarounds to individual repositories.
 
+Canonical attestation-file inventory rechecked through the GitHub Contents API
+on 2026-10-03 at 04:23 UTC:
+
+| Repository | Default-branch `ci-attestations.yml` | Observed blob SHA |
+| --- | --- | --- |
+| zackees/zccache | Present | `19dfe90106c5087c86e1ae18d6b6b449194cb5b4` |
+| zackees/soldr | Present | `ab5354c4f7ade0365e455d59476d22b10d0cba92` |
+| FastLED/fbuild | Missing (HTTP 404) | — |
+| zackees/bosn | Present | `d700fdbdcf511c7ab740e9282f171a8a1ba37941` |
+| zackees/clud | Present | `c0254c7b744f1a40ab6b25351ada1dbfc752e087` |
+| zackees/kernal-api | Missing (HTTP 404) | — |
+| zackees/running-process | Missing (HTTP 404) | — |
+
+This inventories the canonical root file only. Presence does not establish
+gate fidelity, attestation validity, warm-cache behavior, or remote skip wiring.
+
 This is an evidence snapshot and rollout worklist, not binding policy. Queried the latest 50 workflow runs per repository using GitHub REST. These are workflow-run rates, not first-push PR rates or required-check rates. Windows differ by repository activity. Cancelled, skipped, and pending runs are excluded from the decisive denominator (success + failure); their counts are reported separately. Reruns are not deduplicated. No local speed claim is established by this snapshot.
 
 | Repository | Sample window (UTC) | PR success / decisive | Push success / decisive | PR cancelled / skipped |
