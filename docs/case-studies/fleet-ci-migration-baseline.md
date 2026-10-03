@@ -147,3 +147,12 @@ The sister directory disappeared during this investigation. Kernal-api's two
 commits were recovered from bosn's retained frozen source Git repository;
 Git bundles of both working branches now live under ci.yml's
 `.git/fleet-migration-bundles/` so another directory loss cannot discard them.
+
+The bosn candidate's isolated compile completed successfully: 82.02 seconds
+of Cargo work cold. A second identical isolated task completed with 0.21
+seconds of Cargo work and 4.661 seconds total wall time, with no recompilation.
+The same persistent stack volumes and immutable image were reused. This
+proves the focused local engine compile is incremental; it does not prove the
+whole kernal-api workflow is warm. Focused native engine regression tests
+are now running through `bosn run --task ci-engine-test` before review and
+publication of the shared fix.
