@@ -1,5 +1,58 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
+## Shared runner fix: merged and measured
+
+[Bosn PR #441](https://github.com/zackees/bosn/pull/441) merged as
+`6ae32cd7dca8947af69863cd1df12fca7779c40a`. Its full local gate passed in
+696 seconds: unchanged Python/static and policy lanes reused their earlier
+passes, Rust completed in 80 seconds, and isolated native packaging plus Python
+and Rust tests completed in 616 seconds. The Python suite passed 248 tests
+with 10 Docker-marked tests deselected; existing ignored Rust Docker tests
+remained ignored. This gate does not establish full Docker-test coverage.
+An unchanged-tree retry reused all four lane keys and reported 0 seconds,
+stamping the same tree `7a8503506e98979b8cab53d6d4c080786562a246`.
+[Remote CI](https://github.com/zackees/bosn/actions/runs/37096813519) passed
+every selected check, including the attestation verifier and locked Rust tests;
+full-tier hosted macOS and widget jobs were skipped as designed, so this is
+ordinary-PR evidence, not a full-release validation.
+
+Kernal-api candidate run `9562187d-8294-421d-a418-2efb52ac537e` executed
+the exact clean source `414cad28634170c2859f12adee94bfcd80d821f2` through
+the newly built bosn in a separate daemon state directory, using act2
+`0.2.89-act2.2`. The previously failing CI-guard step passed in 1.59 seconds
+(131 Python guards plus shell and PowerShell scripts). It reached compilation,
+then failed at default-facade Clippy: Soldr 0.9.23's linker shim invoked
+`clang`, which the pinned slim image lacks (GCC is present). The run finished
+failed and cleanup removed its engine; no local attestation was stamped.
+
+Released Soldr 0.9.29 includes the existing upstream managed-Clang resolver
+(soldr#3430), so the kernal-api candidate now pins that one runtime through
+its shared wrapper. The version guard failed before the wrapper change, then
+all 43 focused cache/local-gate/native-job guards passed. Run
+`7073d525-ebbf-4f3b-94fa-2c3c640336b4` passed on source
+`d0e824bb1f957e5495bb76742a87c79ceb517afd`: both selected jobs succeeded,
+with act execution 219.6 seconds and total 250.5 seconds; cleanup removed the
+engine. Warm workflow reuse still needs runtime evidence. Its new canonical attestation
+definition names only checks the minimal Linux lane performs and maps no remote
+jobs. Other native platforms, Dylint and full-feature coverage remain required
+for the complete migration.
+
+Review then required an explicit native Linux x64 process-host and Docker-server
+architecture check, and uv invocation in the remote verifier. Those fixes passed
+45 focused guards and received a clean review. Declared local-gate run
+`f52f36c3-0e26-4ca6-a3b4-57b4a40e9888` passed in 285 seconds on source
+`b9b9abe4c882449624524e59b0b788083b6709f7` and stamped its tree. A static
+LAYOUT-001 check then required moving Python host queries into the exact
+declared CI facade `ci/platform_host.py`; that check and review now pass.
+Run `6e6f9a6d-9ff4-49fd-b3a5-9f3eaceac183` is validating the resulting
+source `48611063be0361fb302fc74e3e7fd2b2ca9e8188` before publication.
+The gate uses the built bosn wheel through an isolated uv environment and the
+separate `BOSN_STATE_DIR`; the wheel CLI's SHA256 matches the tested native
+binary, `c3bcaa01b78bac52d0c63d72639d9ab0886c90d7c15a124d3a7437d46f85bc9a`.
+
+The notes below retain earlier checkpoints; the section above supersedes their
+pending statuses for the shared runner fix and first successful kernal-api run.
+
 Publication update: the baseline and first-pass rerun correction are in
 [ci.yml PR #237](https://github.com/zackees/ci.yml/pull/237), validated by all
 813 selftests. Bosn's shared runner fix is reviewed clean and passed six engine,
