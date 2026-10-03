@@ -12,7 +12,7 @@ as an exact hit and could not update that generation with newly compiled
 content. This is evidence of an incomplete failed-build seed, not evidence
 that the cache's existing compiler objects are corrupt.
 
-The unpushed Fbuild correction `aa4096ae0ee7` passes `${{ job.status }}` to
+The published Fbuild correction `f56be5161729` passes `${{ job.status }}` to
 both calls and rotates only the workspace generation to
 `check-ubuntu-py312-v1`, retaining the facade job's valid existing cache.
 Twenty-one focused tests passed after a regression first failed on the
@@ -20,7 +20,15 @@ missing input; code review passed. A private negative fixture compiled a
 small real Rust crate, exited 42, and completed as failure in local run
 `d1ef2cf2-1202-421d-be19-47f1b9a54100`: both build and target layers reported
 `failed-job-skip`. The fixture is not published or attested as a passing
-gate. The correction's full positive gate is still required before push.
+gate. The correction passed its declared positive gate in 583 seconds
+(run `042053f9-07ad-40af-8e87-2a3dd1aeee26`) before push. Its workspace
+build-cache miss saved a fresh seed as `id=10`. A forced engine warm run
+`075544e9-0d2d-4886-b1b9-0eeb3c12d40c` restored that generation as an exact
+hit and passed both required jobs in 247 seconds. Workspace test-profile
+compilation fell from 140.98 seconds on the preceding generation to 95.76
+seconds; linked test binaries still rebuild. The warm run attested the same
+source tree `ddcfc5246492`, amending only trailers to `06c913d88bb7` locally.
+The published head remains `f56be5161729` while its remote checks run.
 
 The action's whole-job status guard is conservative: it also suppresses a
 save after a pure test assertion failure, whereas the fleet's `CACHE-008`
@@ -37,10 +45,15 @@ Bosn's runner-tools version PR
 [Exact-SHA full CI 37114032741](https://github.com/zackees/bosn/actions/runs/37114032741)
 passed every required cell, including Docker tests and both hosted macOS
 wheel smokes. Release dry-run
-[37114605896](https://github.com/zackees/bosn/actions/runs/37114605896) is
-running; publication remains pending.
+[37114605896](https://github.com/zackees/bosn/actions/runs/37114605896) passed.
+[Publication 37115034048](https://github.com/zackees/bosn/actions/runs/37115034048)
+passed PyPI and GitHub publication. The [v0.1.11 release](https://github.com/zackees/bosn/releases/tag/v0.1.11)
+identifies that exact merged SHA and contains four platform wheels. Installing
+`bosn==0.1.11` from PyPI into an isolated Python 3.12 environment succeeded;
+the installed CLI reports `bosn 0.1.11`. Runtime use of the published runner
+remains to be checked separately from the earlier source-built candidate.
 
-## Fbuild migration: local proof passes; runtime warm speed remains unproven
+## Fbuild migration: preceding shadow proof and timing baseline
 
 The first remote run of [Fbuild draft PR #1636](https://github.com/FastLED/fbuild/pull/1636)
 is green: [ci-minimal run 37112762596](https://github.com/FastLED/fbuild/actions/runs/37112762596)
@@ -49,13 +62,13 @@ Arduino Uno, ESP32 and Teensy builds, and `CI selected coverage` successfully.
 [Dylint run 37112761945](https://github.com/FastLED/fbuild/actions/runs/37112761945)
 also passed the full all-OS-target pass. Every ordinary static and
 board-definition workflow passed. Extended/full labeled coverage was not
-invoked. The PR remains draft pending the published runner dependency.
+invoked. The PR remains draft while the corrected head and released runner are validated.
 
 The [local job-section timings](fbuild-local-runtime-timings-2026-10-03.json)
 locate the warm execution cost: workspace `Test`
 took 189.5 seconds, including roughly 140 seconds of test-profile compilation;
 Clippy took 49.6 seconds and setup-soldr 6.2 seconds. The facade test step
-took 67.4 seconds. Keeping valid compiled workspace test outputs is the
+took 67.4 seconds. Reusing permitted compiler intermediates is the
 larger optimization opportunity; reducing setup cannot explain or remove the
 140-second compile. These are runtime step timings, not inferred cache hit
 rates or a claim that every test execution is fast.
@@ -80,7 +93,8 @@ are not reliable evidence of a complete run's hit rate.
 Local evidence used a wheel built from bosn's merged stock-runner-tools fix
 `6ae32cd7dca8` ([bosn PR #441](https://github.com/zackees/bosn/pull/441)).
 Published bosn `v0.1.10` at `189e5e8d9840` predates that fix. Runner dependency
-publication and remote validation remain required before rollout. The fleet
+publication is now complete at v0.1.11; validation with that installed release
+and the corrected remote head remains required before rollout. The fleet
 migration and its 100% first-push target are not complete.
 
 [Fbuild issue #1635](https://github.com/FastLED/fbuild/issues/1635) owns the
