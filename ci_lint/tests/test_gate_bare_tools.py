@@ -74,3 +74,9 @@ class FalsePositiveTest(unittest.TestCase):
         self.assertIsNone(_bare(["cargo", "=", "tomllib.loads(x)"]))
         self.assertEqual(_bare(["cargo", "build"]), "cargo")
         self.assertEqual(_python_findings('cargo = tomllib.loads(text)\nprint(cargo["package"])\n', "wf.yml"), [])
+
+    def test_separators_inside_quotes_are_not_commands(self) -> None:
+        from ci_lint.gate_bare_tools import _shell_findings
+        self.assertEqual(_shell_findings('echo "cargo | foo"\n', "wf.yml", "run"), [])
+        self.assertEqual(_shell_findings("echo 'see `cargo build`; done'\n", "wf.yml", "run"), [])
+        self.assertEqual(len(_shell_findings('echo "x" | cargo build\n', "wf.yml", "run")), 1)

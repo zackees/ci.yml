@@ -31,8 +31,7 @@ from pathlib import Path
 
 from ci_lint.yaml_io import YamlValue
 from ci_lint.finding import Finding
-from ci_lint.rules.test_invocations import allowed, raw_lines_of, with_yaml_comment
-from ci_lint.rules.tools import find_commands
+from ci_lint.rules.test_invocations import allowed, raw_lines_of, split_commands, with_yaml_comment
 
 BARE_RUST: frozenset[str] = frozenset({"cargo", "rustc", "rustup", "maturin", "cargo-nextest"})
 FIX = "drive it through soldr ('soldr cargo ...', 'soldr rustup ...', 'soldr wheel ...') so the pinned toolchain and cache apply"
@@ -68,7 +67,8 @@ def _shell_findings(text: str, path: str, where: str, raw_lines: list[str] | Non
             continue
         if allowed(with_yaml_comment(line, raw_lines or []), "RUST-001"):
             continue
-        for tokens in find_commands(stripped):
+        # Quote-aware: `echo "cargo | foo"` is one echo, not a bare cargo.
+        for tokens in split_commands(stripped):
             cmd = _bare(tokens)
             if cmd is not None and not _wrapped_by_soldr(cmd, stripped):
                 findings.append(

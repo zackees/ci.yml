@@ -409,6 +409,43 @@ class BosnCiRunnerTest(TempRepoCase):
         self.assertEqual(self._rules(self._repo("print('trust the exit code')\n")), ["GATE-009"])
 
 
+class IsolationMountTest(TempRepoCase):
+    """GATE-005/009 regressions from the zccache rollout: a non-/repo mount
+    destination and a multi-line Dockerfile ENV."""
+
+    def _repo(self, *, dockerfile_env: str, cmd: str, mount: str) -> Path:
+        bosn = ('[stack.dev]\ndockerfile = "docker/Dockerfile"\n\n[stack.dev.mounts]\n'
+                f'repo = {{ source = ".", destination = "{mount}" }}\n\n[task.test]\nstack = "dev"\ncmd = "{cmd}"\n')
+        files = {
+            "local-gate.toml": ISO_GATE + "proves-tree = true\n",
+            "scripts/test_wrapper.sh": ISO_GUARD,
+            "bosn.toml": bosn,
+            "docker/Dockerfile": "FROM rust@sha256:" + "0" * 64 + "\n" + dockerfile_env,
+            "ci/gate.py": ISO_SCRIPT + 'NONCE = ".gate-nonce"\n',
+            "ci/entry.py": 'p = ".gate-nonce"\nprint("gate-nonce: " + open("/work/.gate-nonce").read())\n',
+        }
+        for rel, text in files.items():
+            (self.tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.tmp / rel).write_text(text, encoding="utf-8")
+        return self.tmp
+
+    def _rules(self, repo: Path) -> list[str]:
+        return sorted(f.rule for f in check_gate_static(self.config(repo), repo) if f.rule in ("GATE-005", "GATE-009"))
+
+    def test_work_mount_resolves_entry_script(self) -> None:
+        repo = self._repo(dockerfile_env="ENV TOOL_TEST_ISOLATED=1\n", cmd="python3 /work/ci/entry.py", mount="/work")
+        self.assertEqual(self._rules(repo), [])
+
+    def test_repo_prefix_does_not_resolve_under_a_work_mount(self) -> None:
+        repo = self._repo(dockerfile_env="ENV TOOL_TEST_ISOLATED=1\n", cmd="python3 /repo/ci/entry.py", mount="/work")
+        self.assertEqual(self._rules(repo), ["GATE-009"])
+
+    def test_multiline_env_sets_the_marker(self) -> None:
+        env = "ENV A=1 \\\n    TOOL_TEST_ISOLATED=1 \\\n    B=2\n"
+        repo = self._repo(dockerfile_env=env, cmd="python3 /work/ci/entry.py", mount="/work")
+        self.assertEqual(self._rules(repo), [])
+
+
 class IsolationTest(TempRepoCase):
     """GATE-005 -- ci_lint/gate_isolation.py (zackees/ci.yml#168)."""
 

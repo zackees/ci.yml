@@ -126,7 +126,7 @@ def _bosn_marker_findings(iso: IsolationConfig, repo_root: Path, source: str) ->
     stack = stacks.get(spec.get("stack")) if isinstance(stacks, dict) and isinstance(spec.get("stack"), str) else None
     dockerfile = stack.get("dockerfile") if isinstance(stack, dict) else None
     if isinstance(dockerfile, str) and (repo_root / dockerfile).is_file():
-        text = (repo_root / dockerfile).read_text(encoding="utf-8", errors="replace")
+        text = _join_continuations((repo_root / dockerfile).read_text(encoding="utf-8", errors="replace"))
         if re.search(rf"^\s*ENV\s+(?:.*\s)?{re.escape(iso.marker)}[= ]", text, re.MULTILINE):
             return []
     return [
@@ -137,6 +137,29 @@ def _bosn_marker_findings(iso: IsolationConfig, repo_root: Path, source: str) ->
             fix=f"add `ENV {iso.marker}=1` to the task's stack Dockerfile (or prefix the task cmd with {iso.marker}=1)",
         )
     ]
+
+
+def _join_continuations(text: str) -> str:
+    """Fold Dockerfile backslash continuations (`ENV A=1 \\` + `    B=2`) into
+    one logical line, so a marker set on a continuation line is seen."""
+
+    return re.sub(r"\\[ \t]*\r?\n", " ", text)
+
+
+def _repo_mount_destination(doc: dict[str, TomlValue], stack_name: TomlValue) -> str:
+    """Container path the task's stack mounts the repository (`source = "."`)
+    at; bosn's default is `/repo` (zccache mounts at `/work`)."""
+
+    stacks = doc.get("stack")
+    stack = stacks.get(stack_name) if isinstance(stacks, dict) and isinstance(stack_name, str) else None
+    mounts = stack.get("mounts") if isinstance(stack, dict) else None
+    if isinstance(mounts, dict):
+        for mount in mounts.values():
+            if isinstance(mount, dict) and mount.get("source") in (".", "./"):
+                dest = mount.get("destination")
+                if isinstance(dest, str) and dest.startswith("/"):
+                    return dest.rstrip("/") or "/"
+    return "/repo"
 
 
 def check_isolation(isolation: IsolationConfig | None, gate_run: tuple[str, ...], repo_root: Path, source: str) -> list[Finding]:
@@ -191,8 +214,9 @@ def check_isolation(isolation: IsolationConfig | None, gate_run: tuple[str, ...]
 
 
 def _bosn_entry_scripts(iso: IsolationConfig, repo_root: Path) -> list[Path]:
-    """Repository files the bosn task's cmd runs (`/repo/<path>` tokens or
-    plain relative paths that exist)."""
+    """Repository files the bosn task's cmd runs (`<mount>/<path>` tokens,
+    where `<mount>` is the stack's `source = "."` mount destination, default
+    `/repo`, or plain relative paths that exist)."""
 
     tokens = list(iso.runner)
     task = tokens[tokens.index("--task") + 1] if "--task" in tokens[:-1] else None
@@ -208,9 +232,10 @@ def _bosn_entry_scripts(iso: IsolationConfig, repo_root: Path) -> list[Path]:
     cmd = spec.get("cmd") if isinstance(spec, dict) else None
     if not isinstance(cmd, str):
         return []
+    prefix = _repo_mount_destination(doc, spec.get("stack") if isinstance(spec, dict) else None) + "/"
     out: list[Path] = []
     for token in re.split(r"[\s;&|]+", cmd):
-        rel = token[len("/repo/"):] if token.startswith("/repo/") else token
+        rel = token[len(prefix):] if token.startswith(prefix) else token
         if rel and (repo_root / rel).is_file():
             out.append(repo_root / rel)
     return out
