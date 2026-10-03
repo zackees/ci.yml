@@ -51,9 +51,11 @@ passed in 72.055 seconds after configuring its test author identity.
 [Act2 #7](https://github.com/zackees/act2/issues/7) tracks the independently
 reproduced containerd image-store lookup bug: inspecting a multi-platform tag
 without a platform returns its default architecture, falsely reporting a
-locally present ARM variant absent. A separate shared draft turns the live
-regression green and covers missing variants, server errors, ignored query
-parameters and older APIs. Native execution and QEMU availability still need
+locally present ARM variant absent. [Act2 PR #8](https://github.com/zackees/act2/pull/8)
+turns that live regression green in 4.472 seconds and passes the same test
+against an isolated Docker 28.5.2 classic/vfs store in 23.035 seconds.
+It covers missing variants, server errors, ignored query parameters and
+older APIs; lint, vet and review passed. Native execution and QEMU availability still need
 separate proof; image presence alone proves neither.
 
 [Act2 PR #6](https://github.com/zackees/act2/pull/6) was closed by the owner's
