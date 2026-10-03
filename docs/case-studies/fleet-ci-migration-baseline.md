@@ -28,13 +28,26 @@ failed and cleanup removed its engine; no local attestation was stamped.
 Released Soldr 0.9.29 includes the existing upstream managed-Clang resolver
 (soldr#3430), so the kernal-api candidate now pins that one runtime through
 its shared wrapper. The version guard failed before the wrapper change, then
-all 43 focused cache/local-gate/native-job guards passed. New run
-`7073d525-ebbf-4f3b-94fa-2c3c640336b4` is pending on source
-`d0e824bb1f957e5495bb76742a87c79ceb517afd`; successful provisioning and
-warm workflow reuse still need runtime evidence. Its new canonical attestation
+all 43 focused cache/local-gate/native-job guards passed. Run
+`7073d525-ebbf-4f3b-94fa-2c3c640336b4` passed on source
+`d0e824bb1f957e5495bb76742a87c79ceb517afd`: both selected jobs succeeded,
+with act execution 219.6 seconds and total 250.5 seconds; cleanup removed the
+engine. Warm workflow reuse still needs runtime evidence. Its new canonical attestation
 definition names only checks the minimal Linux lane performs and maps no remote
 jobs. Other native platforms, Dylint and full-feature coverage remain required
 for the complete migration.
+
+Review then required an explicit native Linux x64 process-host and Docker-server
+architecture check, and uv invocation in the remote verifier. Those fixes passed
+45 focused guards and received a clean review. Declared local-gate run
+`f52f36c3-0e26-4ca6-a3b4-57b4a40e9888` is validating the final source
+`b9b9abe4c882449624524e59b0b788083b6709f7` before it is stamped or pushed.
+The gate uses the built bosn wheel through an isolated uv environment and the
+separate `BOSN_STATE_DIR`; the wheel CLI's SHA256 matches the tested native
+binary, `c3bcaa01b78bac52d0c63d72639d9ab0886c90d7c15a124d3a7437d46f85bc9a`.
+
+The notes below retain earlier checkpoints; the section above supersedes their
+pending statuses for the shared runner fix and first successful kernal-api run.
 
 Publication update: the baseline and first-pass rerun correction are in
 [ci.yml PR #237](https://github.com/zackees/ci.yml/pull/237), validated by all
