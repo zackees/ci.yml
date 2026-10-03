@@ -66,3 +66,11 @@ class BareRustTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FalsePositiveTest(unittest.TestCase):
+    def test_assignment_and_python_steps_are_not_commands(self) -> None:
+        from ci_lint.gate_bare_tools import _bare, _python_findings
+        self.assertIsNone(_bare(["cargo", "=", "tomllib.loads(x)"]))
+        self.assertEqual(_bare(["cargo", "build"]), "cargo")
+        self.assertEqual(_python_findings('cargo = tomllib.loads(text)\nprint(cargo["package"])\n', "wf.yml"), [])

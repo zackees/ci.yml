@@ -375,6 +375,32 @@ class TreeProofTest(TempRepoCase):
                          sorted([f"{Status.VIOLATION.value}:local-gate.toml", f"{Status.VIOLATION.value}:bosn.toml"]))
 
 
+class BosnCiRunnerTest(TempRepoCase):
+    """GATE-005/009 with bosn's act engine as the isolated runner (zackees/clud)."""
+
+    def _repo(self, script: str) -> Path:
+        files = {
+            "local-gate.toml": ISO_GATE.replace('runner = ["bosn", "run", "--task", "test"]',
+                                                'runner = ["bosn", "ci", "run"]') + "proves-tree = true\n",
+            "scripts/test_wrapper.sh": ISO_GUARD,
+            "ci/gate.py": 'RUNNER = ("bosn", "ci", "run")\n' + script,
+        }
+        for rel, text in files.items():
+            (self.tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.tmp / rel).write_text(text, encoding="utf-8")
+        return self.tmp
+
+    def _rules(self, repo: Path) -> list[str]:
+        return sorted(f.rule for f in check_gate_static(self.config(repo), repo) if f.rule in ("GATE-005", "GATE-009"))
+
+    def test_run_record_proof_satisfies_both(self) -> None:
+        script = 'ok = r["workspace"] == ROOT and r["sha"] == HEAD and r["dirty"] is None\n'
+        self.assertEqual(self._rules(self._repo(script)), [])
+
+    def test_missing_run_record_check(self) -> None:
+        self.assertEqual(self._rules(self._repo("print('trust the exit code')\n")), ["GATE-009"])
+
+
 class IsolationTest(TempRepoCase):
     """GATE-005 -- ci_lint/gate_isolation.py (zackees/ci.yml#168)."""
 
