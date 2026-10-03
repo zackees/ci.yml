@@ -55,7 +55,7 @@ Ci-Attestation: {"at":1790917000,"gate":"rust/x86_64-unknown-linux-gnu/test","ho
 
 ## In CI
 
-1. **Verify job:** `ci-lint local-gate verify --trust --github-output`, with full history. Check ci_lint out **outside** the workspace (e.g. `path: ${{ runner.temp }}/ci-lint`, invoked with `PYTHONPATH=$RUNNER_TEMP/ci-lint`). A `.ci-lint/` directory inside the tree trips repository-local static checks; zackees/clud's banned-imports check flagged ci_lint's subprocess use.
+1. **Verify job:** `ci-lint local-gate verify --trust --github-output`, with full history. Don't leave ci_lint inside the tree while repository checks run: a `.ci-lint/` directory trips repository-local static checks (zackees/clud's banned-imports check flagged ci_lint's subprocess use). `actions/checkout` refuses a `path` outside `GITHUB_WORKSPACE`, so either (a) check it out at `.ci-lint`, run the verify step, then remove it in an `if: always()` step (`rm -rf .ci-lint`; clud's `Drop ci_lint checkout`), or (b) skip `actions/checkout` and fetch the pinned SHA with `git` into `$RUNNER_TEMP/ci-lint`, invoking `PYTHONPATH=$RUNNER_TEMP/ci-lint`.
    - GATE-008's head-level policy applies first: base policy, surfaces, author, fork, `ci-full`, and the audit sample.
    - Then, per `[gate.trust].skip` job, it outputs **`skip_<job id>`**, which is `true` only when every gate the base definition maps to that job has a valid attestation.
    - Each skip job's `if:` consumes `needs.<verify>.outputs.skip_<job id>`.
