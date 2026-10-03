@@ -1,5 +1,37 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
+## Fbuild shadow rollout merged; enforced PR proof submitted
+
+[Fbuild #1636](https://github.com/FastLED/fbuild/pull/1636) merged at
+`8246c3099085` after [latest-head ci-minimal 37116500210](https://github.com/FastLED/fbuild/actions/runs/37116500210)
+passed both Ubuntu jobs, all three selected boards and the coverage aggregator,
+and [Dylint 37116499972](https://github.com/FastLED/fbuild/actions/runs/37116499972)
+passed the all-OS-target check. All ordinary static and board-definition checks
+passed. Extended/full labeled coverage was not invoked. This initial rollout
+is shadow mode, so it does not establish enforced pre-push validation or a
+100% first-push rate.
+
+[Fbuild #1637](https://github.com/FastLED/fbuild/pull/1637) follows from that
+exact merged source. It changes the declared mode to enforce and confines
+PR attestation verification to PR events. The local gate uses the existing
+workflow-dispatch event to execute the same required Ubuntu commands before
+stamping; its frozen run proof requires that event. Default-branch pushes and
+dispatch keep a successful verifier dependency. Twenty-six focused checks,
+Ruff and code review passed. Published Bosn 0.1.11 ran the full declared gate
+in 224 seconds (`963a50d7-4f74-4fed-ace2-3cfaf2820bad`), attesting
+`d962b457cce9` / tree `4d5064a4071a`. Real PR verification rejected the
+unsigned head (exit 1), then accepted the stamped head. Remote verification
+of this enforcement change remains pending. Board, extended/full and other
+native-host coverage remain remote; broader local coverage and quick-gate
+reuse are still required work.
+
+The next-candidate [running-process first-push refresh](running-process-first-pass-2026-10-03.json)
+reports **0 of 4** merged PRs since 2026-10-02, with no attestations. The current
+repository still has no `ci-attestations.yml` (HTTP 404). Its existing Bosn
+configuration alone does not establish the requested workflow migration.
+This refresh supplements the earlier 0/3 sample below; it does not replace
+historical mixed-run rates or claim that recent default-branch CI is all red.
+
 ## Failed Fbuild cache seed: caller status wiring proven
 
 The unchanged-main local run `6bd1f21d-9c65-4737-b779-a4e63f587502` failed the
@@ -42,7 +74,7 @@ and code review passed. Real Rust assertion/compilation probes both returned
 setup-soldr actually saved build `id=12` and target `id=13`. The fixture is
 unpublished. The full positive gate through published Bosn passed in 238 seconds
 (`e694c2e1-86a0-4f60-84ec-1cfceaf51aa8`), attesting tree `8335396bc6a8` at
-`a4512c014c51`. Remote verification of this latest correction remains required.
+`a4512c014c51`. Remote verification of this correction passed and #1636 merged; see the rollout above.
 This is repository wiring for existing `CACHE-008`, not a new central checker.
 Further speed work must reuse permitted compilation inputs/intermediates:
 `CACHE-007` forbids linked test binaries, incremental directories and whole
