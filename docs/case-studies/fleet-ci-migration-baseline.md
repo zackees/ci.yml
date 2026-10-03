@@ -70,7 +70,7 @@ weakening any product test. The separate hosted-VM umask proposal remains
 unresolved in closed act2 PR #6.
 
 [Act2 PR #10](https://github.com/zackees/act2/pull/10), at
-`8b3d4f3cb6b8a63406254be0da19192e8daa857b`, now passes ordinary shell/Node
+`4f4888fc0847369805f65c253a0f943848a32770`, now passes ordinary shell/Node
 identity, denied writes, real checkout/setup-python/setup-uv actions, an
 explicit root container, a root-owned completed tool-cache seed, and
 bound-checkout ownership checks. Guards cover HOME, option-derived and
@@ -80,7 +80,7 @@ actions retain their original destination mapping, and hosted networking
 fixtures use sudo with the stock Ubuntu image.
 
 The final local `go test ./... -skip '^TestRunDifferentArchitecture$'
--count=1 -timeout=20m` passed, with the runner package taking 400.415
+-count=1 -timeout=20m` passed, with the runner package taking 407.706
 seconds. The excluded ARM-emulation case is unsupported on this host;
 the existing remote QEMU check remains required. The normal CLI action
 smoke, artifact upload/download, short tests, Go vet, golangci-lint (zero
@@ -99,8 +99,14 @@ A further focused probe found Docker socket access denied for the ordinary
 user. The final addition grants membership in the socket's existing group
 through private account files; the bound UID 1000 regression verifies the
 socket's owner/group/mode remains unchanged and Docker access works. The
-normal CLI smoke now includes Docker access. Final-head checks are
-[running](https://github.com/zackees/act2/actions/runs/37128566156). The
+normal CLI smoke now includes Docker access. The next
+[Linux run on `8b3d4f3`](https://github.com/zackees/act2/actions/runs/37128566156)
+panicked in the user-inclusion matrix test. A local race-enabled run reproduced
+concurrent reads and writes of the default socket path in shared configuration;
+both job and service mount builders now resolve that default locally. A
+deterministic regression failed before the fix, and ten race-enabled matrix
+and mount-regression repetitions passed afterward in 18.319 seconds. Final-head
+checks are [running](https://github.com/zackees/act2/actions/runs/37130101405). The
 candidate remains draft, unmerged and unreleased; no running-process
 attestation has been issued. These milestones do not erase the first-push
 failure or replace the running-process sample.
