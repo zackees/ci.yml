@@ -13,6 +13,19 @@ Use this guide when investigating or implementing fleet CI checks. The goal is t
 
 GitHub documents the [workflow run](https://docs.github.com/en/rest/actions/workflow-runs) and [workflow job](https://docs.github.com/en/rest/actions/workflow-jobs) APIs needed for timing collection. Reusable workflows can hide jobs behind a caller, so inspect their definitions as well as the caller; see [GitHub's reuse reference](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations).
 
+## Audit platform coverage selection instructions
+
+Inspect repository instructions, every platform skill and bundled agent
+planning, review, integration and landing procedure for unconditional native
+label or cross-target-loop instructions. Apply
+[Selecting full PR coverage](policy-general.md#selecting-full-pr-coverage):
+additional platform coverage requires a changed platform implementation,
+not business logic calling it. Check the actual diff and name the affected
+native implementation/contract. A target discovery tool may enumerate
+release-only lanes; that list does not select PR coverage. Report ambiguous
+cases for review rather than inferring a full matrix from a filename or
+local runner gap. Preserve routine required checks and full release validation.
+
 ## Findings and issue lifecycle
 
 Use the stable `GEN-*`, `PY-*`, and `PERF-001` IDs in the [general policy](policy-general.md) and `RUST-*` and `PKG-*` IDs in the [Rust policy](policy-rust.md). Keep these IDs stable when implementing the result schema; change a rule's version rather than reusing an ID for different behavior.
