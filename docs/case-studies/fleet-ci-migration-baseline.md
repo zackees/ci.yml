@@ -30,11 +30,20 @@ seconds; linked test binaries still rebuild. The warm run attested the same
 source tree `ddcfc5246492`, amending only trailers to `06c913d88bb7` locally.
 The published head remains `f56be5161729` while its remote checks run.
 
-The action's whole-job status guard is conservative: it also suppresses a
-save after a pure test assertion failure, whereas the fleet's `CACHE-008`
-table distinguishes failed compilation from test failure alone. That
-distinction remains **needs review** in this migration; this case study
-does not silently redefine the binding table or claim a new checker signal.
+The subsequent correction separates a completed assertion failure from a
+failed compilation without swallowing the test failure. `ci/test_cache_status.py`
+streams the same `soldr cargo test` selection with JSON compiler evidence and
+preserves its exit code. Only a successful `build-finished`, a failed libtest
+summary and Cargo's test-failure diagnostic, without compiler errors, permit
+`save-on-failure`; job cancellation never opts in. Twenty-four focused tests
+and code review passed. Real Rust assertion/compilation probes both returned
+101, with the save opt-in true/false respectively. Private workflow run
+`520a2bfd-58e3-478b-b71f-351fb8d4faed` remained failed on its assertion while
+setup-soldr actually saved build `id=12` and target `id=13`. The fixture is
+unpublished. The full positive gate through published Bosn passed in 238 seconds
+(`e694c2e1-86a0-4f60-84ec-1cfceaf51aa8`), attesting tree `8335396bc6a8` at
+`a4512c014c51`. Remote verification of this latest correction remains required.
+This is repository wiring for existing `CACHE-008`, not a new central checker.
 Further speed work must reuse permitted compilation inputs/intermediates:
 `CACHE-007` forbids linked test binaries, incremental directories and whole
 target trees in cross-run caches or persistent stores. A full target
@@ -50,8 +59,10 @@ wheel smokes. Release dry-run
 passed PyPI and GitHub publication. The [v0.1.11 release](https://github.com/zackees/bosn/releases/tag/v0.1.11)
 identifies that exact merged SHA and contains four platform wheels. Installing
 `bosn==0.1.11` from PyPI into an isolated Python 3.12 environment succeeded;
-the installed CLI reports `bosn 0.1.11`. Runtime use of the published runner
-remains to be checked separately from the earlier source-built candidate.
+the installed CLI reports `bosn 0.1.11`. The forced gate using this installed release passed in 245 seconds
+(`3f5c046c-bfb3-4030-b5d9-7073f92a362a`), independently of the source-built
+candidate. Corrected-head remote CI `37114988442` and all-target Dylint
+`37114988158` passed before the subsequent cache-outcome correction.
 
 ## Fbuild migration: preceding shadow proof and timing baseline
 
