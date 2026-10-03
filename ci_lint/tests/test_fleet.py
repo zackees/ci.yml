@@ -79,6 +79,30 @@ class FleetScanTest(unittest.TestCase):
 
 
 class FleetUnitTest(unittest.TestCase):
+    def test_unreadable_ci_workflow_does_not_claim_missing_pr_trigger(self) -> None:
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from ci_lint.yaml_io import LoadResult, LoadStatus
+
+        for reason in ("no YAML parser available", "PyYAML parse error"):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                workflow = root / ".github" / "workflows" / "ci.yml"
+                workflow.parent.mkdir(parents=True)
+                workflow.write_text("on: [pull_request]\njobs: {}\n", encoding="utf-8")
+                unreadable = LoadResult(LoadStatus.NEEDS_REVIEW, None, reason)
+                with patch("ci_lint.workflow_scan.load_yaml_file", return_value=unreadable):
+                    count, prs, found = check_workflows(root)
+                self.assertEqual(count, 1)
+                self.assertEqual(prs, ())
+                trigger_findings = [finding for finding in found if finding.rule == "GEN-001"]
+                self.assertEqual(len(trigger_findings), 1)
+                self.assertEqual(trigger_findings[0].status, Status.NEEDS_REVIEW)
+                self.assertNotIn("no .github/workflows/ci.yml", trigger_findings[0].message)
+                self.assertEqual(plan_repo(_scan(tuple(found)), []), [])
+
     def test_ci_toml_schema_states(self) -> None:
         self.assertEqual(check_ci_toml("o/r", 200, "schema = 3\n"), (3, []))
         schema, f = check_ci_toml("o/r", 200, "schema = 1\n")
