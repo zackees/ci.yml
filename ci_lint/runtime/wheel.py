@@ -108,7 +108,7 @@ def _host_family_and_arch() -> tuple[str, str] | None:
     return None
 
 
-def check_magic(data: bytes, family: str, arch: str) -> tuple[bool, str]:
+def check_magic(data: bytes, family: str, arch: str) -> tuple[bool, str]:  # noqa: C901
     """Verify `data` (a binary's leading bytes) is really a `family`
     executable for `arch`, reading only the fixed-offset header fields
     every format guarantees: ELF's `e_machine` (offset 18), PE's
@@ -259,7 +259,7 @@ def _check_sdist_backend(sdist_path: Path) -> list[Finding]:
     return []
 
 
-def check_wheel(
+def check_wheel(  # noqa: C901
     ci: CiToml,
     wheel_path: Path,
     sdist_path: Path | None = None,
@@ -498,7 +498,7 @@ def _venv_python(venv_dir: Path) -> Path:
     return bin_dir / "python3"
 
 
-def check_installed(ci: CiToml, repo_root: Path, venv_dir: Path) -> InstalledCheckReport:
+def check_installed(ci: CiToml, repo_root: Path, venv_dir: Path) -> InstalledCheckReport:  # noqa: C901
     findings: list[Finding] = []
     cli_name = ci.python.cli.name if ci.python is not None else ""
     bin_dir = _venv_bin_dir(venv_dir)

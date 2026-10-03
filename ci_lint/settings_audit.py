@@ -167,7 +167,7 @@ def check_sec_005(fetch_status: FetchStatusFn, token: str, repo: str, ci: CiToml
 # ── SEC-006: publish environment missing / not branch-restricted ──────────
 
 
-def check_sec_006(fetch_status: FetchStatusFn, token: str, repo: str, ci: CiToml, default_branch: str) -> list[Finding]:
+def check_sec_006(fetch_status: FetchStatusFn, token: str, repo: str, ci: CiToml, default_branch: str) -> list[Finding]:  # noqa: C901
     if ci.publish.pypi is None or not ci.publish.pypi.environment:
         return [
             Finding(
@@ -485,7 +485,7 @@ def check_gen_011(
 # turn each of those advisory claims into a real verdict.
 
 
-def check_gen_010(
+def check_gen_010(  # noqa: C901
     claims: list[DocClaim],
     branch_protection: tuple[int, dict[str, object] | None] | None,
     rulesets: tuple[int, list[dict[str, object]]] | None,

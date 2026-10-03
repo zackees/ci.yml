@@ -116,7 +116,7 @@ def validate_gate_path(path: str) -> str | None:
     return None
 
 
-def parse_definition(text: str, *, source: str = DEFINITION_FILE, lanes: tuple[str, ...] | None = None) -> DefinitionLoad:
+def parse_definition(text: str, *, source: str = DEFINITION_FILE, lanes: tuple[str, ...] | None = None) -> DefinitionLoad:  # noqa: C901
     findings: list[Finding] = []
 
     def bad(message: str, fix: str) -> None:
@@ -314,7 +314,7 @@ class CommitAttestations:
         return tuple(s for s in self.statuses if s.state not in (VALID, MISSING))
 
 
-def verify_commit(repo: Path, sha: str, definition: Definition) -> CommitAttestations:
+def verify_commit(repo: Path, sha: str, definition: Definition) -> CommitAttestations:  # noqa: C901
     message = _git(repo, "log", "-1", "--format=%B", sha) or ""
     tree = (_git(repo, "rev-parse", f"{sha}^{{tree}}") or "").strip()
     parents = tuple((_git(repo, "log", "-1", "--format=%P", sha) or "").split())

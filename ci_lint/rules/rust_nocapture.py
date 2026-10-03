@@ -106,7 +106,7 @@ def _selects_single_test(args: tuple[str, ...]) -> bool:
     return has_filter and ("--exact" in after or "--ignored" in after)
 
 
-def check_rust_017(repo_root: Path) -> list[Finding]:
+def check_rust_017(repo_root: Path) -> list[Finding]:  # noqa: C901
     findings: list[Finding] = []
     for inv in iter_test_invocations(repo_root):
         flag = _serializing_flag(inv.args)

@@ -167,7 +167,7 @@ def _job_commands(job: dict[str, YamlValue]) -> list[list[str]]:
     return commands
 
 
-def check_rust_008(ci: CiToml, repo_root: Path) -> list[Finding]:
+def check_rust_008(ci: CiToml, repo_root: Path) -> list[Finding]:  # noqa: C901
     targets = sorted({p.target for p in ci.platforms.values()})
     if not targets:
         return []
@@ -279,7 +279,7 @@ def _runs_on_is_linux(runs_on: YamlValue) -> bool | None:
     return None
 
 
-def check_rust_010(repo_root: Path) -> list[Finding]:
+def check_rust_010(repo_root: Path) -> list[Finding]:  # noqa: C901
     findings: list[Finding] = []
     for wf in load_workflows(repo_root):
         if wf.status != LoadStatus.OK:

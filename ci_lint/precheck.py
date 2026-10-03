@@ -23,6 +23,7 @@ from ci_lint.rules.build_parallelism import check_gen_012
 from ci_lint.rules.cache_payload import check_cache_007_static
 from ci_lint.rules.cache_restore_copy import check_gen_013
 from ci_lint.rules.cache_static import check_group9
+from ci_lint.rules.complexity import check_complexity
 from ci_lint.rules.default_branch_skip import check_gen_021
 from ci_lint.gate_bare_tools import check_no_bare_rust
 from ci_lint.local_gate import GATE_FILE, check_gate_static
@@ -115,6 +116,7 @@ GROUP_LABELS: dict[int, str] = {
     16: "default-branch skips only through verified reuse (GEN-021)",
     17: "local gate first: remote quick gate mirrors the local gate, PR entry verifies it (GATE-001/002)",
     18: "remote-only checks never gate a PR: CodeRabbit suppressed, act-impossible steps confined, no app waits (GATE-012)",
+    19: "function-complexity ratchet: clippy and ruff ceilings, per-function expect/noqa only (RUST-018, PY-004)",
 }
 
 
@@ -172,6 +174,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(check_rust_016(repo_root))
         all_findings.extend(check_gen_021(repo_root))
         all_findings.extend(check_gate_012(repo_root))
+        all_findings.extend(check_complexity(repo_root).findings)
         if ci.local.gate is not None:
             all_findings.extend(check_gate_static(ci.local.gate, repo_root))
             all_findings.extend(check_no_bare_rust(repo_root, ci.local.gate.run, workflows=False))

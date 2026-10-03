@@ -43,7 +43,7 @@ def _extends_chain(ci: CiToml, flow_id: str) -> list[Flow]:
     return chain
 
 
-def resolve_flow(ci: CiToml, flow_id: str) -> ResolvedFlow:
+def resolve_flow(ci: CiToml, flow_id: str) -> ResolvedFlow:  # noqa: C901
     platforms: tuple[str, ...] | str = ()
     suites: tuple[str, ...] | str = ()
     dylint: str | None = None

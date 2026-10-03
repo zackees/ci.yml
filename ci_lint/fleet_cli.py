@@ -92,7 +92,7 @@ def _cmd_fleet_scan(args: argparse.Namespace) -> int:
     return 1 if any(f.status == Status.VIOLATION for s in report.repos for f in s.findings) else 0
 
 
-def _cmd_sync_issues(args: argparse.Namespace) -> int:
+def _cmd_sync_issues(args: argparse.Namespace) -> int:  # noqa: C901
     if args.dry_run and args.apply:
         print("ci-lint sync-issues: --dry-run and --apply are mutually exclusive", file=sys.stderr)
         return 2

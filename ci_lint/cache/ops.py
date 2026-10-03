@@ -221,7 +221,7 @@ def _lru_evictions(ci: CiToml, classified: list[ClassifiedEntry]) -> dict[int, s
     return out
 
 
-def janitor(
+def janitor(  # noqa: C901
     ci: CiToml,
     *,
     fetch: FetchFn,

@@ -115,7 +115,7 @@ def _janitor_group_ok(value: YamlValue) -> bool:
     return value.get("group") == JANITOR_GROUP and (cancel is False or cancel == "false")
 
 
-def check_ci_pre_shape(repo_root: Path) -> list[Finding]:
+def check_ci_pre_shape(repo_root: Path) -> list[Finding]:  # noqa: C901
     """GEN-015/014/015/016 over `.github/workflows/ci-pre.yml`."""
 
     findings: list[Finding] = []
@@ -213,7 +213,7 @@ def carries_pr_number(value: YamlValue, *, is_composite: bool) -> bool:
     return is_composite and "inputs." in value
 
 
-def check_cache_010(ci: CiToml, repo_root: Path) -> list[Finding]:
+def check_cache_010(ci: CiToml, repo_root: Path) -> list[Finding]:  # noqa: C901
     del ci  # the rule is ci.toml-independent; kept for the group-function signature
     files: list[tuple[str, bool, dict[str, YamlValue]]] = []
     for wf in load_workflows(repo_root):

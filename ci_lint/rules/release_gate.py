@@ -262,7 +262,7 @@ def _call_argv0_and_rest(call: ast.Call) -> tuple[str | None, list[str | None]] 
     return argv[0], argv[1:]
 
 
-def _is_rebuild_call(call: ast.Call) -> str | None:
+def _is_rebuild_call(call: ast.Call) -> str | None:  # noqa: C901
     if not _is_subprocess_call(call):
         return None
     parsed = _call_argv0_and_rest(call)

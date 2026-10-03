@@ -186,7 +186,7 @@ def automatic_surfaces(repo: Path, rev: str, config_source: str, gate_run: tuple
     return tuple(sorted(out))
 
 
-def decide(repo: Path, inp: TrustInput) -> TrustDecision:
+def decide(repo: Path, inp: TrustInput) -> TrustDecision:  # noqa: C901
     from ci_lint.local_gate import (  # noqa: PLC0415 -- local_gate imports this module
         GitError,
         _git,

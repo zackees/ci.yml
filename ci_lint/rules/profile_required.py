@@ -60,7 +60,7 @@ def _is_literal_false(value: object) -> bool:
     return False
 
 
-def check_group13(ci: CiToml, repo_root: Path) -> list[Finding]:
+def check_group13(ci: CiToml, repo_root: Path) -> list[Finding]:  # noqa: C901
     findings: list[Finding] = []
 
     required = {sid: s for sid, s in ci.suites.items() if s.required}

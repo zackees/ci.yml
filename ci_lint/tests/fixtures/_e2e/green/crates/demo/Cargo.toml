@@ -8,3 +8,6 @@ test = false
 
 [dependencies]
 demo-core = { path = "../private/demo-core" }
+
+[lints]
+workspace = true

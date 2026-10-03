@@ -851,7 +851,7 @@ def load_ci_toml(repo_root: Path) -> tuple[CiToml | None, list[Finding]]:
     return ci, findings
 
 
-def _validate_cross_refs(ci: CiToml) -> list[Finding]:
+def _validate_cross_refs(ci: CiToml) -> list[Finding]:  # noqa: C901
     out: list[Finding] = []
     source = ci.source_path
 

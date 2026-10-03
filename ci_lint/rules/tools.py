@@ -146,7 +146,7 @@ def _tool_findings_for_commands(commands: list[list[str]], path: str, loc: str) 
     return findings
 
 
-def _iter_run_steps(repo_root: Path) -> list[tuple[str, str, str]]:
+def _iter_run_steps(repo_root: Path) -> list[tuple[str, str, str]]:  # noqa: C901
     """(run_text, path, loc) for every run: step in workflows and composite actions."""
 
     out: list[tuple[str, str, str]] = []
@@ -243,7 +243,7 @@ def _discover_python_command_files(repo_root: Path) -> list[Path]:
     return sorted(out)
 
 
-def _extract_ast_commands(path: Path) -> list[tuple[list[str], int]]:
+def _extract_ast_commands(path: Path) -> list[tuple[list[str], int]]:  # noqa: C901
     try:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
@@ -337,7 +337,7 @@ def _is_plan_expr(value: object) -> bool:
     return isinstance(value, str) and ("needs.precheck.outputs." in value or "inputs." in value)
 
 
-def check_cache_009(ci: CiToml, repo_root: Path) -> list[Finding]:
+def check_cache_009(ci: CiToml, repo_root: Path) -> list[Finding]:  # noqa: C901
     findings: list[Finding] = []
     only_in = ci.allow.setup_soldr.only_in.strip("/")
 
@@ -583,7 +583,7 @@ def _runs_on_is_linux(runs_on: YamlValue) -> bool | None:
     return None
 
 
-def check_rust_002(repo_root: Path) -> list[Finding]:
+def check_rust_002(repo_root: Path) -> list[Finding]:  # noqa: C901
     findings: list[Finding] = []
     dylint_jobs: list[tuple[str, str, dict[str, YamlValue]]] = []
 
@@ -694,7 +694,7 @@ def _classify_lint_tokens(tokens: list[str]) -> str | None:
     return None
 
 
-def _scan_commands_for_gen_004(
+def _scan_commands_for_gen_004(  # noqa: C901
     commands: list[list[str]],
     repo_root: Path,
     *,
@@ -748,7 +748,7 @@ def _scan_commands_for_gen_004(
             )
 
 
-def check_gen_004(repo_root: Path) -> list[Finding]:
+def check_gen_004(repo_root: Path) -> list[Finding]:  # noqa: C901
     if not any(f.endswith(".py") for f in list_repo_files(repo_root)):
         return []  # GEN-004 only applies when the repo has Python sources
 
@@ -933,7 +933,7 @@ def _env_no_sync(value: YamlValue) -> bool:
     return isinstance(value, dict) and _truthy(value.get("UV_NO_SYNC"))
 
 
-def check_tool_003_workflows(repo_root: Path) -> list[Finding]:
+def check_tool_003_workflows(repo_root: Path) -> list[Finding]:  # noqa: C901
     if not _repo_builds_rust(repo_root):
         return []
 

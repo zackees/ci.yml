@@ -132,7 +132,7 @@ def _within(cwd: str, crate_dir: str) -> bool:
     return cwd == crate_dir or cwd.startswith(crate_dir + "/")
 
 
-def _collect(repo_root: Path) -> dict[str, list[CargoCall]]:
+def _collect(repo_root: Path) -> dict[str, list[CargoCall]]:  # noqa: C901
     """Every cargo/dylint call per workflow file."""
 
     by_file: dict[str, list[CargoCall]] = {}
