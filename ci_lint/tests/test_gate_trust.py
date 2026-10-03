@@ -276,6 +276,37 @@ class StaticTest(TrustCase):
         self.assertTrue(any(f"GATE-008:{Status.VIOLATION.value}:ci.yml has no push trigger" in f for f in self.findings()),
                         self.findings())
 
+    def _two_workflows(self, *, integration_verify: bool) -> None:
+        verify = (
+            "  verify-int:\n    runs-on: ubuntu-24.04\n    outputs:\n      skip_smoke: ${{ steps.v.outputs.skip_smoke }}\n"
+            "    steps:\n      - id: v\n        run: python3 -m ci_lint local-gate verify --repo . --trust --github-output\n"
+            if integration_verify else ""
+        )
+        (self.repo / ".github/workflows/integration.yml").write_text(
+            "name: Integration\non:\n  push:\n    branches: [main]\n  pull_request:\njobs:\n" + verify
+            + "  smoke:\n    needs: [verify-int]\n    if: ${{ needs.verify-int.outputs.skip_smoke != 'true' }}\n"
+            "    runs-on: ubuntu-24.04\n    steps:\n      - run: echo smoke\n", encoding="utf-8")
+        gate = self.repo / "local-gate.toml"
+        gate.write_text(gate.read_text(encoding="utf-8").replace(
+            'skip = ["ci.yml:lint", "ci.yml:tests"]\ncovered-by = { "ci.yml:tests" = ["tests"] }',
+            'skip = ["ci.yml:lint", "ci.yml:tests", "integration.yml:smoke"]\n'
+            'covered-by = { "ci.yml:tests" = ["tests"], "integration.yml:smoke" = ["tests"] }'), encoding="utf-8")
+
+    def test_each_workflow_with_its_own_verify_job_is_clean(self) -> None:
+        self._two_workflows(integration_verify=True)
+        self.assertEqual(self.findings(), [])
+
+    def test_skip_decision_without_same_workflow_verify_job(self) -> None:
+        self._two_workflows(integration_verify=False)
+        found = self.findings()
+        self.assertTrue(any(f"GATE-008:{Status.VIOLATION.value}:skip job 'smoke' consumes needs.verify-int" in f
+                            and "integration.yml has no such job" in f for f in found), found)
+
+    def test_skip_decision_from_a_job_that_never_verifies(self) -> None:
+        wf = self.repo / ".github/workflows/ci.yml"
+        wf.write_text(wf.read_text(encoding="utf-8").replace("local-gate verify", "local-gate check-push"), encoding="utf-8")
+        self.assertTrue(any("never runs `local-gate verify`" in f for f in self.findings()), self.findings())
+
     def test_bad_mode_and_audit_rate(self) -> None:
         gate = self.repo / "local-gate.toml"
         gate.write_text(gate.read_text(encoding="utf-8").replace('mode = "enforce"', 'mode = "always"').replace(

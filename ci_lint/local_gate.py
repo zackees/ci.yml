@@ -1011,7 +1011,12 @@ def _check_trust(config: GateConfig, wfs: _Workflows) -> list[Finding]:
     for wf in wfs.parsed:
         for job_id, job in jobs_of(wf.doc).items():
             cond = job.get("if")
-            jobs.append(WorkflowJob(wf.name, job_id, cond if isinstance(cond, str) else None))
+            steps = job.get("steps")
+            runs_verify = isinstance(steps, list) and any(
+                isinstance(step, dict) and isinstance(step.get("run"), str) and "local-gate verify" in step["run"]
+                for step in steps
+            )
+            jobs.append(WorkflowJob(wf.name, job_id, cond if isinstance(cond, str) else None, runs_verify))
     facts = WorkflowFacts(
         jobs=tuple(jobs),
         push_triggered=frozenset(wf.name for wf in wfs.parsed if "push" in get_on_section(wf.doc)),

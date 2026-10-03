@@ -261,6 +261,7 @@ class WorkflowJob:
     workflow: str  # file name under .github/workflows/
     job_id: str
     condition: str | None  # the job-level `if:`, when it is a string
+    runs_verify: bool = False  # a step runs `local-gate verify`
 
 
 @dataclass(frozen=True)
@@ -273,6 +274,30 @@ class WorkflowFacts:
             if job.workflow == workflow and job.job_id == job_id:
                 return job
         return None
+
+
+def _decision_findings(job: WorkflowJob, workflow: str, workflows: WorkflowFacts, needle: str, per_job: str,
+                       path: str) -> list[Finding]:
+    """The skip job's `if:` reads a trust decision, and every
+    `needs.<id>.outputs.*` it reads is produced by a job `<id>` in the SAME
+    workflow that runs `local-gate verify`: `needs:` cannot cross workflow
+    files, so a missing or non-verify producer leaves the decision empty."""
+
+    decision_re = re.compile(rf"needs\.([A-Za-z_][A-Za-z0-9_-]*)\.outputs\.(?:{TRUSTED_OUTPUT}|skip_{re.escape(job.job_id)})\b")
+    producers = sorted(set(decision_re.findall(job.condition or "")))
+    if not producers:
+        return [Finding(rule="GATE-008", path=path,
+                        message=f"skip job '{job.job_id}' has no job-level if: consuming {per_job} (or {needle}), so trust never skips it",
+                        fix=f"add `{per_job} != 'true'` to its if:")]
+    out: list[Finding] = []
+    for producer in producers:
+        backing = workflows.job(workflow, producer)
+        if backing is None or not backing.runs_verify:
+            what = "no such job" if backing is None else "that job never runs `local-gate verify`"
+            out.append(Finding(rule="GATE-008", path=path, status=Status.VIOLATION,
+                               message=f"skip job '{job.job_id}' consumes needs.{producer}.outputs.* but {workflow} has {what}",
+                               fix=f"add a job '{producer}' to {workflow} that runs `ci-lint local-gate verify --trust --github-output`"))
+    return out
 
 
 def check_trust_static(trust: TrustConfig | None, *, verify_job: str | None, mirrors: tuple[str, ...],
@@ -299,10 +324,7 @@ def check_trust_static(trust: TrustConfig | None, *, verify_job: str | None, mir
             continue
         needle = f"needs.{verify_id}.outputs.{TRUSTED_OUTPUT}"
         per_job = f"needs.{verify_id}.outputs.skip_{job_id}"  # GATE-010 per-job decision
-        if job.condition is None or (needle not in job.condition and per_job not in job.condition):
-            out.append(Finding(rule="GATE-008", path=path,
-                               message=f"skip job '{job_id}' has no job-level if: consuming {per_job} (or {needle}), so trust never skips it",
-                               fix=f"add `{per_job} != 'true'` to its if:"))
+        out.extend(_decision_findings(job, workflow, workflows, needle, per_job, path))
         if ref not in mirrors:
             lanes = trust.lanes_for(ref)
             if lanes is None:
