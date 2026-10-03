@@ -1,6 +1,29 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
-## Fbuild migration: interpreter dependency found before publishing
+## Fbuild migration: local proof passes; runtime warm speed remains unproven
+
+[Fbuild draft PR #1636](https://github.com/FastLED/fbuild/pull/1636) carries
+the source-bound shadow gate. Its tree `97ec665f5af3` passed the declared
+local gate in 284 seconds (run `3bf730c2-b0c1-4ce4-baa5-74a21cfb015a`), then
+a forced engine execution of the same tree in 286 seconds (run
+`f4da150c-634c-40be-a700-0781565d5998`). Both runs completed the verifier,
+workspace job and ignored Python-facade job successfully. The final commit
+`c14693b5bd06` carries four gate attestations. A forced local-gate invocation
+with lane reuse enabled finished in 0 seconds over the same 3,364 inputs,
+without starting an engine; this is distinct from warm engine execution.
+
+The runtime warm pass is not faster than the first successful pass: thin
+target-cache fallback still rebuilds workspace leaf crates. The build-cache
+exact hit skips saving newer content, while the target layer saved the first
+successful workspace run. Reported zccache session totals are global
+last-writer-wins fallback data with unknown originating workspace, so they
+are not reliable evidence of a complete run's hit rate.
+
+Local evidence used a wheel built from bosn's merged stock-runner-tools fix
+`6ae32cd7dca8` ([bosn PR #441](https://github.com/zackees/bosn/pull/441)).
+Published bosn `v0.1.10` at `189e5e8d9840` predates that fix. Runner dependency
+publication and remote validation remain required before rollout. The fleet
+migration and its 100% first-push target are not complete.
 
 [Fbuild issue #1635](https://github.com/FastLED/fbuild/issues/1635) owns the
 next source-bound bosn/act2 migration. Its unchanged-main baseline at
@@ -24,8 +47,8 @@ cache-key uniqueness failure reproduces on unchanged main and is not waived.
 Parsed local-gate lint also reports existing standalone-workflow verification,
 bare Rust-tool and CodeRabbit findings, plus an undeclared mirrored-job
 relationship. The new verifier's missing dependency was corrected in the
-generator. Full runtime, warm reuse and remote validation are still required
-before publication; this is not a completed migration or a 100% pass claim.
+generator. The successful local runs above establish Linux proof fidelity;
+remote validation and faster warm engine execution remain outstanding.
 
 ## Latest validation: nightly cache reuse proven; kernel permission correction pending
 
