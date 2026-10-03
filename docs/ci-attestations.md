@@ -55,7 +55,7 @@ Ci-Attestation: {"at":1790917000,"gate":"rust/x86_64-unknown-linux-gnu/test","ho
 
 ## In CI
 
-1. **Verify job:** `ci-lint local-gate verify --trust --github-output`, with full history.
+1. **Verify job:** `ci-lint local-gate verify --trust --github-output`, with full history. Check ci_lint out **outside** the workspace (e.g. `path: ${{ runner.temp }}/ci-lint`, invoked with `PYTHONPATH=$RUNNER_TEMP/ci-lint`). A `.ci-lint/` directory inside the tree trips repository-local static checks; zackees/clud's banned-imports check flagged ci_lint's subprocess use.
    - GATE-008's head-level policy applies first: base policy, surfaces, author, fork, `ci-full`, and the audit sample.
    - Then, per `[gate.trust].skip` job, it outputs **`skip_<job id>`**, which is `true` only when every gate the base definition maps to that job has a valid attestation.
    - Each skip job's `if:` consumes `needs.<verify>.outputs.skip_<job id>`.

@@ -172,7 +172,9 @@ def check_isolation(isolation: IsolationConfig | None, gate_run: tuple[str, ...]
                     fix=f"refuse to start unless CI=true or {iso.marker}=1, naming the isolated command ({' '.join(iso.runner)})",
                 )
             )
-    if iso.runner[0] == "bosn":
+    if _is_bosn_ci(iso.runner):
+        pass  # act sets CI=true inside every job, and the guard must honour CI
+    elif iso.runner[0] == "bosn":
         findings.extend(_bosn_marker_findings(iso, repo_root, source))
     scripts = [repo_root / token for token in gate_run if (repo_root / token).is_file()]
     findings.extend(_tree_proof_findings(iso, scripts, repo_root, source))
@@ -214,6 +216,16 @@ def _bosn_entry_scripts(iso: IsolationConfig, repo_root: Path) -> list[Path]:
     return out
 
 
+def _is_bosn_ci(runner: tuple[str, ...]) -> bool:
+    """`bosn ci run ...`: bosn's GitHub-Actions engine (act), the sanctioned
+    local runner where a repository forbids direct bosn tasks (zackees/clud)."""
+
+    return len(runner) >= 3 and runner[0] == "bosn" and runner[1] == "ci" and runner[2] == "run"
+
+
+RUN_RECORD_FIELDS: tuple[str, ...] = ("workspace", "sha", "dirty")
+
+
 def _tree_proof_findings(iso: IsolationConfig, gate_scripts: list[Path], repo_root: Path, source: str) -> list[Finding]:
     if not iso.proves_tree:
         return [
@@ -228,6 +240,20 @@ def _tree_proof_findings(iso: IsolationConfig, gate_scripts: list[Path], repo_ro
             )
         ]
     findings: list[Finding] = []
+    if _is_bosn_ci(iso.runner):
+        # bosn ci snapshots the tree honouring .gitignore, so a gitignored
+        # nonce never reaches the job; the proof is bosn's own run record,
+        # which names the workspace, the commit and whether the snapshot was
+        # dirty. The gate must check all three against itself.
+        texts = [s.read_text(encoding="utf-8", errors="replace") for s in gate_scripts]
+        if not any(all(f'"{field}"' in t for field in RUN_RECORD_FIELDS) for t in texts):
+            findings.append(Finding(
+                rule="GATE-009", path=source,
+                message="proves-tree is set with a `bosn ci run` runner, but the gate script never checks the run "
+                "record's workspace, sha and dirty fields",
+                fix="after `bosn ci run`, read its run record and require workspace == this worktree, sha == HEAD and "
+                "dirty == null"))
+        return findings
     if not any(NONCE_FILE in s.read_text(encoding="utf-8", errors="replace") for s in gate_scripts):
         findings.append(Finding(rule="GATE-009", path=source,
                                 message=f"proves-tree is set but the gate script never writes {NONCE_FILE}",
