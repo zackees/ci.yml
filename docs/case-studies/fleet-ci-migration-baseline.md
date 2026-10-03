@@ -74,3 +74,36 @@ of 1,295 executed tests, with
 `process::ape_launch::command_routes_a_real_image_through_its_loader` timing out
 at 120 seconds. This remains a test reliability investigation; do not waive it
 or claim the minimal Linux gate covers the full test graph.
+
+
+## First-push PR measurement
+
+The [first-pass ledger](fleet-first-pass-ledger.json) records merged PRs since
+2026-10-02 00:00 UTC with matching PR workflow runs. Unlike the earlier
+50-run sample, this measures distinct PR head SHAs, failures and reruns within
+each PR's lifetime. Fbuild's entrypoint is `ci-minimal.yml`; the other six use
+`ci.yml`. Merged PRs with no matching run and unmerged PRs are outside this
+collector's denominator. Its branch-run query is capped at 100; the ledger
+records these limits. Trailer presence is not proof of stamp validity.
+
+| Repository | First-pass PRs / sampled | Trailer present on latest run |
+| --- | --- | --- |
+| FastLED/fbuild | 7/16 | 0/16 |
+| zackees/bosn | 36/49 | 10/49 |
+| zackees/clud | 19/34 | 0/34 |
+| zackees/kernal-api | 3/8 | 0/8 |
+| zackees/running-process | 0/3 | 0/3 |
+| zackees/soldr | 15/15 | 15/15 |
+| zackees/zccache | 5/9 | 0/9 |
+
+A focused regression found the classifier counted a successful attempt-one
+run followed by a rerun as first-pass, contrary to its documented contract.
+`classify` now requires zero reruns. RED → GREEN passed, and all 813 ci-lint
+selftests passed via the repository local gate. Duplicate cancelled runs of
+attempt one on the same head retain their existing treatment.
+
+Kernal-api's candidate is now running locally. Its shadow verifier completed
+successfully in 1.131 seconds; the engine preparation took 85.1 seconds after
+7.7 seconds of engine creation. Setup-soldr is currently installing the pinned
+Rust toolchain in the fresh job, so fast warm execution is still unproven.
+No remote skip is enabled and no migration is marked complete.
