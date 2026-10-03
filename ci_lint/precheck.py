@@ -35,6 +35,7 @@ from ci_lint.rules.packaging import check_group8
 from ci_lint.rules.profile_required import check_group13
 from ci_lint.rules.py_benchmark import check_group14
 from ci_lint.rules.doc_claims import check_gen_010_static
+from ci_lint.rules.ghapi_reread import check_ghapi_001
 from ci_lint.rules.release_gate import check_group11
 from ci_lint.rules.rust_dylint_target import check_rust_016
 from ci_lint.rules.rust_nocapture import check_rust_017
@@ -115,6 +116,7 @@ GROUP_LABELS: dict[int, str] = {
     16: "default-branch skips only through verified reuse (GEN-021)",
     17: "local gate first: remote quick gate mirrors the local gate, PR entry verifies it (GATE-001/002)",
     18: "remote-only checks never gate a PR: CodeRabbit suppressed, act-impossible steps confined, no app waits (GATE-012)",
+    19: "GitHub API budget: no unbounded GitHub re-read loops in run:, ci/ or skill/tool scripts (GHAPI-001)",
 }
 
 
@@ -172,6 +174,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(check_rust_016(repo_root))
         all_findings.extend(check_gen_021(repo_root))
         all_findings.extend(check_gate_012(repo_root))
+        all_findings.extend(check_ghapi_001(repo_root))
         if ci.local.gate is not None:
             all_findings.extend(check_gate_static(ci.local.gate, repo_root))
             all_findings.extend(check_no_bare_rust(repo_root, ci.local.gate.run, workflows=False))
