@@ -113,11 +113,30 @@ head (`e087757816d04327caee08d465464b1c7bf0a3b0`).
 [Release v0.2.89-act2.3](https://github.com/zackees/act2/releases/tag/v0.2.89-act2.3)
 published through the existing tag workflow. The downloaded Linux x86_64
 archive matches its published checksum; its extracted binary reports the
-expected version. Bosn's staged 0.1.12 change pins both verified digests, and
-its focused isolated engine/pin/tool tests pass after a stale-URL regression
-failed. The full local gate and subsequent exact-main full CI/release gate
-remain required. No running-process attestation has been issued. These
-milestones do not erase failed attempts or replace the running-process sample.
+expected version. Bosn 0.1.12 pins both verified digests. Its focused isolated
+engine/pin/tool tests pass after a stale-URL regression failed, and its full
+local gate passed in 586 seconds. [PR #443](https://github.com/zackees/bosn/pull/443)
+merged as `08c7c8cdb262b980d56fd9fccbe9b6156fc6ec82`, with the exact tested tree.
+The [exact-main full CI](https://github.com/zackees/bosn/actions/runs/37132565941),
+[dry release](https://github.com/zackees/bosn/actions/runs/37133268857), and
+[publication](https://github.com/zackees/bosn/actions/runs/37133859473) passed,
+including all four wheels and both native macOS smokes.
+[Version 0.1.12](https://github.com/zackees/bosn/releases/tag/v0.1.12) was installed
+from PyPI into a private environment and reports the expected version.
+
+Before publication, the source-built candidate ran the unchanged running-process
+Linux quick gate against the same source snapshot and event payload. It failed
+in 686.285 seconds: the ordinary-user and read-only loader fallback tests passed,
+Dylint passed, and nextest executed 1549 of 2346 tests (1545 passed, including
+one retry; four APE tests failed). The unexecuted remainder prevents attestation.
+A separate diagnostic using the released act2.3 binary observed umask `0000`
+and default directory mode `0777`; a diagnostic-only `0022` control produced
+`0755` and passed the directory-permission assertion. This isolates a runner
+permission gap, but does not prove that all four APE failures share that cause.
+No production umask change or repository workaround was applied. A run through
+the published Bosn wheel is pending. No running-process attestation has been
+issued. These milestones do not erase failed attempts or replace its first-push
+sample.
 
 The post action reported a build miss with save skipped by global
 `save-cache` policy. An unpushed focused regression is RED on the original
