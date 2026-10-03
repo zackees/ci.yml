@@ -1,0 +1,139 @@
+{
+  "repo": "zackees/zccache",
+  "workflow": "ci.yml",
+  "since": "2026-10-02T00:00:00+00:00",
+  "target": 0.8,
+  "rate": 0.7142857142857143,
+  "merged_total": 14,
+  "scanned": 14,
+  "without_runs": 0,
+  "limit": 0,
+  "prs": [
+    {
+      "number": 1866,
+      "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1868,
+      "title": "fix(ci): x86 Test keeps its own warm test-profile store (#1867)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1871,
+      "title": "ci: pass job.status to every setup-soldr step (setup-soldr#559)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1872,
+      "title": "feat(embedded): request-scoped --test harness admission, observable (#1550)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1873,
+      "title": "ci: admit --test harness links in Linux x64 Build test binaries (#1550)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1874,
+      "title": "chore(release): bump 1.15.0 -> 1.15.1",
+      "head_shas": 3,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1876,
+      "title": "fix(ci): retire same-lock soldr generations; a failed pre-prune no longer blocks cleanup (#1875)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1877,
+      "title": "ci(cache): per-family one-generation budgets in the cache-budget check (#1875)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1880,
+      "title": "ci(cache): release builds save no Actions cache; retire the 1.15.1 release entries",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1881,
+      "title": "ci: local gate + per-gate attestations (GATE-001..010)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1882,
+      "title": "test(release): detect-bump stubs win over a BASH_ENV PATH shim",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1883,
+      "title": "ci(local-gate): per-worktree soldr home in the gate container",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1884,
+      "title": "ci(cache): the pre-prune barrier never fails a job; it gates cache writes",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1886,
+      "title": "ci: prove isolated MSRV and Integration through Bosn Actions",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    }
+  ]
+}
