@@ -1,5 +1,32 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
+## Fbuild migration: interpreter dependency found before publishing
+
+[Fbuild issue #1635](https://github.com/FastLED/fbuild/issues/1635) owns the
+next source-bound bosn/act2 migration. Its unchanged-main baseline at
+`6acb66a2f54f`, local run `6bd1f21d-9c65-4737-b779-a4e63f587502`, took
+572.7 seconds and failed the workspace test link: `rust-lld` could not find
+`libpython3.12`. The separate ignored Python-facade job passed. Ignoring the
+embedded-CPython tests does not remove their test binary's link dependency.
+
+The local draft `a4b258b8a028` selects uv-managed Python 3.12 explicitly for
+the workspace job, preserving its hosted interpreter version and every
+Clippy/test command. The facade job keeps Python 3.10 and its distinct cache
+suffix. The draft requires successful evidence for both `check` and
+`python-facade-tests` on the same clean source through bosn's act2 engine;
+dirty, stale, partial, skipped or malformed evidence fails closed. Its
+verifier is shadow-only; board, extended/full and other native-host coverage
+remain remote. Only existing workflow files are changed, with the minimal
+entrypoint generated from `ci/render_workflows.py`.
+
+Nineteen focused tests and the code review passed. The broader guard suite's
+cache-key uniqueness failure reproduces on unchanged main and is not waived.
+Parsed local-gate lint also reports existing standalone-workflow verification,
+bare Rust-tool and CodeRabbit findings, plus an undeclared mirrored-job
+relationship. The new verifier's missing dependency was corrected in the
+generator. Full runtime, warm reuse and remote validation are still required
+before publication; this is not a completed migration or a 100% pass claim.
+
 ## Latest validation: nightly cache reuse proven; kernel permission correction pending
 
 The unpushed kernal-api cache-policy tree `5839aa5acbc5` moves the unconditional
