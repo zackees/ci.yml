@@ -7,7 +7,13 @@ creation/merge times) are grouped by head SHA:
 
 `workflow` is the workflow *file* name (`ci.yml`), matched against each
 run's `path`, because a run's `name` is its run-name and many repositories
-set that to the PR title.
+set that to the PR title. Runs are read from the workflow-scoped endpoint
+(`/actions/workflows/<file>/runs`, paginated), so `--workflow` really scopes
+the sample; the report prints how many merged PRs were scanned and how many
+had no run of that workflow at all (excluded from the rate), so two
+workflows' reports are visibly different. Merged PRs are paginated with no
+silent cap; `limit` (CLI `--limit`, default 0 = all) keeps only the newest N
+merged PRs and the report says so.
 
 - **first pass** = exactly one head SHA ever got a run, some run on it
   concluded `success` on attempt 1, and no run on it concluded `failure`.
@@ -66,6 +72,10 @@ class FirstPassReport:
     prs: tuple[PrSample, ...]
     target: float
     min_prs: int
+    merged_total: int = 0
+    scanned: int = 0
+    without_runs: int = 0
+    limit: int = 0
 
     @property
     def rate(self) -> float | None:
@@ -92,6 +102,10 @@ class FirstPassReport:
             "since": self.since,
             "target": self.target,
             "rate": self.rate,
+            "merged_total": self.merged_total,
+            "scanned": self.scanned,
+            "without_runs": self.without_runs,
+            "limit": self.limit,
             "prs": [
                 {
                     "number": p.number,
@@ -151,7 +165,9 @@ def classify(runs: list[RunSample]) -> PrClassification:
 
 def _merged_prs(repo: str, since: datetime, fetch: FetchFn, token: str) -> list[dict[str, JsonValue]]:
     out: list[dict[str, JsonValue]] = []
-    for page in range(1, 11):
+    page = 0
+    while True:
+        page += 1
         url = f"{API}/repos/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100&page={page}"
         batch = _l(fetch(url, token))
         for raw in batch:
@@ -164,18 +180,33 @@ def _merged_prs(repo: str, since: datetime, fetch: FetchFn, token: str) -> list[
     return out
 
 
+def _workflow_runs(repo: str, workflow: str, branch: str, fetch: FetchFn, token: str) -> list[JsonValue]:
+    base = (f"{API}/repos/{repo}/actions/workflows/{quote(workflow, safe='')}/runs"
+            f"?event=pull_request&branch={quote(branch, safe='')}&per_page=100")
+    out: list[JsonValue] = []
+    page = 0
+    while True:
+        page += 1
+        batch = _l(_d(fetch(f"{base}&page={page}", token)).get("workflow_runs"))
+        out.extend(batch)
+        if len(batch) < 100:
+            return out
+
+
 def collect(repo: str, workflow: str, since: datetime, fetch: FetchFn, token: str,
-            *, target: float = DEFAULT_TARGET, min_prs: int = DEFAULT_MIN_PRS) -> FirstPassReport:
+            *, target: float = DEFAULT_TARGET, min_prs: int = DEFAULT_MIN_PRS, limit: int = 0) -> FirstPassReport:
     prs: list[PrSample] = []
-    for pr in _merged_prs(repo, since, fetch, token):
+    merged_prs = sorted(_merged_prs(repo, since, fetch, token), key=lambda p: _s(p.get("merged_at")), reverse=True)
+    selected = merged_prs[:limit] if limit > 0 else merged_prs
+    without_runs = 0
+    for pr in selected:
         head = _d(pr.get("head"))
         branch = _s(head.get("ref"))
         if not branch:
             continue
         created, merged = _ts(_s(pr.get("created_at"))), _ts(_s(pr.get("merged_at")))
-        url = f"{API}/repos/{repo}/actions/runs?event=pull_request&branch={quote(branch, safe='')}&per_page=100"
         runs: list[RunSample] = []
-        for raw in _l(_d(fetch(url, token)).get("workflow_runs")):
+        for raw in _workflow_runs(repo, workflow, branch, fetch, token):
             run = _d(raw)
             # `name` is the run-name (often the PR title); `path` names the file.
             if _s(run.get("path")).split("@", 1)[0].rsplit("/", 1)[-1] != workflow:
@@ -194,6 +225,7 @@ def collect(repo: str, workflow: str, since: datetime, fetch: FetchFn, token: st
                 )
             )
         if not runs:
+            without_runs += 1
             continue
         verdict = classify(runs)
         number = pr.get("number")
@@ -210,11 +242,18 @@ def collect(repo: str, workflow: str, since: datetime, fetch: FetchFn, token: st
         )
     prs.sort(key=lambda p: p.number)
     return FirstPassReport(repo=repo, workflow=workflow, since=since.isoformat(), prs=tuple(prs),
-                           target=target, min_prs=min_prs)
+                           target=target, min_prs=min_prs, merged_total=len(merged_prs),
+                           scanned=len(selected), without_runs=without_runs, limit=limit)
 
 
 def render_text(report: FirstPassReport) -> str:
-    lines = [f"first-pass: {report.repo} workflow '{report.workflow}' since {report.since}"]
+    capped = f" (--limit {report.limit}: newest {report.scanned} of {report.merged_total})" if report.limit else ""
+    lines = [
+        f"first-pass: {report.repo} workflow '{report.workflow}' since {report.since}",
+        f"  merged PRs: {report.merged_total} total, {report.scanned} scanned{capped}; "
+        f"{report.without_runs} had no pull_request run of '{report.workflow}' (excluded); "
+        f"{len(report.prs)} sampled",
+    ]
     for p in report.prs:
         mark = "PASS" if p.first_pass else "MISS"
         lines.append(
