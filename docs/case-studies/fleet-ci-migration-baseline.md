@@ -1,6 +1,6 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
-## Fbuild shadow rollout merged; enforced PR proof submitted
+## Fbuild enforcement merged; warm remote execution measured
 
 [Fbuild #1636](https://github.com/FastLED/fbuild/pull/1636) merged at
 `8246c3099085` after [latest-head ci-minimal 37116500210](https://github.com/FastLED/fbuild/actions/runs/37116500210)
@@ -20,10 +20,25 @@ dispatch keep a successful verifier dependency. Twenty-six focused checks,
 Ruff and code review passed. Published Bosn 0.1.11 ran the full declared gate
 in 224 seconds (`963a50d7-4f74-4fed-ace2-3cfaf2820bad`), attesting
 `d962b457cce9` / tree `4d5064a4071a`. Real PR verification rejected the
-unsigned head (exit 1), then accepted the stamped head. Remote verification
-of this enforcement change remains pending. Board, extended/full and other
-native-host coverage remain remote; broader local coverage and quick-gate
-reuse are still required work.
+unsigned head (exit 1), then accepted the stamped head. Exact-head
+[ci-minimal 37117558797](https://github.com/FastLED/fbuild/actions/runs/37117558797)
+and [Dylint 37117558377](https://github.com/FastLED/fbuild/actions/runs/37117558377)
+passed before #1637 merged at `971efdf2bc83`. Its single pushed head passed
+on the first attempt; that individual result is not a fleet-wide 100% rate.
+Board, extended/full and other native-host coverage remain remote; broader
+local coverage and quick-gate reuse are still required work.
+
+The merged default-branch [warm run 37118394155](https://github.com/FastLED/fbuild/actions/runs/37118394155)
+passed in 261 seconds overall. The workspace job took 241 seconds, with
+Clippy taking 59 seconds (Cargo 45.91) and Test taking 147 seconds (Cargo
+compilation 97.12). The build layer reported an exact hit on the healthy
+main seed saved by the preceding merged run; the target layer used a
+restore-key fallback. The preceding PR workspace job took 787 seconds,
+with Clippy/Test compilation of 342.90/359.48 seconds and a build miss.
+That PR started before the main seed was saved. These are observed cold-PR
+and warm-main contexts, not a controlled universal speed ratio or a cache
+hit rate inferred from cumulative zccache statistics. Linked tests still
+rebuild; no forbidden test-binary cache was introduced.
 
 The next-candidate [running-process first-push refresh](running-process-first-pass-2026-10-03.json)
 reports **0 of 4** merged PRs since 2026-10-02, with no attestations. The current
@@ -31,6 +46,35 @@ repository still has no `ci-attestations.yml` (HTTP 404). Its existing Bosn
 configuration alone does not establish the requested workflow migration.
 This refresh supplements the earlier 0/3 sample below; it does not replace
 historical mixed-run rates or claim that recent default-branch CI is all red.
+
+## Running-process unchanged baseline: shared runner parity failure
+
+[Migration issue #1306](https://github.com/zackees/running-process/issues/1306)
+records the unchanged `9b4a5c656de9` quick lane under published Bosn 0.1.11
+and act2.2. Local run `54c2130f-30e5-4eb2-bf9b-19ea37658ce7` completed in
+621.223 seconds: Dylint passed, preflight failed in Unit Tests, and lint-gates
+correctly failed. Nextest stopped after 1508 of 2346 tests, reporting 1507
+passed (one flaky), one failed and nine skipped; earlier failures retried.
+This is neither complete test coverage nor a passing local attestation.
+
+The ordinary-process privilege test expected no privilege but observed
+`Some(UnixRoot)`. A read-only-directory loader fallback also wrote where an
+ordinary user should be denied. The pinned runner image declares root and
+act2 inherits it for hosted-VM simulation. A focused stock-image probe
+confirmed UID 0 and a successful write into a mode-0500 directory, exiting 1
+on the required non-root assertion. [act2 #9](https://github.com/zackees/act2/issues/9)
+tracks a shared fix with writable home/workspace/tool-cache and explicit
+container-job regression coverage. Other APE and process-tree failures
+remain unresolved; restoring user parity must precede attributing or
+weakening any product test. The separate hosted-VM umask proposal remains
+unresolved in closed act2 PR #6.
+
+The post action reported a build miss with save skipped by global
+`save-cache` policy. An unpushed focused regression is RED on the original
+main-only global permission and GREEN when global `auto` is separated from
+remote writer permission. Failed-build versus pure-test-failure saves,
+Dylint delegation, permitted cache payloads and source-bound verifier
+wiring still require implementation and real successful gate evidence.
 
 ## Failed Fbuild cache seed: caller status wiring proven
 
