@@ -630,7 +630,9 @@ attested), `stale` (trailer tree differs from the commit's tree), `missing`.
 | `check-push` | pre-push hook body: reads git's stdin, refuses (1) any pushed branch head that is not attested; tags and deletes pass; a repository with no gate declared passes. |
 | `install-hook [--repo .] [--launcher CMD] [--force]` | Writes `$(git rev-parse --git-path hooks)/pre-push`; refuses (1) to replace a hook it did not write unless `--force`. |
 | `lint [--repo .]` | `GATE-001`/`GATE-002` for any repository, with or without `ci.toml` (needs PyYAML or `yq`). |
-| `first-pass --slug o/r --since ISO [--workflow ci.yml] [--target 0.8] [--min-prs 5] [--json]` | `GATE-004`, live GET-only (`GITHUB_TOKEN`/`GH_TOKEN`). `--workflow` is the workflow *file* name, matched against each run's `path`. |
+| `first-pass --slug o/r --since ISO [--workflow ci.yml] [--target 0.8] [--min-prs 5] [--json]` | `GATE-004`, live GET-only (`GITHUB_TOKEN`/`GH_TOKEN`). `--workflow` is the workflow *file* name, matched against each run's `path`. Reports strict single-head adoption and a separate earliest-head pass/fail/unknown companion. |
+
+JSON preserves the existing `rate`, `prs`, target and GATE-004 denominator. The new `first_head.summary` contains `passed`, `failed`, `unknown`, the pass rate among known outcomes (`known_rate`), evidence coverage (`coverage`) and observed earliest-head attestation counts. `first_head.prs` includes every scanned PR, including PRs without matching runs, with its head SHA, outcome and reason, plus the earliest observed workflow-run cohort's timestamp, run IDs and size. Same-head timestamp ties stay together; later duplicate triggers do not change the initial outcome. A known-outcome rate of 100% with unknown PRs does not establish 100% CI success. Overwritten first-attempt history stays unknown without additional attempt evidence; this command makes no extra API calls to reconstruct it. Historical reports without `first_head` have no companion evidence.
 
 With `ci.toml`, `precheck` runs `GATE-001`/`GATE-002` as group 17.
 
