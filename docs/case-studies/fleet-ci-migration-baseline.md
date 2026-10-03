@@ -1029,3 +1029,63 @@ Clippy and Auto-Release. The deliberate warm dispatch is a separate diagnostic,
 not a retry or first-head outcome. This successful rollout does not establish a fleet-wide 100% pass rate. Source-specific updates
 under an already exact immutable key and assertion-only failure publication
 remain separate work.
+
+
+## Running-process private APE fixture (#1306)
+
+Current main `9b4a5c656de959cc5c1f0317c16b8a520b8a8b07` still has no
+local-gate or per-gate attestation manifest. Its published-runner baseline
+failed in Linux APE cases under the runner's ambient `0000` umask. The
+production loader already creates missing cache directories with mode `0700`
+and rejects existing shared writable directories. The failing tests instead
+passed an existing `tempfile::tempdir()` directly as their supposedly valid
+cache; tempfile 3.27 defaults that directory to `0777` before applying umask.
+That fixture depends on ambient permissions which its security contract does
+not promise.
+
+A test-only candidate, `782f6ae273170f18c21c2841f7f8678b4020a1bc`, creates
+the Linux APE scratch fixture with `Builder::permissions(0700)` and adds a
+regression assertion for its mode. Production code, ambient umask, and the
+explicit shared-directory/read-only/symlink adversarial cases are unchanged.
+This is a general fixture correction, not an act-specific permission override.
+The closed act2 umask PR remains separate.
+
+Native Linux x64, released act2.3 and the pinned stock runner image executed
+immutable archives of the committed RED and candidate trees. With current
+setup-soldr SHA `d17a58eb2cea17a89af0824fb7c6b24ee68f5083`, the RED source
+passed 14 and failed five cases (the four APE failures plus the new private-mode
+assertion); failed-job publication was skipped. The candidate passed all 19
+focused APE cases under the same `0000` umask, including rejection of a shared
+writable directory. This does not prove the full workspace or migration.
+
+Two candidate diagnostics failed before testing with a rustup `EXDEV` rename
+while adding clippy to a restored minimal toolchain. The harness initially
+specified only a channel, and a subsequent unsupported components input did
+not fix it. Pointing the documented `toolchain-file` input at the archived
+repository's real manifest resolved clippy/rustfmt before restore and selected
+a distinct complete-toolchain slot. No restored-tree permissions or contents
+were modified to bypass the error.
+
+An initial direct diagnostic also used a stale floating action ref from its
+legacy action cache and wrote a retired solo-toolchain layer. It is not the
+canonical cache-policy proof. The canonical diagnostic uses an immutable
+current action SHA, explicitly disables that layer, and owns its separate local
+cache. Published Bosn still passes `--use-new-action-cache`; removal of the
+legacy switch and consolidation to one action-cache behavior remain candidate
+ACT-002 work, not completed migration.
+
+Published Bosn 0.1.12 run `90674329-00ad-495f-8489-d2f088018c32` failed
+in 1,039.910 seconds on the clean candidate, using the actual unchanged Linux
+quick selection: workflow `ci.yml`, job `linux-quick`, minimal PR mode, with
+no label-based coverage additions or removals. All 2,347 nextest cases passed
+in 56.226 seconds, including one configured retry and nine existing skips.
+Python reported 825 passed, 26 skipped, 127 deselected and 94 subtests passed
+in 102.05 seconds.
+
+The subsequent real socket Hello performance gate failed: across 10,000
+samples, P50 was 153.792 microseconds (budget 200 microseconds), while P99
+was 1.120463 milliseconds (budget 1 millisecond). The aggregate stayed red;
+no attestation was issued. The frozen latency budgets and test selection were
+preserved. The cause of the latency failure remains unconfirmed; focused APE
+success does not establish full routine validation, rollout or a first-head
+or fleet-rate improvement. The attestation pilot remains pending.
