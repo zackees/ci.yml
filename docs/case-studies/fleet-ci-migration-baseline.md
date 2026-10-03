@@ -106,10 +106,18 @@ concurrent reads and writes of the default socket path in shared configuration;
 both job and service mount builders now resolve that default locally. A
 deterministic regression failed before the fix, and ten race-enabled matrix
 and mount-regression repetitions passed afterward in 18.319 seconds. Final-head
-checks are [running](https://github.com/zackees/act2/actions/runs/37130101405). The
-candidate remains draft, unmerged and unreleased; no running-process
-attestation has been issued. These milestones do not erase the first-push
-failure or replace the running-process sample.
+checks [passed](https://github.com/zackees/act2/actions/runs/37130101405), including
+Linux/QEMU in 11m42s, native macOS/Windows, lint and snapshot. PR #10 merged as
+`5af1c449274d7835ad7a26aee1ed376b3e6a7e09`; its tree exactly matches the tested
+head (`e087757816d04327caee08d465464b1c7bf0a3b0`).
+[Release v0.2.89-act2.3](https://github.com/zackees/act2/releases/tag/v0.2.89-act2.3)
+published through the existing tag workflow. The downloaded Linux x86_64
+archive matches its published checksum; its extracted binary reports the
+expected version. Bosn's staged 0.1.12 change pins both verified digests, and
+its focused isolated engine/pin/tool tests pass after a stale-URL regression
+failed. The full local gate and subsequent exact-main full CI/release gate
+remain required. No running-process attestation has been issued. These
+milestones do not erase failed attempts or replace the running-process sample.
 
 The post action reported a build miss with save skipped by global
 `save-cache` policy. An unpushed focused regression is RED on the original
