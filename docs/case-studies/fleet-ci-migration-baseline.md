@@ -9,8 +9,29 @@ minimal Linux gate in 303 seconds, stamping `fe9f5aec145e` for tree
 source-bound act2 engine and completed both selected jobs successfully. An
 unchanged retry reused the attestation without rerunning the workflow.
 The `ci-full` label preserves full validation of the shared runtime change;
-remote verification and Dylint passed, while full Linux/platform validation
-was still running at this observation. No trusted remote skip is enabled.
+remote verification and Dylint passed. Full run `37099060991` subsequently
+failed: four tests reported missing ELF build identities and the blocked-stack
+unwind test failed. An isolated probe with managed LLVM 21.1.5 showed that
+Clang/lld omits GCC's default GNU build ID; explicit `--build-id=sha1` restores
+it. The package build script now requests that identity for Linux target
+artifacts without changing dependency Rust flags. The updated minimal gate
+passed in 208 seconds, stamping `811cb58ddae0`; actual full Linux and native
+platform validation remain pending. The C probe alone does not prove the
+failing Rust tests pass. No trusted remote skip is enabled.
+
+The next shadow rollout declared both local lanes and passed them together in
+730 seconds on the earlier tree: Linux 253 seconds, Dylint 477 seconds,
+stamped `be12a9b4b396` for tree `61d78494dc67`. An unchanged retry required
+no engine run. Its Dylint attestation explicitly names Linux x64:
+Cargo `--all-targets` selects build-target kinds, not operating systems.
+The branch is rebased onto the build-ID correction and undergoing fresh
+validation; the earlier attestation does not prove the rebased tree.
+
+A failed workflow-mode guard cost 140 seconds before the initial two-lane
+attempt stopped. The lane now runs its fast Python guards before submitting
+the engine; 159 guards completed in 0.523 seconds, and a regression proves
+a failed preflight prevents engine submission. This is an observed local
+optimization, not a new mechanically enforced fleet rule.
 
 The existing minimal Dylint job also passed locally: run
 `8f3fadaa-a7ac-43bc-b8ee-3e7d00093df6`, 500.9 seconds total, both selected
@@ -42,9 +63,15 @@ The first remote Python contract failed because its exact public-input
 registry had not been included in the local validation; after reproducing the
 failure and adding the new input to that exact set, all 44 contract tests
 passed locally. This is a first-push miss, not a 100% success claim.
-Review passed; remote validation and the required exact-SHA fbuild canary
-remain pending before `v0` promotion or consumer adoption. Cold/new-commit/warm
-timings after adoption remain unmeasured.
+Review passed and all 49 remote checks passed. The action merged as
+`d17a58eb2cea17a89af0824fb7c6b24ee68f5083`. Its required exact-SHA full
+canary is [fbuild PR #1634](https://github.com/FastLED/fbuild/pull/1634);
+`v0` promotion and consumer adoption remain pending that evidence. A PR-opened
+event superseded the first labeled canary and selected minimal coverage;
+reapplying `ci-full` produced run `37101793881`, whose `full / verify` passed.
+Only successful selected/full coverage plus logs proving execution of the
+exact action SHA qualify for promotion. Cold/new-commit/warm timings after
+adoption remain unmeasured.
 
 ## Shared runner fix: merged and measured
 
