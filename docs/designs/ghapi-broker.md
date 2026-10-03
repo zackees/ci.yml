@@ -1,6 +1,6 @@
 # GitHub API broker: incremental query rewrites + cached query merging (GHAPI-001)
 
-Status: design. Implements the candidate policy `GHAPI-001` in [policy-general.md](../policy-general.md#github-api-budget-one-controlled-query-mechanism-per-machine-candidate-ghapi-001) ([#224](https://github.com/zackees/ci.yml/issues/224)).
+Status: design. Implements the policy `GHAPI-001` in [policy-general.md](../policy-general.md#github-api-budget-one-controlled-query-mechanism-per-machine-ghapi-001) ([#224](https://github.com/zackees/ci.yml/issues/224)).
 
 Implementation lives in zackees/clud: the session `gh` shim plus the always-on clud daemon, tracked in [zackees/clud#1743](https://github.com/zackees/clud/issues/1743).
 
@@ -84,7 +84,7 @@ SQLite in the daemon state dir (`~/.clud/state/gh-broker.sqlite`) with two table
 1. **Read-through ETag cache for `gh api` GET.** It covers the shim classification, daemon endpoint, store, ETag/304, TTL, single-flight and the ledger. This is the largest saving for the least risk.
 2. Incremental rewrites (`since=`, `created>=`, stop-at-cached paging) and merge for comments, runs, jobs and check runs. Porcelain `run view` / `pr checks` go through REST projections.
 3. Subscriptions for `pr_merge_watch.py`, the budget floor and reconciliation.
-4. The ci-lint `GHAPI-001` static signal.
+4. The ci-lint `GHAPI-001` static signal. Landed ahead of phases 1-3: `precheck` group 19, `ci_lint.rules.ghapi_reread` (see the policy's "Static signal" table).
 
 ## Acceptance (per phase, on a real machine)
 

@@ -265,7 +265,7 @@ What the data says:
    - **PR-scoped delta saves:** zstd 3, because they are written on the critical path and short-lived.
 4. **The knobs today are compile-time constants:** soldr's `DEFAULT_ZSTD_LEVEL = 3` (cache save/load, mirrored by setup-soldr) and `COOK_ZSTD_LEVEL = 19`. Making the save level tier-selectable is the implementation follow-up.
 
-## GitHub API budget: one controlled query mechanism per machine (candidate GHAPI-001)
+## GitHub API budget: one controlled query mechanism per machine (GHAPI-001)
 
 **Decision ([issue #224](https://github.com/zackees/ci.yml/issues/224)):** CI-supporting tooling on a machine reads GitHub state through one controlled query mechanism that keeps a durable local cache of everything already fetched.
 
@@ -295,7 +295,19 @@ In one FastLED/fbuild session (2026-10-02), an orchestrating agent and two or th
 
 **Scope.** This governs machine-local tooling: agents, local gates, bosn → act runs and release automation driven from a developer machine. Hosted Actions jobs authenticate with the per-repository `GITHUB_TOKEN`, which has its own budget. They are in scope only where they run a query loop, which GATE-012's zero-wait rule already restricts.
 
-**Status.** Candidate. The broker is not implemented yet; its design is [docs/designs/ghapi-broker.md](designs/ghapi-broker.md) (implementation: zackees/clud#1743). A ci-lint static signal follows from it: a skill, tool or `ci/` script that re-reads a GitHub collection in a loop without a time or cursor bound, or that calls `gh api` / `gh pr checks` / `gh run view`/`watch` directly instead of through the broker.
+**Status.** The static signal is enforced by ci-lint (`precheck` group 19, `ci_lint.rules.ghapi_reread`). The broker itself is not implemented yet; its design is [docs/designs/ghapi-broker.md](designs/ghapi-broker.md) (implementation: zackees/clud#1743), and the broker-bypass and machine-shared-cache clauses stay candidate until it ships.
+
+**Static signal.** ci-lint scans every workflow/composite-action `run:` block, every script under `ci/`, and every `.py`/`.sh`/`.bash` file under a `skills/` or `tools/` directory or under `.claude/` (Markdown skill bodies are not parsed). Python is read by AST, following a loop's calls into same-module helpers and through a `gh(*args)` wrapper that builds `["gh", *args]`.
+
+| Shape | Result |
+| --- | --- |
+| A `while`/`until` loop that sleeps and reaches a GitHub read (`gh api` GET, `gh pr checks`, `gh pr view`, `gh run view`, `gh run list`, or curl/wget/requests/urllib against `api.github.com`) with no bound | violation |
+| `gh run watch`, `gh pr checks --watch`, or `watch ... gh ...` anywhere | violation |
+| Every read the loop reaches carries a bound: `since=`, `created>=`/`updated>=`/`--created`, or `If-None-Match`/`If-Modified-Since`/ETag | pass |
+| A counted `for` loop that sleeps around a read (a retry or a poll), or a sleeping `while` loop whose reads go through a non-literal command | `needs_review` |
+| A loop with no sleep (pagination, iteration over input), or a `gh api` write (`-X POST`, fields without `-X GET`, a GraphQL mutation) | not a finding |
+
+A same-line `# ci-lint: allow GHAPI-001 <reason>` on the loop's opening line or on the read excuses it. A loop whose own text names a GitHub App check, in a file GATE-012 scans, is left to GATE-012 so one wait is reported once.
 
 ## Performance rule
 
@@ -392,7 +404,7 @@ The **Status** column below reflects what `ci_lint` actually checks today, verif
 | `GATE-010` | A `ci-attestations.yml` that is not restricted YAML, names a malformed gate path or an undeclared lane, or maps a job to an undeclared gate; a `[gate.trust]` skip job not mapped to gates (`needs_review`: it never skips). At runtime an attestation counts only when it is declared, valid against its stamp, tree, parents and lane, and every gate of the job is attested; omission means not run (#198). | Enforced by ci-lint (static: `local-gate lint`; runtime: `local-gate run` emits, `local-gate verify --trust` decides `skip_<job>`, `attest verify|keys|resolve`) |
 | `GATE-012` | A check that cannot run under bosn → act gates or waits on a PR (#206): a missing `.coderabbit.yaml`, or one leaving `reviews.auto_review.enabled`/`commit_status` on or `request_changes_workflow`/`fail_commit_status` true; a job of a PR-triggered workflow (or a local reusable workflow it calls) using a registered act-impossible action (`github/codeql-action/*`, Pages deploys, attestations, PyPI trusted publish, Codecov/Coveralls/Sonar, dependency review) or `id-token: write` without an `if:` confining it to non-PR events or an opt-in label (unrecognized `if:` is `needs_review`); a wait-on-check action, `run:` or `ci/` script waiting on or polling for an app check such as `CodeRabbit`; live, a required status check naming an app check or bound to an app other than GitHub Actions. Item 5 (a job act cannot run declares `CI_REMOTE_ONLY: <reason>`; a local runner reports it `remote_only`, never a failure) is honoured by bosn ci (zackees/bosn#400) and not yet checked by ci-lint. | Enforced by ci-lint (static: `ci-lint remote-only`, `precheck` group 18, `local-gate lint`; live audit: `ci-lint audit`); item 5 is runner-side |
 | `CACHE-023` | A cache save whose zstd level ignores its tier (#173): a PR-path save above level 3, or a long-lived default-branch family below the measured remote recommendation. | Candidate |
-| `GHAPI-001` | Machine-local CI tooling (a skill, tool, watcher, lander or `ci/` script) re-reads a GitHub collection it already holds without a time or cursor bound, or bypasses the per-machine broker (#224). Incremental re-queries bounded by the cache's high-water mark (`since=`, `created>=`/`updated` filters, stop-at-cached pagination, `If-Modified-Since`/`If-None-Match`) are allowed; unbounded re-fetches, uncached terminal state, and per-process caches that are not shared across the machine are violations. | Candidate |
+| `GHAPI-001` | Machine-local CI tooling (a skill, tool, watcher, lander or `ci/` script) re-reads a GitHub collection it already holds without a time or cursor bound, or bypasses the per-machine broker (#224). Incremental re-queries bounded by the cache's high-water mark (`since=`, `created>=`/`updated` filters, stop-at-cached pagination, `If-Modified-Since`/`If-None-Match`) are allowed; unbounded re-fetches, uncached terminal state, and per-process caches that are not shared across the machine are violations. | Enforced by ci-lint (static precheck, `precheck` group 19: unbounded GitHub re-read loops and gh watch loops in `run:`, `ci/` and skill/tool scripts); the broker-bypass and machine-shared-cache clauses are candidate until the broker ships (zackees/clud#1743) |
 
 An exception must name the repository, rule ID, reason, owner, compensating coverage, and review date. The documented Soldr dependency cycle in `zackees/running-process` is an example to evaluate for an exception. Exceptions are reviewed when their date arrives or the dependency changes; they do not erase historical findings. `ci.toml`'s `[[exceptions]]` array implements this mechanically for a `ci_lint`-checked repository (`rule`, `path`, `reason`, `issue`, `expires` -- `CT-005` fails an expired entry).
 
