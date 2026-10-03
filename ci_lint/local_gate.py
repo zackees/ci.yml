@@ -535,7 +535,7 @@ def _report(outcome: LaneOutcome) -> None:
     print("\n".join(lines[-150:]), file=sys.stderr, flush=True)
 
 
-def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache: bool) -> LaneRun:
+def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache: bool) -> LaneRun:  # noqa: C901
     """Run (or reuse) every declared lane (GATE-007). Cache hits are
     resolved first; then `light` lanes run concurrently alongside the
     `heavy` chain (heavy lanes one at a time, declared order). Every lane
@@ -607,7 +607,7 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
     return LaneRun(0, provenance, spent, tuple(passed))
 
 
-def run_gate(
+def run_gate(  # noqa: C901
     repo: Path, config: GateConfig, *, stamp: bool = True, force: bool = False, use_cache: bool = True
 ) -> RunOutcome:
     try:
@@ -823,7 +823,7 @@ def _load_workflows(repo_root: Path) -> _Workflows:
     return out
 
 
-def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:
+def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:  # noqa: C901
     from ci_lint.workflow_scan import jobs_of, steps_of  # noqa: PLC0415
 
     findings: list[Finding] = check_isolation(config.isolation, config.run, repo_root, config.source)

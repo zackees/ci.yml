@@ -223,7 +223,7 @@ class ApplyResult:
     errors: tuple[str, ...]
 
 
-def _execute(write: WriteFn, token: str, action: IssueAction) -> str | None:
+def _execute(write: WriteFn, token: str, action: IssueAction) -> str | None:  # noqa: C901
     """Perform ONE issue write for `action`. Returns None on success, else
     an error string. Never called for `action.action in ("unchanged",)`."""
 

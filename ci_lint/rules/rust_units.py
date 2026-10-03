@@ -114,7 +114,7 @@ def _iter_all_commands(repo_root: Path) -> list[tuple[list[str], str, str]]:
     return out
 
 
-def check_rust_011(ci: CiToml, crates: list[CargoCrate], repo_root: Path) -> list[Finding]:
+def check_rust_011(ci: CiToml, crates: list[CargoCrate], repo_root: Path) -> list[Finding]:  # noqa: C901
     findings: list[Finding] = []
     if ci.rust is None:
         return findings

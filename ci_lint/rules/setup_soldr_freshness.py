@@ -153,7 +153,7 @@ def _unresolvable_finding(locations: list[tuple[str, str]], sha: str) -> Finding
     )
 
 
-def _check_one_sha(
+def _check_one_sha(  # noqa: C901
     fetch_status: FetchStatusFn, token: str, sha: str, locations: list[tuple[str, str]]
 ) -> list[Finding]:
     commit_url = f"{API_ROOT}/repos/{SETUP_SOLDR_REPO}/commits/{sha}"

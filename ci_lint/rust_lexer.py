@@ -83,7 +83,7 @@ def _raw_string_prefix_len(source: str, i: int) -> tuple[int, int] | None:
     return (j + 1 - i, hashes)
 
 
-def strip_comments_and_strings(source: str) -> str:
+def strip_comments_and_strings(source: str) -> str:  # noqa: C901
     out: list[str] = []
     i = 0
     n = len(source)

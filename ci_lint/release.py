@@ -166,7 +166,7 @@ def _pkg006(message: str, fix: str, path: str) -> Finding:
     return Finding(rule="PKG-006", path=path, message=message, fix=fix)
 
 
-def verify_staged_artifacts(
+def verify_staged_artifacts(  # noqa: C901
     ci: CiToml,
     dist_dir: Path,
     *,

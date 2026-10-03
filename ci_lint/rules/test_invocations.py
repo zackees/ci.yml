@@ -162,7 +162,7 @@ class ScriptCall:
     has_cwd: bool  # any `cwd=` keyword at all (literal or not)
 
 
-def script_calls(path: Path) -> list[ScriptCall]:
+def script_calls(path: Path) -> list[ScriptCall]:  # noqa: C901
     """Literal subprocess argv in a Python script (GEN-004's extractor, plus
     the call's `cwd=` keyword)."""
 
@@ -250,7 +250,7 @@ def with_yaml_comment(line: str, raw_lines: list[str]) -> str:
     return line
 
 
-def iter_run_lines(repo_root: Path) -> list[tuple[str, str, str]]:
+def iter_run_lines(repo_root: Path) -> list[tuple[str, str, str]]:  # noqa: C901
     """(logical_line, path, loc) for every workflow / composite-action run: line."""
 
     out: list[tuple[str, str, str]] = []

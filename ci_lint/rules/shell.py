@@ -133,7 +133,7 @@ def check_tracked_scripts(repo_root: Path) -> list[Finding]:
     return findings
 
 
-def check_group3(ci: CiToml, repo_root: Path) -> list[Finding]:
+def check_group3(ci: CiToml, repo_root: Path) -> list[Finding]:  # noqa: C901
     findings: list[Finding] = check_tracked_scripts(repo_root)
 
     workflows: list[ParsedYamlFile] = load_workflows(repo_root)

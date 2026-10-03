@@ -9,3 +9,6 @@ requires-python = ">=3.11"
 
 [tool.soldr.pep517]
 bundle-bins = ["demo-cli"]
+
+[tool.ruff.lint]
+select = ["E", "F", "C901", "RUF"]

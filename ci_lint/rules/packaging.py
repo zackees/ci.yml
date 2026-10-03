@@ -119,7 +119,7 @@ def _load_toml(path: Path) -> dict[str, object] | None:
         return None
 
 
-def check_pkg_004(repo_root: Path) -> list[Finding]:
+def check_pkg_004(repo_root: Path) -> list[Finding]:  # noqa: C901
     findings: list[Finding] = []
     pyproject = _load_toml(repo_root / "pyproject.toml")
     if pyproject is None:

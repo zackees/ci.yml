@@ -119,7 +119,7 @@ def _is_dataclass(cls: ast.ClassDef) -> bool:
     return False
 
 
-def scan_source(path: str, source: str) -> list[RecordViolation]:
+def scan_source(path: str, source: str) -> list[RecordViolation]:  # noqa: C901
     try:
         tree = ast.parse(source)
     except SyntaxError:

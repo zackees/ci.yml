@@ -93,7 +93,7 @@ def _resolve_lib(crate_dir: Path, manifest: dict[str, object]) -> tuple[bool, bo
     return default_path.is_file(), True
 
 
-def _resolve_bins(
+def _resolve_bins(  # noqa: C901
     crate_dir: Path, manifest: dict[str, object], pkg: dict[str, object], crate_name: str
 ) -> tuple[CargoBinTarget, ...]:
     bins: dict[str, CargoBinTarget] = {}
