@@ -260,13 +260,26 @@ def check_workflows(repo_root: Path) -> tuple[int, tuple[str, ...], list[Finding
                     )
                 )
     if ".github/workflows/ci.yml" not in pr_entrypoints:
+        unreadable_ci = any(
+            workflow.path == ".github/workflows/ci.yml" and workflow.status != LoadStatus.OK
+            for workflow in workflows
+        )
         findings.append(
             Finding(
                 rule="GEN-001",
                 path=".github/workflows/ci.yml",
-                message="no .github/workflows/ci.yml with an on.pull_request trigger",
-                fix="make .github/workflows/ci.yml the single ordinary-PR entry point "
-                "(on.pull_request), gated by the precheck plan",
+                status=Status.NEEDS_REVIEW if unreadable_ci else Status.VIOLATION,
+                message=(
+                    "could not determine whether .github/workflows/ci.yml declares on.pull_request "
+                    "because the workflow could not be parsed"
+                    if unreadable_ci else "no .github/workflows/ci.yml with an on.pull_request trigger"
+                ),
+                fix=(
+                    "parse .github/workflows/ci.yml successfully and re-run `ci-lint fleet scan` "
+                    "before assessing its PR trigger"
+                    if unreadable_ci else "make .github/workflows/ci.yml the single ordinary-PR entry point "
+                    "(on.pull_request), gated by the precheck plan"
+                ),
             )
         )
     if len(pr_entrypoints) > 1:
