@@ -69,6 +69,18 @@ remain unresolved; restoring user parity must precede attributing or
 weakening any product test. The separate hosted-VM umask proposal remains
 unresolved in closed act2 PR #6.
 
+A private act2 candidate now passes ordinary shell/Node identity, denied
+writes, real checkout/setup-python/setup-uv actions, an explicit root
+container, a root-owned completed tool-cache seed, and bound-checkout
+ownership checks. Review identified additional HOME, option-derived and
+account/sudo/mail mount protections; focused regressions and lint pass
+with those guards. These are candidate proofs, not a released runner.
+The broader Go run failed: copied workspace parents and implicitly created
+workflow directories remained root-owned, while legacy test fixtures used
+bare privileged package installs. Artifact-server networking and several
+platform/Docker-action failures also remain unclassified. No candidate PR
+has been pushed, and no running-process attestation has been issued.
+
 The post action reported a build miss with save skipped by global
 `save-cache` policy. An unpushed focused regression is RED on the original
 main-only global permission and GREEN when global `auto` is separated from
