@@ -1,5 +1,44 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
+## Latest validation: shared action promoted; kernel runtime still incomplete
+
+The exact-main fbuild canary `37101793881` passed all full platform and board
+jobs, `CI selected coverage`, and `full / Full coverage`.
+[Fbuild PR #1634](https://github.com/FastLED/fbuild/pull/1634) merged as
+`6acb66a2f54ff879dc0e23b3577861b69c80cbe1`. Setup-soldr's exact-main contract
+`37101549069` passed. Promotion dry run `37103509706` verified the contract,
+coverage aggregators, and logs proving execution of the exact action SHA.
+The prescribed promotion `37103685561` succeeded and `v0` now resolves to
+`d17a58eb2cea17a89af0824fb7c6b24ee68f5083`. Local reuse timings after consumer
+adoption still need measurement.
+
+Kernal-api's corrected remote full Linux job passed in run `37101690833`;
+its other native platform lanes are still running. The local full act2 run
+`3fae8064-872f-4d7e-bda2-5097d3bc5777` completed in 1988.9 seconds:
+all five original build-ID/unwind failures passed, but a nested APE-launch
+test failed (1296 passed, one failed, 36 skipped; three leaky). That failure
+was an assertion that the embedded loader had a filesystem directory. The
+backend also supports an embedded memfd loader, which cannot serve a
+grandchild; the exact filesystem cause is not proven yet.
+
+The consumer draft places that test's private loader cache next to its
+executable, on a filesystem proven executable, and retains every nested
+launch/output assertion. It also runs the existing APE launch tests in the
+minimal lane and removes the old minimal build-ID exclusion now that the
+package explicitly emits that identity. A new attestation gate names the APE
+checks. Fresh runtime validation is running; these edits are not yet a proven
+fix or merged migration.
+
+The cache-policy draft has 160 passing fast guards and a clean review. A
+current precheck matched its parent's 916 violations and 13 review items
+exactly before disabling the new verifier's setup-uv saves; that correction
+removed `CACHE-003` and `CACHE-013`, leaving 914 violations. This rollout is
+not evidence that the repository meets every current fleet policy rule.
+The fast preflight caught a guard mismatch after changing the default test
+commands in one second, before allocating the engine. The corrected guard
+allows only the two exact default-mode commands, checks their mode conditions,
+and forbids `--skip`; full-mode graph enforcement remains intact.
+
 ## Kernal-api: two local compile lanes proven; rollout and reuse still pending
 
 [Kernal-api PR #399](https://github.com/zackees/kernal-api/pull/399) publishes
