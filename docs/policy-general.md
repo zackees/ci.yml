@@ -19,6 +19,26 @@ The reference implementation of this policy is [`zackees/template-python-rust-cm
 
 **Decision:** tags are PR-title markers combined by pure set algebra: `selection = (flow base ∪ tag adds) − tag removes`. Tags have no precedence, and every platform/suite/group a repository declares automatically derives its own tag (`ci-<platform-id>`, `ci-<group>`, `ci-test-<suite>`, `no-test-<suite>`), so a tag can never drift from what it's supposed to select. A tag with a `remove` clause always makes the run `mergeable = false` -- a repository cannot silently drop required coverage by tagging it away. `CI OK` is the single required check: it aggregates every job the plan actually selected (`required_jobs`), and a `skipped` job that isn't a live-verified reuse of an already-green run counts as a failure (`TEST-001`), never a silent pass. Proven in zackees/ci.yml#15/#21 (the planner's platform-lane matrix outputs, title-edit reuse, and gate reuse verification) and zackees/template-python-rust-cmd#19 (tag-selected platform lanes cross-built on Linux and executed natively, `[ci-full]` green across 5 platforms + integration).
 
+## Selecting full PR coverage
+
+Use `ci-full` (or an equivalent full-matrix marker) for changes to platform
+implementation code, not for business logic that calls platform code. Inspect
+the changed implementation: native API/FFI handling, OS-specific branches,
+platform adapters/selectors, and platform-specific runtime contracts qualify.
+An unchanged platform call, a shared orchestration refactor, or moving existing
+OS-specific code unchanged into a helper does not qualify. A filename such as
+`session.rs`, a PTY-related feature, or a local validation gap is not evidence
+of a platform implementation change.
+
+Before adding the label, name the changed platform implementation and the
+native behavior the extra lanes validate in the PR description. Use the
+smallest existing tier covering the affected platforms; reserve the full
+matrix for platform changes needing that coverage. Routine business logic
+keeps the required quick lint, cross-target checks and representative tests.
+Release/candidate validation still runs its complete required matrix.
+This is a selection policy for agents and reviewers; ci-lint does not infer
+semantic changes from a diff or automatically enforce this distinction.
+
 ## Default-branch validation
 
 **Decision (`GEN-021`, [issue #156](https://github.com/zackees/ci.yml/issues/156)):** a default-branch push run may skip a required job **only through verified reuse**, never by a blanket `if:` that excludes default-branch pushes and never by deleting the `push:` trigger, unless the repository proves live (per `GEN-010`'s live half, `ci-lint audit`) that a merge queue validates the exact merge commit. Verified reuse means all of:
