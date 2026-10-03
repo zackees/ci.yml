@@ -1,5 +1,51 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
+## Kernal-api: two local compile lanes proven; rollout and reuse still pending
+
+[Kernal-api PR #399](https://github.com/zackees/kernal-api/pull/399) publishes
+the first rollout. The combined tree with current main passed the declared
+minimal Linux gate in 303 seconds, stamping `fe9f5aec145e` for tree
+`9352ba2ffcaa`. Run `b462219d-eb7f-4cbb-9943-a2dacf1a059a` used bosn's
+source-bound act2 engine and completed both selected jobs successfully. An
+unchanged retry reused the attestation without rerunning the workflow.
+The `ci-full` label preserves full validation of the shared runtime change;
+remote verification and Dylint passed, while full Linux/platform validation
+was still running at this observation. No trusted remote skip is enabled.
+
+The existing minimal Dylint job also passed locally: run
+`8f3fadaa-a7ac-43bc-b8ee-3e7d00093df6`, 500.9 seconds total, both selected
+jobs successful, including the lint libraries' own tests and the all-feature,
+all-target workspace pass. This is an execution measurement, not a stamped
+Dylint lane yet. Its PR base was `main` at
+`0aed1aba4560429e544e65bf37790909938ca614`.
+
+The first Dylint attempt exposed an evidence defect: the recovered checkout's
+`origin/HEAD` pointed at the feature branch, so bosn used that same commit as
+the PR base and diff-gated lint-library tests were skipped. That attempt was
+cancelled and its engine removed; it is not successful coverage evidence.
+`git remote set-head origin -a` corrected the checkout. The next rollout
+branch rejects any default-base ref other than `origin/main` before submitting
+the lane; its focused regressions failed before implementation and passed
+afterward. A correct source SHA alone does not prove diff-selected coverage:
+inspect the event base and the executed commands too.
+
+New local commits remain expensive because the ci-lint planner's PR
+`cache_save=false` is forwarded to setup-soldr's global `save-cache` input,
+which correctly disables local saves too. The shared correction is
+[setup-soldr PR #565](https://github.com/zackees/setup-soldr/pull/565): an
+optional remote-only write policy preserves planned remote restrictions while
+the action retains its own act-aware local automatic saves. Explicit global
+disable remains authoritative. Defaults preserve existing consumers.
+Nineteen focused policy tests, four archive-wrapper pretests, 894 full-suite
+tests (one intentional watchdog skip), typechecking and action bundling passed.
+The first remote Python contract failed because its exact public-input
+registry had not been included in the local validation; after reproducing the
+failure and adding the new input to that exact set, all 44 contract tests
+passed locally. This is a first-push miss, not a 100% success claim.
+Review passed; remote validation and the required exact-SHA fbuild canary
+remain pending before `v0` promotion or consumer adoption. Cold/new-commit/warm
+timings after adoption remain unmeasured.
+
 ## Shared runner fix: merged and measured
 
 [Bosn PR #441](https://github.com/zackees/bosn/pull/441) merged as
