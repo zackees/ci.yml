@@ -1,0 +1,112 @@
+{
+  "repo": "zackees/kernal-api",
+  "workflow": "ci.yml",
+  "since": "2026-10-02T00:00:00+00:00",
+  "target": 1.0,
+  "rate": 0.45454545454545453,
+  "merged_total": 11,
+  "scanned": 11,
+  "without_runs": 0,
+  "limit": 0,
+  "prs": [
+    {
+      "number": 385,
+      "title": "feat(webview): widget window controls, first slice (#384)",
+      "head_shas": 2,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 387,
+      "title": "test(process): session_spawn_cost runs on every host (fixes main's boundary failure)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 2,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 388,
+      "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 391,
+      "title": "feat(webview): finish widget window controls -- position, navigate, typed best effort, real Windows/macOS (#384)",
+      "head_shas": 3,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 392,
+      "title": "release: kernal-api 0.1.24",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 394,
+      "title": "feat(fs): ContextPathMetadata reports whether a regular file is executable",
+      "head_shas": 3,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 396,
+      "title": "release: kernal-api 0.1.25",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 397,
+      "title": "feat(ape): kernal_api::ape endpoint on running-process 4.10.16",
+      "head_shas": 4,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 398,
+      "title": "release: kernal-api 0.1.26",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 399,
+      "title": "Run a source-bound minimal Linux gate through bosn and act2",
+      "head_shas": 2,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": true
+    },
+    {
+      "number": 400,
+      "title": "ci: add source-bound shadow proofs for Linux and Dylint",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    }
+  ]
+}
