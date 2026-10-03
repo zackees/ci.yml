@@ -1,0 +1,190 @@
+[
+  {
+    "run": "3bf730c2-b0c1-4ce4-baa5-74a21cfb015a",
+    "sha": "a4b258b8a028afee6485c43d7db90a697766289b",
+    "seconds": 281.484,
+    "jobs": [
+      {
+        "job": "verify",
+        "steps": [
+          {
+            "name": "actions/checkout@v6",
+            "seconds": 1.444
+          },
+          {
+            "name": "astral-sh/setup-uv@v3",
+            "seconds": 1.734
+          },
+          {
+            "name": "Verify source-bound local proof",
+            "seconds": 3.189
+          }
+        ]
+      },
+      {
+        "job": "check",
+        "steps": [
+          {
+            "name": "actions/checkout@v6",
+            "seconds": 1.429
+          },
+          {
+            "name": "Verify candidate SHA",
+            "seconds": 0.051
+          },
+          {
+            "name": "astral-sh/setup-uv@v3",
+            "seconds": 2.526
+          },
+          {
+            "name": "Select workspace test interpreter",
+            "seconds": 2.066
+          },
+          {
+            "name": "Setup soldr",
+            "seconds": 6.475
+          },
+          {
+            "name": "Clippy",
+            "seconds": 44.422
+          },
+          {
+            "name": "Lint subprocess spawns",
+            "seconds": 0.364
+          },
+          {
+            "name": "Guard production USB VID/PID catalogue literals",
+            "seconds": 1.861
+          },
+          {
+            "name": "Test",
+            "seconds": 193.877
+          }
+        ]
+      },
+      {
+        "job": "python-facade-tests",
+        "steps": [
+          {
+            "name": "actions/checkout@v6",
+            "seconds": 1.412
+          },
+          {
+            "name": "Verify candidate SHA",
+            "seconds": 0.053
+          },
+          {
+            "name": "astral-sh/setup-uv@v3",
+            "seconds": 4.947
+          },
+          {
+            "name": "Setup soldr",
+            "seconds": 4.688
+          },
+          {
+            "name": "Run embedded-CPython facade tests",
+            "seconds": 2.197
+          },
+          {
+            "name": "Test (python facades, --ignored)",
+            "seconds": 60.789
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "run": "f4da150c-634c-40be-a700-0781565d5998",
+    "sha": "a5475f3ee689147e0cce7287a60aaa09d5d86958",
+    "seconds": 283.488,
+    "jobs": [
+      {
+        "job": "verify",
+        "steps": [
+          {
+            "name": "actions/checkout@v6",
+            "seconds": 1.4
+          },
+          {
+            "name": "astral-sh/setup-uv@v3",
+            "seconds": 5.085
+          },
+          {
+            "name": "Verify source-bound local proof",
+            "seconds": 3.21
+          }
+        ]
+      },
+      {
+        "job": "check",
+        "steps": [
+          {
+            "name": "actions/checkout@v6",
+            "seconds": 1.452
+          },
+          {
+            "name": "Verify candidate SHA",
+            "seconds": 0.06
+          },
+          {
+            "name": "astral-sh/setup-uv@v3",
+            "seconds": 3.174
+          },
+          {
+            "name": "Select workspace test interpreter",
+            "seconds": 2.149
+          },
+          {
+            "name": "Setup soldr",
+            "seconds": 6.19
+          },
+          {
+            "name": "Clippy",
+            "seconds": 49.645
+          },
+          {
+            "name": "Lint subprocess spawns",
+            "seconds": 0.353
+          },
+          {
+            "name": "Guard production USB VID/PID catalogue literals",
+            "seconds": 1.705
+          },
+          {
+            "name": "Test",
+            "seconds": 189.479
+          }
+        ]
+      },
+      {
+        "job": "python-facade-tests",
+        "steps": [
+          {
+            "name": "actions/checkout@v6",
+            "seconds": 1.419
+          },
+          {
+            "name": "Verify candidate SHA",
+            "seconds": 0.057
+          },
+          {
+            "name": "astral-sh/setup-uv@v3",
+            "seconds": 2.736
+          },
+          {
+            "name": "Setup soldr",
+            "seconds": 4.478
+          },
+          {
+            "name": "Run embedded-CPython facade tests",
+            "seconds": 4.445
+          },
+          {
+            "name": "Test (python facades, --ignored)",
+            "seconds": 67.431
+          }
+        ]
+      }
+    ]
+  }
+]
