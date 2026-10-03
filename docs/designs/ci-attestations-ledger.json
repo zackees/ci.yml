@@ -322,5 +322,63 @@
     ],
     "cache_keys": "<family>-m<n>-<sha10> (main) / <family>-m<b>-c<k>-<sha10>-pr-<N> (PR; suffix = PR_CACHE_TAG): human-readable, ancestor-defining, git-confirmed",
     "hydration": "nearest ancestor generation whose commit carries a valid required-gate attestation side entry, GET-only listing, advisory with prefix fallback"
+  },
+  "rollouts": {
+    "recorded": "2026-10-03",
+    "zccache": {
+      "prs": [
+        1881,
+        1882,
+        1883,
+        1884
+      ],
+      "pr_ci_median_seconds": {
+        "before": 1109,
+        "after": 644,
+        "after_samples": 1
+      },
+      "integration_seconds": {
+        "before": 1060,
+        "after": 14
+      },
+      "main_push_failures_from_preprune_barrier": "~93%, fixed in #1884",
+      "notes": [
+        "timing-budget tests flaky under host load",
+        "gate container must run non-root"
+      ]
+    },
+    "llvm-ld": {
+      "prs": [
+        71,
+        72
+      ],
+      "pr71": "allocator benchmark path-filtered/nightly; ~-24% to -31% runner-minutes per PR (projected)",
+      "pr72": "Windows zccache cache 0 hits (0/1791, run 36867883784)"
+    },
+    "mimalloc-pprof": {
+      "prs": [
+        599,
+        600,
+        601
+      ],
+      "pr599": "pytest-xdist: python-lint 3m30 -> 2m16",
+      "pr600_601": "python-lint 3m30 -> 12 s on an attested PR; ~83 s total to green",
+      "gated_pr_workflows": "python-lint.yml only, of ~15",
+      "always_gate_red_jobs_per_week": 270,
+      "always_gate_evidence_run": 36342295043,
+      "zccache_hit_rate": "0.0% (run 36809571898)"
+    },
+    "soldr": {
+      "prs": [
+        3555
+      ],
+      "result": "lane fidelity (GATE-011)"
+    },
+    "ci.yml": {
+      "prs": [
+        244,
+        245
+      ]
+    }
   }
 }

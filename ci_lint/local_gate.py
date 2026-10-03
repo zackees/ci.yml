@@ -966,6 +966,7 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:  # 
                 stack.extend(needs_of(dep))
         return False
 
+    findings.extend(_ungated_pr_workflows(config, wfs))
     for job_id in jobs:
         if job_id == ref.job or job_id in config.verify_exempt:
             continue
@@ -980,6 +981,76 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:  # 
                 )
             )
     return findings
+
+
+def _pr_triggered(doc: dict[str, YamlValue]) -> bool:
+    from ci_lint.workflow_scan import get_on_section  # noqa: PLC0415
+
+    on = get_on_section(doc)
+    return "pull_request" in on or "pull_request_target" in on
+
+
+def _workflow_gated(doc: dict[str, YamlValue], exempt: frozenset[str]) -> bool:
+    """Every non-exempt job runs `local-gate verify` itself or (transitively)
+    needs a job that does."""
+
+    from ci_lint.workflow_scan import jobs_of, steps_of  # noqa: PLC0415
+
+    jobs = jobs_of(doc)
+    verifiers = {
+        job_id for job_id, job in jobs.items()
+        if any(isinstance(s.get("run"), str) and VERIFY_TOKEN in str(s.get("run")) for s in steps_of(job))
+    }
+    if not verifiers:
+        return False
+
+    def needs_of(job_id: str) -> list[str]:
+        raw = jobs.get(job_id, {}).get("needs")
+        if isinstance(raw, str):
+            return [raw]
+        return [n for n in raw if isinstance(n, str)] if isinstance(raw, list) else []
+
+    def reaches(job_id: str) -> bool:
+        seen: set[str] = set()
+        stack = needs_of(job_id)
+        while stack:
+            dep = stack.pop()
+            if dep in verifiers:
+                return True
+            if dep not in seen:
+                seen.add(dep)
+                stack.extend(needs_of(dep))
+        return False
+
+    return all(j in verifiers or j in exempt or reaches(j) for j in jobs)
+
+
+def _ungated_pr_workflows(config: GateConfig, wfs: _Workflows) -> list[Finding]:
+    """GATE-002 cross-workflow half: the verify job gates only its own
+    workflow. Every other PR-triggered workflow whose jobs do not sit behind
+    a `local-gate verify` job of their own still spends runner time on an
+    unattested head (mimalloc-pprof: ~15 PR workflows, one gated)."""
+
+    assert config.verify is not None
+    exempt = config.verify_exempt | {
+        e.split(":", 1)[1] for e in config.verify_exempt if ":" in e
+    }
+    ungated = sorted(
+        wf.name for wf in wfs.parsed
+        if wf.name != config.verify.workflow
+        and wf.name not in config.verify_exempt
+        and _pr_triggered(wf.doc)
+        and not _workflow_gated(wf.doc, exempt)
+    )
+    if not ungated:
+        return []
+    return [Finding(
+        rule="GATE-002", path=config.source, status=Status.NEEDS_REVIEW,
+        message=f"verify job '{config.verify}' gates only {config.verify.workflow}; {len(ungated)} other "
+        f"PR-triggered workflow(s) run jobs that need no verify job: {', '.join(ungated)}",
+        fix="add a `ci-lint local-gate verify` job to each and make its jobs need it, fold them into the verified "
+        "workflow, path-filter them off PRs, or list the workflow file name in 'verify-exempt'",
+    )]
 
 
 def _check_attestation_definition(config: GateConfig, repo_root: Path) -> list[Finding]:

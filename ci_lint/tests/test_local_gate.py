@@ -16,7 +16,7 @@ from pathlib import Path
 
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.finding import Status
-from ci_lint.first_pass import PrClassification, RunSample, classify, collect
+from ci_lint.first_pass import PrClassification, RunSample, classify, collect, render_text
 from ci_lint.local_gate import (
     HOOK_MARKER,
     Attestation,
@@ -287,6 +287,31 @@ class StaticRulesTest(TempRepoCase):
         self.assertEqual(self._rules(self._write(wf)), ["GATE-002"])
 
 
+    def _review(self, repo: Path) -> list[str]:
+        return [f.message for f in check_gate_static(self.config(repo), repo)
+                if f.rule == "GATE-002" and f.status == Status.NEEDS_REVIEW]
+
+    def test_other_pr_workflow_without_verify_is_gate_002_review(self) -> None:
+        repo = self._write(WORKFLOW_GREEN)
+        other = "name: lint\non: [pull_request]\njobs:\n  ruff:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: ruff check\n"
+        (repo / ".github" / "workflows" / "python-lint.yml").write_text(other, encoding="utf-8")
+        (repo / ".github" / "workflows" / "nightly.yml").write_text(
+            other.replace("[pull_request]", "[schedule]"), encoding="utf-8")
+        messages = self._review(repo)
+        self.assertEqual(len(messages), 1)
+        self.assertIn("python-lint.yml", messages[0])
+        self.assertNotIn("nightly.yml", messages[0])
+        self.assertEqual(self._rules(repo), [])
+
+    def test_other_pr_workflow_with_own_verify_is_clean(self) -> None:
+        repo = self._write(WORKFLOW_GREEN)
+        other = ("on: pull_request\njobs:\n  v:\n    runs-on: ubuntu-24.04\n    steps:\n"
+                 "      - run: python3 -m ci_lint local-gate verify --repo .\n"
+                 "  ruff:\n    needs: v\n    runs-on: ubuntu-24.04\n    steps:\n      - run: ruff check\n")
+        (repo / ".github" / "workflows" / "python-lint.yml").write_text(other, encoding="utf-8")
+        self.assertEqual(self._review(repo), [])
+
+
 class FirstPassTest(unittest.TestCase):
     def test_classify(self) -> None:
         one = [RunSample("s1", "success", 1, "2026-10-01T00:00:00Z", True),
@@ -327,6 +352,27 @@ class FirstPassTest(unittest.TestCase):
         self.assertEqual(report.rate, 1.0)
         self.assertTrue(report.prs[0].attested)
         self.assertIsNone(report.finding())
+        self.assertEqual((report.merged_total, report.scanned, report.without_runs), (1, 1, 0))
+
+    def test_collect_scopes_workflow_and_limit(self) -> None:
+        pulls: JsonValue = [
+            {"number": n, "title": "t", "head": {"ref": f"b{n}"}, "created_at": "2026-10-01T00:00:00Z",
+             "merged_at": f"2026-10-01T0{n}:00:00Z", "updated_at": "2026-10-01T09:00:00Z"} for n in (1, 2, 3)
+        ]
+        seen: list[str] = []
+
+        def fetch(url: str, _token: str) -> JsonValue:
+            seen.append(url)
+            if "/pulls?" in url:
+                return pulls
+            return {"workflow_runs": []}
+
+        report = collect("o/r", "lint.yml", datetime(2026, 9, 30, tzinfo=timezone.utc), fetch, "tok", limit=2)
+        self.assertEqual((report.merged_total, report.scanned, report.without_runs), (3, 2, 2))
+        run_urls = [u for u in seen if "/runs?" in u]
+        self.assertTrue(run_urls and all("/actions/workflows/lint.yml/runs?" in u for u in run_urls))
+        self.assertTrue(any("branch=b3" in u for u in run_urls) and not any("branch=b1" in u for u in run_urls))
+        self.assertIn("newest 2 of 3", render_text(report))
 
 
 if __name__ == "__main__":

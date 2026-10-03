@@ -262,7 +262,8 @@ def _cmd_first_pass(args: argparse.Namespace) -> int:
     if since.tzinfo is None:
         since = since.replace(tzinfo=timezone.utc)
     try:
-        report = collect(args.slug, args.workflow, since, default_fetch, token, target=args.target, min_prs=args.min_prs)
+        report = collect(args.slug, args.workflow, since, default_fetch, token, target=args.target, min_prs=args.min_prs,
+                         limit=args.limit)
     except GitHubApiError as exc:
         print(f"ci-lint local-gate first-pass: {exc}", file=sys.stderr)
         return 2
@@ -320,7 +321,10 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
 
     fp = lg.add_parser("first-pass", help="live first-push pass rate of merged PRs (GATE-004)")
     fp.add_argument("--slug", required=True, help="owner/name")
-    fp.add_argument("--workflow", default="ci.yml", help="workflow file name (default: ci.yml)")
+    fp.add_argument("--workflow", default="ci.yml",
+                    help="workflow file name (default: ci.yml); only PRs with a pull_request run of it are sampled")
+    fp.add_argument("--limit", type=int, default=0,
+                    help="keep only the newest N merged PRs (default 0: all, paginated); the total is always printed")
     fp.add_argument("--since", required=True, help="ISO date/time; PRs merged at or after it")
     fp.add_argument("--target", type=float, default=DEFAULT_TARGET)
     fp.add_argument("--min-prs", type=int, default=DEFAULT_MIN_PRS)

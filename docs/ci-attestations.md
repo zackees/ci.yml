@@ -125,6 +125,18 @@ What makes the labels ancestor-defining:
 3. **Phase 4: done** (soldr#3549 and soldr#3550). The Tier-2 zccache store is saved under lineage keys (`…-m<n>-<sha10>`). Linux x64 restores the nearest ancestor generation whose commit has a valid `rust/x86_64-unknown-linux-gnu/test` side entry (`attest resolve --require-gate`, GET-only, advisory, prefix fallback). Verified live: `main` m2201 published both, the resolver picks `…-m2201-9f92fdbe37`, and it skips m2200, whose test gate overflowed the old 8 slots (fixed in #218: job-mapped gates are published first, and overflow is a `::warning`). Next: the Dylint trees and cross lanes.
 4. **Isolation:** the isolated runner proves which tree it tested (GATE-009, `.gate-nonce`; bosn 0.1.7 fixed the container reuse at the root).
 
+## Fleet rollouts (goal 3)
+
+Measured results of rolling the local gate and attestations out beyond soldr. Single samples are marked; the raw figures are in [designs/ci-attestations-ledger.json](designs/ci-attestations-ledger.json) under `rollouts`.
+
+| Repository | PRs | Result |
+| --- | --- | --- |
+| zccache | #1881, #1882, #1883, #1884 | PR CI median 1109 s -> 644 s (one sample); integration 1060 s -> 14 s. The pre-prune barrier caused ~93% of main-push failures; fixed in #1884 (see candidate `CACHE-026`). Timing-budget tests are flaky under host load; the gate container must run non-root. |
+| llvm-ld | #71, #72 | #71 moves the allocator benchmark to path-filtered/nightly: ~-24% to -31% runner-minutes per PR (projected). #72: the Windows zccache cache gets 0 hits (0/1791), candidate `CACHE-027`. |
+| mimalloc-pprof | #599, #600, #601 | #599 pytest-xdist: python-lint 3m30 -> 2m16. #600/#601: python-lint 3m30 -> 12 s on an attested PR, ~83 s total to green. Only `python-lint.yml` is gated of ~15 PR workflows (now a GATE-002 `needs_review`); `if: always()` gate jobs went red ~270 times in a week (candidate `GATE-013`). |
+| soldr | #3555 | lane fidelity (`GATE-011`). |
+| ci.yml | #244, #245 | ci-lint rollout defect fixes (GATE-009/005/008, RUST-001) and the GHAPI-001 complexity split. |
+
 ## Commands
 
 | Command | Use |
