@@ -852,3 +852,69 @@ proves the focused local engine compile is incremental; it does not prove the
 whole kernal-api workflow is warm. Focused native engine regression tests
 are now running through `bosn run --task ci-engine-test` before review and
 publication of the shared fix.
+
+## Initial CI outcomes alongside single-head adoption (issue #270)
+
+The [fresh companion ledger](fleet-first-head-2026-10-03.json) records 177
+merged PRs across the seven repositories, since October 2 UTC. Its collector
+is `670701f1b080020b3e5bba77b4eb80bbe692fcbe`. Each report preserves GATE-004's
+existing single-head rate and adds the earliest observed workflow-run cohort's
+pass/fail/unknown outcome, timestamp and run IDs. Same-head timestamp ties stay
+together; later review revisions and duplicate triggers do not change the
+initial outcome. A missing or overwritten first attempt remains unknown.
+
+| Repository | Initial pass | Initial fail | Unknown | Pass rate among known outcomes | Evidence coverage |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| zccache | 14 | 1 | 0 | 93.3% | 100.0% |
+| soldr | 17 | 0 | 2 | 100.0% | 89.5% |
+| FastLED/fbuild | 11 | 6 | 2 | 64.7% | 89.5% |
+| bosn | 6 | 2 | 46 | 75.0% | 14.8% |
+| clud | 33 | 9 | 13 | 78.6% | 76.4% |
+| kernal-api | 3 | 2 | 6 | 60.0% | 45.5% |
+| running-process | 1 | 0 | 3 | 100.0% | 25.0% |
+
+A 100% rate with unknown outcomes does not establish 100% CI success. Bosn's
+unknown count is especially material: for example, runs `36952870693` and
+`36952871451` share the first timestamp of PR #328, with cancellation and
+success respectively. That tied initial cohort remains unknown. These reports
+cover `ci-minimal.yml` for fbuild and `ci.yml` elsewhere; they do not establish
+all-workflow/native-lane success or reconstruct an earlier push without a
+recorded workflow run. PRs without matching runs remain unknown in the
+companion, while the original GATE-004 denominator still excludes them.
+
+The same fresh scan's strict rates are 10/15 for zccache, 18/19 for soldr,
+9/19 for fbuild, 41/54 for bosn, 36/55 for clud, 5/11 for kernal-api and 0/4 for
+running-process. Old mixed-run and strict snapshots remain historical. The
+policy target stays 80%; the migration goal remains 100%. The seven live
+reads are not an atomic fleet snapshot, and this ledger predates the merge
+of zccache's permission slice below.
+
+## Zccache remote-permission rollout (#1888)
+
+[PR #1888](https://github.com/zackees/zccache/pull/1888) merged at
+`f277c97c5e644b5459c468d115a16c89b5066382`. All 23 existing writer steps now use
+global `save-cache:auto` and the published remote permission guarded by main
+push plus the writer barrier. Explicit global disables, cache families,
+payloads, keys, budgets and job-status inputs remain unchanged. The footprint
+guard also rejects remote PR overrides for independent build writers with
+`cache:false`. No workflow file was added.
+
+The final committed-tree gate passed in 725 seconds: lint 13s, CI helpers 38s,
+MSRV 182s, docs 3s and Integration 489s. It stamped head
+`10fb3bb1d4c988e9bbb04bc77e66e6ccb89319ec`, tree
+`e883d31544ba00fb931b1116da34bcb0d8d6350e`. All ten triggered workflows passed
+on that one pushed head, each on attempt 1: CI, Integration, Linux, Windows,
+macOS, Python Tests, Filesystem Matrix, Wrapper end-to-end, Perf Guard and
+Soldr Broker Stress. Remote GATE-003 accepted the exact tree; GATE-008 used
+the workflow-surface-change fallback and retained remote execution. MSRV job
+`111270602052` explicitly reports `save-cache-remote=false` for build, registry
+and cook saves.
+
+Local post steps reported build/registry exact-hit skips, rather than global
+save-policy disables; they did not need to write a new payload. Integration
+still compiles through a private seeded store while post state points at the
+separate restored store. Publishing validated private outputs and resolving
+immutable exact-key generations remain the next compile-reuse work. Failure
+classification also remains separate: compile/cancellation failures must not
+publish build outputs, while assertion-only failures may retain valid compiled
+outputs. The permission rollout does not prove those follow-ups complete.
