@@ -131,12 +131,27 @@ Dylint passed, and nextest executed 1549 of 2346 tests (1545 passed, including
 one retry; four APE tests failed). The unexecuted remainder prevents attestation.
 A separate diagnostic using the released act2.3 binary observed umask `0000`
 and default directory mode `0777`; a diagnostic-only `0022` control produced
-`0755` and passed the directory-permission assertion. This isolates a runner
-permission gap, but does not prove that all four APE failures share that cause.
-No production umask change or repository workaround was applied. A run through
-the published Bosn wheel is pending. No running-process attestation has been
-issued. These milestones do not erase failed attempts or replace its first-push
-sample.
+`0755` and passed the directory-permission assertion. At that stage this isolated a runner
+permission gap, but did not prove that all four APE failures shared that cause.
+No production umask change or repository workaround was applied. The published-wheel run `675e97ac-ce35-4b7c-abe8-db9bb7416ea3`
+then failed in 920.297 seconds against the identical snapshot and payload.
+Dylint and both targeted permission/fallback tests passed. Nextest executed
+1531/2346 tests: 1530 passed (one flaky), one final APE nested-spawn failure,
+nine skipped. The other three APE cases failed earlier attempts, but fail-fast
+interrupted their remaining retries; this does not prove they passed. The
+aggregate correctly failed. No running-process attestation has been issued. A subsequent controlled diagnostic on the same source and released
+act2.3 ran the entire Linux APE test module: default umask `0000` produced
+14 passes and exactly the four APE failures above; a diagnostic-only `0022`
+step reused the same source/build and passed all 18 tests, with zero failures
+or ignored tests (202 unrelated tests filtered in both steps). The fixture
+asserted baseline failure and control success. Its initial checkout attempt
+stopped before testing because a token was required; the corrected fixture
+fetched public Git source and checked the exact SHA. This is stronger causal
+evidence for the runner permission mismatch, not a successful full gate.
+[The umask PR remains closed](https://github.com/zackees/act2/pull/6), awaiting
+clarification of its closure; no production change or repository workaround
+was applied. These milestones do not erase failed attempts or replace its
+first-push sample.
 
 The post action reported a build miss with save skipped by global
 `save-cache` policy. An unpushed focused regression is RED on the original
@@ -672,11 +687,22 @@ This example proves the trusted-skip path works; it does not establish a
 100% first-push rate or independently verify every local test from trailers.
 
 An unchanged current-source baseline on `89b7fb7214fd43836ee34c7d7c985059a873dd6f`
-is running with the privately installed PyPI Bosn 0.1.12 wheel and released
-act2.3 (`3789d32d-feea-4e75-9d16-2e601c06d86e`). Static checks passed; builds,
-Dylint, unit shards and the aggregator still need a terminal result. The fresh
-runner state contains compile misses, so this is a cold baseline. No Clud
-source, test selection, cache-writer arrangement or coverage has changed.
+passed with the privately installed PyPI Bosn 0.1.12 wheel and released
+act2.3 (`3789d32d-feea-4e75-9d16-2e601c06d86e`) in 1007.548 seconds.
+Static checks, Clippy, build, all three Dylint targets, all three unit shards
+and `CI OK` executed successfully. The expanded unit matrix children passed;
+the unexpanded planning node reports skipped. Existing ignored/skipped tests
+and opt-in tiers were retained, so this proves the selected routine plan,
+not the entire repository test graph or native Windows/macOS coverage.
+The fresh runner state contains compile misses, so this is a cold baseline.
+No Clud source, test selection, cache-writer arrangement or coverage changed.
+
+The [refreshed strict first-push scan](clud-first-pass-2026-10-03.json), using
+the same start date and workflow, found 36/55 (65.5%) first-pass PRs, with
+trailers on 3/55; all three attested PRs passed first push. Trailer presence
+alone remains weaker than the exact-tree acceptance verified above. Sparse
+adoption and the historical failures mean this does not meet the fleet's
+100% target. The earlier denominator and failures are preserved below.
 
 Zccache's current source `b7ccf9f5e4814fc02b69f7d628ec62fad31ec60e` also has
 attestation and trusted-skip declarations, but its isolated test lane still
