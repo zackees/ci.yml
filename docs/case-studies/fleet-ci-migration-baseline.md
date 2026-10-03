@@ -704,12 +704,56 @@ alone remains weaker than the exact-tree acceptance verified above. Sparse
 adoption and the historical failures mean this does not meet the fleet's
 100% target. The earlier denominator and failures are preserved below.
 
-Zccache's current source `b7ccf9f5e4814fc02b69f7d628ec62fad31ec60e` also has
-attestation and trusted-skip declarations, but its isolated test lane still
+## Zccache Bosn Actions migration
+
+At the unchanged baseline `b7ccf9f5e4814fc02b69f7d628ec62fad31ec60e`, Zccache has
+attestation and trusted-skip declarations, but its isolated test lane
 uses `bosn run --task gate-test`, rather than the Actions plan through act2.
 Its workflow/cache guard explicitly allows ACT-specific save overrides.
 This is a remaining migration target, not evidence that a manifest is missing.
-No Zccache edits or new workflow files have been made.
+No Zccache edits had been made at that baseline.
+
+[Issue #1885](https://github.com/zackees/zccache/issues/1885) records successful
+published Bosn 0.1.12 / act2.3 baselines: the actual Integration workflow
+passed in 499.122 seconds, and MSRV with its dependencies passed in
+147.414 seconds. Integration ran 3478 nextest cases successfully, with 286
+existing skips; MSRV ran six nested Dylint cache-contract tests. These are
+selected Linux PR jobs, not the native or schedule-only test graph.
+
+[PR #1886](https://github.com/zackees/zccache/pull/1886) replaces the gate's
+check/tests lanes with those actual Actions definitions. Its frozen typed
+receipt checks bind the workspace, clean HEAD, workflow/job selection,
+terminal success and successful required Main steps. Host/daemon architecture
+checks reject unsupported or unknown test fidelity. The existing nextest
+host-refusal predicate and other remote/native coverage remain intact.
+The ci-lint pin advances to existing Bosn receipt support, and no workflow
+file is added. ACT-specific cache overrides remain a separate follow-up.
+
+The committed-tree gate passed in 637 seconds: lint 46, CI-helper tests 33,
+MSRV 138, documentation 32 and Integration 387. Actual Bosn runs
+`51fca9ce-803d-4e5f-9e32-5a649c003464` and
+`325ef59f-13fc-43ca-a5eb-c35833426c2c` executed against the clean candidate
+`1248090a6ee2fe945e192d82165b73657675c42f`. The gate stamped head
+`36f64f3a16ea36d16083c2fdcb503f449d539c22`, tree
+`4664118014a09f6b82d51d60e201f015f9cee59a`, with six per-gate attestations.
+Integration again passed all 3478 nextest cases, its doctests and explicit
+contracts, retaining the 286 skips. The 36 focused proof/wiring/fidelity
+cases, Ruff including C901, cache-footprint guard and primary review passed.
+
+An unchanged-tree `--force --no-stamp` gate invocation reused every lane
+and returned in about 0.5 seconds. This measures input-bound reuse of prior
+successful checks, not another full suite execution or a performance ratio
+for changed source. The initial host linker/daemon failures remain recorded
+in #1885; neither received an attestation. The successful full retry used a
+session-local Soldr root and Nix's native linker for host metadata checks,
+leaving the incompatible shared daemon alone; product tests ran in Bosn.
+
+The [remote CI run](https://github.com/zackees/zccache/actions/runs/37140388351)
+accepted the exact tree (`GATE-003`). `GATE-008` correctly returned
+`surface-changed` because this PR edits workflow definitions, so all four
+covered jobs still run remotely. This confirms source proof and fail-closed
+trust, not the later ordinary-PR skip path. The rollout PR is still open
+at this observation; its complete remote first-push outcome remains pending.
 
 ## First-push PR measurement
 
