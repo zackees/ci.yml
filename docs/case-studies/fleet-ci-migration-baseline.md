@@ -1,0 +1,76 @@
+# Fleet CI migration baseline — 2026-10-03 UTC
+
+This is an evidence snapshot and rollout worklist, not binding policy. Queried the latest 50 workflow runs per repository using GitHub REST. These are workflow-run rates, not first-push PR rates or required-check rates. Windows differ by repository activity. Cancelled, skipped, and pending runs are excluded from the decisive denominator (success + failure); their counts are reported separately. Reruns are not deduplicated. No local speed claim is established by this snapshot.
+
+| Repository | Sample window (UTC) | PR success / decisive | Push success / decisive | PR cancelled / skipped |
+| --- | --- | --- | --- | --- |
+| [zackees/zccache](https://github.com/zackees/zccache/actions) | 2026-10-02T22:10:51Z – 2026-10-03T00:38:26Z | 15/15 (100.0%) | 29/29 (100.0%) | 0 / 0 |
+| [zackees/soldr](https://github.com/zackees/soldr/actions) | 2026-10-02T10:24:36Z – 2026-10-03T02:03:33Z | 15/15 (100.0%) | 13/15 (86.7%) | 0 / 0 |
+| [FastLED/fbuild](https://github.com/FastLED/fbuild/actions) | 2026-10-03T00:43:14Z – 2026-10-03T03:12:53Z | 20/27 (74.1%) | 9/9 (100.0%) | 4 / 3 |
+| [zackees/bosn](https://github.com/zackees/bosn/actions) | 2026-10-02T20:37:43Z – 2026-10-03T03:07:20Z | 15/18 (83.3%) | 16/16 (100.0%) | 13 / 0 |
+| [zackees/clud](https://github.com/zackees/clud/actions) | 2026-10-03T02:26:53Z – 2026-10-03T03:39:58Z | 14/20 (70.0%) | 6/6 (100.0%) | 4 / 18 |
+| [zackees/kernal-api](https://github.com/zackees/kernal-api/actions) | 2026-09-29T12:26:45Z – 2026-10-03T02:48:49Z | 10/12 (83.3%) | 6/9 (66.7%) | 18 / 0 |
+| [zackees/running-process](https://github.com/zackees/running-process/actions) | 2026-10-02T12:36:34Z – 2026-10-03T03:24:23Z | 25/31 (80.6%) | 9/9 (100.0%) | 6 / 0 |
+
+## Current evidence and next correction
+
+1. **Kernal-api: investigate the test failure, then establish local/remote coverage parity and attestation verification.** The current default-branch `ci.yml` has no `local-gate verify` job; `ci.toml` declares `runner = "bosn-act"`, but `bosn.toml` exposes fmt/clippy/cargo-test tasks rather than the entire workflow. That is configuration intent, not proof of act2 execution or equivalent coverage. [Failed full PR run](https://github.com/zackees/kernal-api/actions/runs/37085333936): Linux failed “Run the full test suite”; full-coverage correctly rejected Linux failure and skipped platform jobs. [Failed push](https://github.com/zackees/kernal-api/actions/runs/36983751509): “Test the default facade”. Preserve native/platform/full-mode coverage; do not skip it based on Linux-only proof.
+
+2. **Running-process: separate external service failures from real platform tests.** [PR run](https://github.com/zackees/running-process/actions/runs/37080463874) failed both Codecov upload and Windows x86 all-feature unit tests. Removing a remote service dependency alone cannot resolve the real test failure. Investigate test evidence before migration.
+
+3. **Clud: validate the recent rollout before another broad change.** [PR run](https://github.com/zackees/clud/actions/runs/37092346055) failed the Linux unit suite in Python shard 2, then CI OK. Fetch and compare its local gate coverage and exact source tree; green main pushes do not prove first-push reliability.
+
+4. **Bosn: preserve dependency-boundary checks locally.** [PR run](https://github.com/zackees/bosn/actions/runs/37088922239) failed “Verify kernal-api boundary and locked resolution”. A root `ci-attestations.yml` exists on the default branch, but its existence alone proves neither local coverage nor remote skip behavior.
+
+5. **Soldr and zccache: retain warm artifact reuse and inspect remaining non-PR failures.** Soldr has a root `ci-attestations.yml`; zccache latest sampled PR/push runs are green. The older [CACHE-026 evidence](https://github.com/zackees/ci.yml/pull/236) (53% zccache main success, cache-barrier failures) is historical and must not outrank current failures without a wider fresh measurement. Zccache still has failed Cache Cleanup runs in this sample.
+
+6. **Fbuild: inspect failures before ranking a specific migration.** Its owner is FastLED, not zackees. The sample includes failed platform-boundary research, ci-minimal, and subprocess-lint workflows; job evidence still needs investigation.
+
+## Acceptance for each migration
+
+- Preserve every required lint, test, platform and artifact check; map actual commands, features, execution host and target.
+- Run the same workflow through bosn’s pinned act2 engine locally. Measure cold, warm, and no-source-change execution separately.
+- Establish tree-bound per-job attestation verification before skipping remote PR jobs. A missing or invalid stamp fails closed; native tests require native or VM evidence.
+- Restore the nearest compatible known-good ancestor artifacts; verify actual restore/save logs and local persistent volumes. Never claim a cache is effective from declared keys alone.
+- Compare decisive first-push PR outcomes and required-job execution/critical path over a consistent rolling window; keep queue time separate.
+- Attestation reduces redundant work. It does not make external services, audit samples, new dependency resolution or uncovered platform tests infallible. A 100% sample is evidence over that sample, not a guarantee.
+
+The next step is the kernal-api coverage map and focused failing-test reproduction. No repository migration is marked complete by this baseline.
+
+## Kernal-api rollout: first local implementation
+
+Work branch `feat/bosn-act2-local-gate` in the sister checkout
+`ci.yml-extern/kernal-api` contains the first migration step (not published or
+completed):
+
+- `ci/local_gate.py` submits the exact existing `ci.yml:linux` job in minimal
+  PR mode to bosn. It accepts only a completed successful act2 run with the
+  expected workspace, commit SHA, null dirty-snapshot field, workflow, job,
+  mode, zero exit, and every selected job completed with none failed. It also
+  checks the worktree stayed clean and at the same HEAD through execution.
+- `[local.gate.lanes.linux-minimal]` records identical-input passes through
+  ci-lint's existing lane cache. There are no input exclusions. Bosn owns the
+  workflow execution and persistent machine cache; warm speed still needs
+  measurement.
+- A shadow `verify` job precedes Linux and Dylint; platform jobs retain their
+  existing dependency on Linux. Every existing check still executes remotely.
+  The local runner is not declared a conventional mirrored command because it
+  executes the workflow itself: local-gate lint correctly leaves GATE-001 as
+  needs_review. Remote attestation skips are not enabled.
+- Focused RED → GREEN evidence covers unrelated source, dirty snapshots,
+  upstream act, wrong workflow/mode/job, failed and incomplete verdicts. All
+  153 existing/new CI guard tests pass; Ruff check and format checks pass for
+  the new runner and its tests.
+
+Runtime validation is active as bosn run
+`ae6f3b50-42b9-4187-9dc1-5b8536a5fb56` for commit
+`df5325b7310036a1a82531526606d15caa9525bb`, observed queued behind four active
+local runners. The run record confirms pinned act2 `0.2.89-act2.1`. The earlier
+unchanged-tree probe was explicitly cancelled while queued in favour of this
+committed candidate, rather than restarted because observation timed out.
+
+The full remote test failure is now identified: run 37085333936 passed 1,294
+of 1,295 executed tests, with
+`process::ape_launch::command_routes_a_real_image_through_its_loader` timing out
+at 120 seconds. This remains a test reliability investigation; do not waive it
+or claim the minimal Linux gate covers the full test graph.
