@@ -107,3 +107,43 @@ successfully in 1.131 seconds; the engine preparation took 85.1 seconds after
 7.7 seconds of engine creation. Setup-soldr is currently installing the pinned
 Rust toolchain in the fresh job, so fast warm execution is still unproven.
 No remote skip is enabled and no migration is marked complete.
+
+## Runner-parity failure and shared correction
+
+Kernal-api run `ae6f3b50-42b9-4187-9dc1-5b8536a5fb56` is terminal failure.
+Its verifier passed and 131 selected Python guard tests plus shell guards
+passed. The next command failed because the pinned slim runner image has no
+`pwsh` (exit 127); the failure-reporting step also has no `gh`. No product
+compile or test verdict was reached. The gate correctly refused to stamp the
+commit. This is runner parity, not evidence of a product test regression.
+
+The next correction is shared in bosn, branch `feat/ci-runner-stock-tools`,
+commit `9c2a5b2`: provision PowerShell 7.6.6 and GitHub CLI 2.102.0 from their
+publisher release assets, pinned by SHA256, into a versioned generation of
+act's tool-cache volume after seeding it. Probe both executables before
+writing `.complete`; existing tool-cache saving retains that generation.
+The runner image digest stays unchanged. Act receives the tools' bin path,
+and workflows keep their stock commands. The Rust wiring is not yet fully
+validated or published.
+
+Verification so far:
+
+- A real cold bootstrap in the exact pinned Ubuntu runner image verified
+  both publisher archive digests and successfully executed both tools.
+- A second bootstrap used a read-only install volume with Docker networking
+  disabled; both probes passed without any download. Total container wall
+  time was 11.392 seconds, including container startup and cleanup. This is a
+  tool-bootstrap measurement, not full CI warm timing.
+- Four focused tests pass, including real script execution against fixture
+  archives, warm reuse without downloads, and checksum rejection without a
+  completion marker. Ruff and file-length/include-base checks pass.
+- The isolated `bosn run --task ci-engine-check` is running the Rust compile
+  in persistent stack volumes. A first attempt failed because Docker could
+  not create the nested target mountpoint below the read-only source bind;
+  creating the ignored host `target/` mountpoint allowed the second attempt
+  to start compilation. No host test suite was run.
+
+The sister directory disappeared during this investigation. Kernal-api's two
+commits were recovered from bosn's retained frozen source Git repository;
+Git bundles of both working branches now live under ci.yml's
+`.git/fleet-migration-bundles/` so another directory loss cannot discard them.
