@@ -1,5 +1,21 @@
 # Fleet CI migration baseline — 2026-10-03 UTC
 
+Publication update: the baseline and first-pass rerun correction are in
+[ci.yml PR #237](https://github.com/zackees/ci.yml/pull/237), validated by all
+813 selftests. Bosn's shared runner fix is reviewed clean and passed six engine,
+four pinned-image and four bootstrap tests in isolation. It preserves the
+runner's Node/npm PATH and collects bootstrap tests in normal pytest discovery.
+Its full gate passed Python static and policy lanes; Rust initially encountered
+a Soldr 0.9.28/0.9.27 shared-state ownership conflict. A retry uses a separate
+persistent Soldr root without replacing the shared daemon and is pending.
+
+A second shared speed issue is confirmed: the planner emits `cache_save=false`
+for the read-only PR flow, which kernal-api passes explicitly to setup-soldr.
+setup-soldr allows local act saves in `auto` mode but respects explicit `false`.
+Resolve the planner/cache contract centrally with regression evidence, preserving
+explicit cache-disable inputs and remote cache policy, rather than adding local
+runner workarounds to individual repositories.
+
 This is an evidence snapshot and rollout worklist, not binding policy. Queried the latest 50 workflow runs per repository using GitHub REST. These are workflow-run rates, not first-push PR rates or required-check rates. Windows differ by repository activity. Cancelled, skipped, and pending runs are excluded from the decisive denominator (success + failure); their counts are reported separately. Reruns are not deduplicated. No local speed claim is established by this snapshot.
 
 | Repository | Sample window (UTC) | PR success / decisive | Push success / decisive | PR cancelled / skipped |
