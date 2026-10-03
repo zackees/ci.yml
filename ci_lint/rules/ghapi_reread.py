@@ -494,19 +494,9 @@ def _enclosing_strings(tree: ast.Module, loop: ast.stmt) -> list[str]:
     return []
 
 
-def check_python(path: Path, rel: str, *, gate_012_scope: bool) -> list[Finding]:
-    try:
-        source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source, filename=str(path))
-    except (SyntaxError, UnicodeDecodeError, OSError, ValueError):
-        return []
-    mod = PyModule(tree, source)
-
-    def line_allowed(line: int) -> bool:
-        return 0 < line <= len(mod.lines) and allowed(mod.lines[line - 1], RULE)
-
+def _watch_findings(mod: PyModule, tree: ast.AST, rel: str, line_allowed, reported: set[int]) -> list[Finding]:
+    """`gh ... watch` reads: gh's own polling loop, a finding wherever it appears."""
     findings: list[Finding] = []
-    reported: set[int] = set()
     for read in mod.reads_in(tree, []):
         if read.what.endswith("(watch)") and not line_allowed(read.line):
             reported.add(read.line)
@@ -520,35 +510,69 @@ def check_python(path: Path, rel: str, *, gate_012_scope: bool) -> list[Finding]
                     fix=_FIX,
                 )
             )
+    return findings
+
+
+def _sleeping_loop_reads(mod: PyModule, tree: ast.AST, loop, line_allowed, reported: set[int]) -> list:
+    """GitHub reads a sleeping loop reaches that are not already reported or excused."""
+    body = ast.Module(body=list(loop.body), type_ignores=[])
+    if not any(
+        isinstance(n, ast.Call) and _call_name(n) in (_SLEEP_NAMES | mod.sleepers)
+        for n in ast.walk(body)
+    ):
+        return []
+    if line_allowed(loop.lineno):
+        return []
+    reads = [
+        r
+        for r in mod.reachable(loop, _enclosing_strings(tree, loop))
+        if not r.what.endswith("(watch)")
+    ]
+    return [r for r in reads if r.line not in reported and not line_allowed(r.line)]
+
+
+def _loop_finding(loop, rel: str, unbounded: list, ambiguous: list) -> Finding:
+    polling = isinstance(loop, ast.While)
+    if polling and unbounded:
+        status = Status.VIOLATION
+        what = ", ".join(f"`{r.what}` (line {r.line})" for r in unbounded[:5])
+        more = f" and {len(unbounded) - 5} more" if len(unbounded) > 5 else ""
+        message = f"line {loop.lineno}: a sleeping `while` loop re-reads GitHub state with no time/cursor bound: {what}{more}"
+    else:
+        status = Status.NEEDS_REVIEW
+        cited = unbounded or ambiguous
+        what = ", ".join(f"`{r.what}` (line {r.line})" for r in cited[:5])
+        why = (
+            "a counted `for` loop that sleeps: a retry or a poll -- cannot tell statically"
+            if not polling
+            else "its reads go through a non-literal command -- cannot see the endpoint or a bound"
+        )
+        message = f"line {loop.lineno}: GitHub reads in a sleeping loop ({why}): {what}"
+    return Finding(rule=RULE, path=rel, line=loop.lineno, status=status, message=message, fix=_FIX)
+
+
+def check_python(path: Path, rel: str, *, gate_012_scope: bool) -> list[Finding]:
+    try:
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+    except (SyntaxError, UnicodeDecodeError, OSError, ValueError):
+        return []
+    mod = PyModule(tree, source)
+
+    def line_allowed(line: int) -> bool:
+        return 0 < line <= len(mod.lines) and allowed(mod.lines[line - 1], RULE)
+
+    reported: set[int] = set()
+    findings = _watch_findings(mod, tree, rel, line_allowed, reported)
     loops = sorted(
-        (
-            n
-            for n in ast.walk(tree)
-            if isinstance(n, (ast.While, ast.For, ast.AsyncFor))
-        ),
+        (n for n in ast.walk(tree) if isinstance(n, (ast.While, ast.For, ast.AsyncFor))),
         key=lambda n: n.lineno,
     )
     for loop in loops:
-        body = ast.Module(body=list(loop.body), type_ignores=[])
-        if not any(
-            isinstance(n, ast.Call) and _call_name(n) in (_SLEEP_NAMES | mod.sleepers)
-            for n in ast.walk(body)
-        ):
-            continue
-        if line_allowed(loop.lineno):
-            continue
-        reads = [
-            r
-            for r in mod.reachable(loop, _enclosing_strings(tree, loop))
-            if not r.what.endswith("(watch)")
-        ]
-        reads = [
-            r for r in reads if r.line not in reported and not line_allowed(r.line)
-        ]
+        reads = _sleeping_loop_reads(mod, tree, loop, line_allowed, reported)
         if not reads:
             continue
-        segment = ast.get_source_segment(source, loop) or ""
-        if gate_012_scope and _names_app_check(segment):
+        if gate_012_scope and _names_app_check(ast.get_source_segment(source, loop) or ""):
             continue  # GATE-012 owns a wait on an app check
         unbounded = sorted(
             {r.line: r for r in reads if not r.bounded and r.literal}.values(),
@@ -558,34 +582,7 @@ def check_python(path: Path, rel: str, *, gate_012_scope: bool) -> list[Finding]
         if not unbounded and not ambiguous:
             continue  # every read the loop reaches is bounded
         reported.update(r.line for r in reads)
-        polling = isinstance(loop, ast.While)
-        if polling and unbounded:
-            status = Status.VIOLATION
-            what = ", ".join(f"`{r.what}` (line {r.line})" for r in unbounded[:5])
-            more = f" and {len(unbounded) - 5} more" if len(unbounded) > 5 else ""
-            message = f"line {loop.lineno}: a sleeping `while` loop re-reads GitHub state with no time/cursor bound: {what}{more}"
-        else:
-            status = Status.NEEDS_REVIEW
-            cited = unbounded or ambiguous
-            what = ", ".join(f"`{r.what}` (line {r.line})" for r in cited[:5])
-            why = (
-                "a counted `for` loop that sleeps: a retry or a poll -- cannot tell statically"
-                if not polling
-                else "its reads go through a non-literal command -- cannot see the endpoint or a bound"
-            )
-            message = (
-                f"line {loop.lineno}: GitHub reads in a sleeping loop ({why}): {what}"
-            )
-        findings.append(
-            Finding(
-                rule=RULE,
-                path=rel,
-                line=loop.lineno,
-                status=status,
-                message=message,
-                fix=_FIX,
-            )
-        )
+        findings.append(_loop_finding(loop, rel, unbounded, ambiguous))
     return findings
 
 
