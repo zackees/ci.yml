@@ -36,6 +36,16 @@ smallest existing tier covering the affected platforms; reserve the full
 matrix for platform changes needing that coverage. Routine business logic
 keeps the required quick lint, cross-target checks and representative tests.
 Release/candidate validation still runs its complete required matrix.
+Apply this decision at every agent entry point: repository instructions,
+platform skills, planning/review/integration/landing procedures and local
+validation playbooks. A tool listing available targets is an inventory, not
+an instruction to check every target. Additional per-target checks exercise
+only the changed platform implementations; scope commands to their platform
+crates where the repository provides that boundary. Do not add a second
+cross-target loop when the routine gate already supplies those checks.
+Preserving remote CI means keeping required checks, not adding optional
+native/full labels to business-logic PRs.
+
 This is a selection policy for agents and reviewers; ci-lint does not infer
 semantic changes from a diff or automatically enforce this distinction.
 
