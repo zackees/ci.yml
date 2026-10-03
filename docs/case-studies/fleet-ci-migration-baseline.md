@@ -40,8 +40,12 @@ for the complete migration.
 Review then required an explicit native Linux x64 process-host and Docker-server
 architecture check, and uv invocation in the remote verifier. Those fixes passed
 45 focused guards and received a clean review. Declared local-gate run
-`f52f36c3-0e26-4ca6-a3b4-57b4a40e9888` is validating the final source
-`b9b9abe4c882449624524e59b0b788083b6709f7` before it is stamped or pushed.
+`f52f36c3-0e26-4ca6-a3b4-57b4a40e9888` passed in 285 seconds on source
+`b9b9abe4c882449624524e59b0b788083b6709f7` and stamped its tree. A static
+LAYOUT-001 check then required moving Python host queries into the exact
+declared CI facade `ci/platform_host.py`; that check and review now pass.
+Run `6e6f9a6d-9ff4-49fd-b3a5-9f3eaceac183` is validating the resulting
+source `48611063be0361fb302fc74e3e7fd2b2ca9e8188` before publication.
 The gate uses the built bosn wheel through an isolated uv environment and the
 separate `BOSN_STATE_DIR`; the wheel CLI's SHA256 matches the tested native
 binary, `c3bcaa01b78bac52d0c63d72639d9ab0886c90d7c15a124d3a7437d46f85bc9a`.
