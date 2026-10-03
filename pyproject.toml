@@ -1,13 +1,16 @@
 # Packaging only, so any repository can run the checker without a sister
 # checkout (zackees/ci.yml#166):
 #   uvx --from git+https://github.com/zackees/ci.yml@<sha> ci-lint local-gate run
-# ci_lint stays standard-library-only; PyYAML is an optional accelerant.
+# The ci_lint source stays standard-library-importable, but the packaged
+# entrypoint depends on PyYAML: without it the fallback parser cannot read
+# real workflows and `local-gate lint` reports false GATE-008 violations
+# (soldr rollout, 2026-10-02).
 [project]
 name = "ci-lint"
 version = "0.1.0"
 description = "Fleet CI policy checker for zackees/ci.yml"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["pyyaml>=6"]
 
 [project.optional-dependencies]
 yaml = ["pyyaml>=6"]
