@@ -918,3 +918,77 @@ immutable exact-key generations remain the next compile-reuse work. Failure
 classification also remains separate: compile/cancellation failures must not
 publish build outputs, while assertion-only failures may retain valid compiled
 outputs. The permission rollout does not prove those follow-ups complete.
+
+## Zccache isolated-store experiments (#1885)
+
+[Issue #1867](https://github.com/zackees/zccache/issues/1867) already identified
+why Linux Test could seed a cache yet lose its own workspace compiles:
+first-writer-wins shared keys and post state pointing at a different store.
+Its existing `publish-isolated-build-cache` action was reused for Integration;
+this investigation did not require a new cache backend or ancestor resolver.
+
+The initial clean candidate `3db3d6a12ec2c7a282f85e0ef53393328b555ee4` gave
+Integration its own `integration` suffix and published the private store after
+shutdown and audit. Published Bosn 0.1.12 / act2.3 produced these receipts:
+
+| Run | Result | Integration prebuild | Full nextest result |
+| --- | --- | --- | --- |
+| `301118e4-c037-49c0-b96e-8ed768c0ae4b`, cold | Passed, 913s overall | 285s | 3,478 passed, 286 skipped |
+| `131709c9-ea29-4852-8f4a-2f1a9eaac38c`, same source warm | Failed, 495s overall | 140s | 3,477 passed, one failed, 286 skipped |
+
+The warm failure was the durability fixture's unchanged 500ms flush budget:
+786ms was measured. It remains a failed gate, not successful warm-validation
+or first-push evidence. The post step reported `failed-job-skip`; no
+`save-on-failure` override or threshold increase was introduced. Phase-local
+compiler rollups showed 49 hits / zero misses and 18 hits / zero misses for
+the two prebuild commands. These are compiler-cache measurements, not a
+claim that every harness or workflow was reused.
+
+The initial publisher **wrote** a local build archive of 1,056,628,741 bytes.
+But its suffix also split the setup cook key, whose post-build archive was
+3,533,586,676 bytes. Both were measured with the published local compression
+profile. This naive candidate was rejected before pushing: its new cook
+archive alone exceeded the repository's 1.7GB cook-family allocation.
+
+The revised candidate disables the setup cook for Integration, restores the
+Cargo registry explicitly, and reuses dependencies and workspace units through
+the isolated unit store. It preserves every existing build, nextest, doctest,
+wrapper-contract, artifact-layout, ignored/stress and audit command. Explicit
+`ci-tests:true` protects test-product policy; an explicit
+`NEXTEST_TEST_THREADS:num-cpus` preserves parallel execution because that
+setup input otherwise defaults nextest to one thread. Existing timing-test
+slot reservations remain unchanged. The setting is documented by
+[nextest](https://nexte.st/docs/running/).
+
+The build-family allocation reserves 1.2GB for the measured store, increasing
+that family's cap from 2.9GB to 4.1GB within the unchanged 9.5GB repository
+cap. The pre-prune planner reserves the first Integration writer before any
+entry exists, credits already-charged old-store bytes, and charges nothing
+extra when a current-lock store exists. Both measured Linux Test and
+Integration stores retire their old-lock generations before replacement.
+The captured 247-entry listing totals 7,900,758,346 bytes; with the real
+LF/CRLF lock hashes, its projected peak is 9,100,758,346 bytes under the
+unchanged 9.2GB pre-prune target. This is a replay of that listing, not a
+promise that later live inventories will fit. Historical inventories that
+cannot also fit the additional producer correctly refuse writes.
+
+A full gate on the intermediate no-cook candidate passed in 954s and stamped
+`e587de8e8550706df463ca11b1c0643d22dc3eb7`. That run exposed the nextest
+one-thread default. The final planner/parallelism revision passed its full gate
+in 638s (lint 51s, CI-helper tests 38s, MSRV/Dylint 163s, docs 4s,
+Integration 381s) and stamped `6f2cc5ace3de962746becdb0396d60dc74b00a36`,
+tree `83ea03b0d81bf5532bdda8e137f2a1750a2e653c`. Integration receipt
+`02c15449-a1de-4d7c-ad7f-a9e304e53153` records successful execution from
+the clean committed source. Its prebuild took 123s; nextest took 80s with
+3,478 passed and 286 skipped. Phase compiler rollups were 462, 103, 11 and
+36 hits, each with zero misses. The seeder restored 4,462 artifact files
+(4,437,966,101 bytes) into the private store; post steps reported an exact hit
+and zero new compiles, so this final run did not write another build archive.
+The 118 focused CI-helper tests and primary review also passed.
+
+[PR #1889](https://github.com/zackees/zccache/pull/1889) publishes this
+attested candidate. Its first remote head is still being evaluated; these
+local results do not establish remote publication or a fleet-wide 100%
+pass rate. Source-specific updates
+under an already exact immutable key and assertion-only failure publication
+remain separate work.
