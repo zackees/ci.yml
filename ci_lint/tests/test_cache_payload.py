@@ -32,6 +32,25 @@ class CachePayloadClassifyTest(unittest.TestCase):
         self.assertIn("incremental/", classes)
         self.assertEqual(2, len(violations))
 
+    def test_linked_products_include_cross_target_profile_paths(self) -> None:
+        paths = [
+            "target/debug/deps/suite-0123456789abcdef",
+            "target/aarch64-unknown-linux-gnu/debug/deps/suite-0123456789abcdef",
+            "target/x86_64-pc-windows-msvc/release/deps/suite-0123456789abcdef.exe",
+            r"C:\repo\target\aarch64-pc-windows-msvc\debug\deps\suite-0123456789abcdef.exe",
+        ]
+        violations = classify_payload_paths(paths)
+        self.assertEqual(paths, [v.path for v in violations])
+        self.assertTrue(all(v.content_class == "linked test binary" for v in violations))
+
+    def test_cross_target_compiler_inputs_remain_allowed(self) -> None:
+        paths = [
+            "target/aarch64-unknown-linux-gnu/debug/deps/libsuite-0123456789abcdef.rmeta",
+            "target/x86_64-pc-windows-msvc/release/deps/libsuite-0123456789abcdef.rlib",
+            "target/aarch64-unknown-linux-gnu/debug/deps/suite-0123456789abcdef.d",
+        ]
+        self.assertEqual([], classify_payload_paths(paths))
+
 
 class CachePayload007StaticTest(unittest.TestCase):
     @requires_yaml_tooling

@@ -23,7 +23,7 @@ from dataclasses import dataclass
 _NEVER_CLASS_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "linked test binary",
-        re.compile(r"(?:^|/)target/[^/]+/deps/[^/]*-[0-9a-f]{16}(?:\.exe)?$"),
+        re.compile(r"(?:^|/)target/(?:[^/]+/)?[^/]+/deps/[^/]*-[0-9a-f]{16}(?:\.exe)?$"),
     ),
     (
         "nextest archive",
