@@ -511,5 +511,61 @@
     "repos_listed": 34,
     "still_blocked": 32,
     "blocker": "no CI-OK aggregator, so no consumer; ci-lint gate IS that aggregator"
+  },
+  "measured_eligibility": {
+    "method": "ci-lint reuse-report --limit 10..20 --since 2026-09-20, required-job = the dominant main-push job; costs are mean runner-minutes per successful main push over 5-12 runs.",
+    "adopt": {
+      "zackees/clud": {
+        "reuse_rate": 0.425,
+        "runner_min_per_push": 14.9,
+        "skippable": 7.1,
+        "saves_per_day": 4.9,
+        "state": "MERGED"
+      },
+      "zackees/kernal-api": {
+        "reuse_rate": 0.895,
+        "runner_min_per_push": 6.6,
+        "dominant": "Dylint workspace 4.5 (68%)",
+        "saves_per_day": 5.3,
+        "state": "PR open"
+      },
+      "zackees/template-python-rust-cmd": {
+        "reuse_rate": null,
+        "state": "MERGED (reference wiring)"
+      },
+      "zackees/running-process": {
+        "reuse_rate": 0.667,
+        "runner_min_per_push": 15.6,
+        "dominant": "preflight 13.4, dylint 2.1",
+        "saves_per_day": 10.4,
+        "state": "PR open"
+      }
+    },
+    "skip_do_not_adopt": {
+      "zackees/soldr": {
+        "reuse_rate": 0.0,
+        "runner_min_per_push": 12.9,
+        "reason": "verdict no-op: reuse never fires (merge shape defeats tree identity). 15 decisive runs, 0 reusable."
+      },
+      "zackees/bosn": {
+        "reuse_rate": 0.1,
+        "runner_min_per_push": 4.7,
+        "reason": "1 safe skip in 10; ~0.4 runner-min/day saved. Not worth the wiring or the review surface."
+      },
+      "zackees/ledmapper": {
+        "decisive_runs": 0,
+        "reason": "no decisive main-push runs in window"
+      },
+      "zackees/getgo": {
+        "decisive_runs": 0,
+        "reason": "no decisive main-push runs in window"
+      },
+      "zackees/fp-bindgen": {
+        "verdict": "error",
+        "reason": "no successful ci.yml main pushes in window"
+      }
+    },
+    "finding": "The ROI is concentrated. Four repositories carry essentially all of the measurable saving; the long tail of 30 is each worth well under a runner-minute a day or has no eligible merges at all. Adopting the tail would add review surface and skip-guarding risk for noise. Prioritise the four, and re-measure rather than adopt blindly.",
+    "note_on_cache": "Per owner directive 2026-10-04: a daily catch-all run is fine for cache revalidation but is superseded by cache promotion (setup-soldr `auto`, nearest-ancestor restore, CACHE-024). Where a repository already has a scheduled full matrix (running-process, template-python-rust-cmd) or enough naturally-must-run pushes to refresh on their own (kernal-api, ~1 full run per 6 days at 89.5% reuse), no nightly is added. setup-soldr's `auto` key covers the build-cache family today; it does not yet cover `dylint`."
   }
 }
