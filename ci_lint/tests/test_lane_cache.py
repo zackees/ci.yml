@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -11,6 +12,7 @@ import unittest
 from pathlib import Path
 
 from ci_lint.finding import Status
+from ci_lint.full_run_receipt import load_receipt
 from ci_lint.lane_cache import (
     LaneConfig,
     ToolVersion,
@@ -251,6 +253,78 @@ class ParallelTest(LanedRepo):
         )
         (self.repo / "local-gate.toml").write_text(text, encoding="utf-8")
         self.assertEqual([f.rule for f in load_gate_config(self.repo).findings], ["GATE-007"])
+
+
+class FullRunReceiptTest(LanedRepo):
+    """A full run can seed distinct lane passes only with an exact receipt."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        py = sys.executable
+        text = (self.repo / "local-gate.toml").read_text(encoding="utf-8")
+        text = text.replace(
+            f'run = ["{py}", "gate.py"]\n\n',
+            f'run = ["{py}", "full.py", "--full", "--log", "{self.log}"]\n\n'
+            '[gate.full-run]\nreceipt = "lane-passes-v1"\nmin-misses = 2\n\n',
+        )
+        (self.repo / "local-gate.toml").write_text(text, encoding="utf-8")
+        self.write("full.py", """\
+import json, os, pathlib, sys
+log = pathlib.Path(sys.argv[sys.argv.index("--log") + 1])
+log.write_text(log.read_text() + "full\\n" if log.exists() else "full\\n")
+if not pathlib.Path("no-receipt").exists():
+    lanes = ["lint"] if pathlib.Path("missing-tests").exists() else ["lint", "tests"]
+    receipt = {"version": 1, "tree": os.environ["CI_LINT_GATE_TREE"],
+               "passes": [{"lane": lane, "secs": 2} for lane in lanes]}
+    pathlib.Path(os.environ["CI_LINT_GATE_RECEIPT"]).write_text(json.dumps(receipt))
+""")
+        self.commit("full-run receipt gate")
+
+    def test_cold_full_run_seeds_each_lane_and_warm_hit_reuses(self) -> None:
+        self.assertEqual(self.gate(), "lint:run,tests:run")
+        self.assertEqual(self.runs(), ["full"])
+        self.assertEqual(len(list((cache_dir(self.repo) / "lint").glob("*.json"))), 1)
+        self.assertEqual(len(list((cache_dir(self.repo) / "tests").glob("*.json"))), 1)
+        self.write("docs/readme.md", "new docs\n")
+        self.commit("docs")
+        self.assertRegex(self.gate(), r"^lint:reused@.*,tests:reused@")
+        self.assertEqual(self.runs(), [])
+
+    def test_one_miss_runs_only_that_lane(self) -> None:
+        self.gate()
+        self.write("tools/guard.py", "Y = 2\n")
+        self.commit("guard")
+        self.assertRegex(self.gate(), r"^lint:run,tests:reused@")
+        self.assertEqual(self.runs(), ["lint"])
+
+    def test_missing_receipt_fails_closed(self) -> None:
+        self.write("no-receipt", "")
+        self.commit("no receipt")
+        outcome = run_gate(self.repo, self.config())
+        self.assertNotEqual(outcome.exit_code, 0)
+        self.assertEqual(self.runs(), ["full"])
+        self.assertEqual(len(list((cache_dir(self.repo) / "lint").glob("*.json"))), 0)
+
+    def test_partial_receipt_fails_closed(self) -> None:
+        self.write("missing-tests", "")
+        self.commit("partial receipt")
+        outcome = run_gate(self.repo, self.config())
+        self.assertNotEqual(outcome.exit_code, 0)
+        self.assertEqual(self.runs(), ["full"])
+        self.assertEqual(len(list((cache_dir(self.repo) / "lint").glob("*.json"))), 0)
+
+    def test_receipt_rejects_duplicate_lane_wrong_tree_and_symlink(self) -> None:
+        path = self.tmp / "receipt.json"
+        expected = ("lint", "tests")
+        path.write_text(json.dumps({"version": 1, "tree": TREE,
+                                    "passes": [{"lane": "lint", "secs": 1}, {"lane": "lint", "secs": 2}]}))
+        self.assertIsNone(load_receipt(path, tree=TREE, expected_lanes=expected).evidence)
+        path.write_text(json.dumps({"version": 1, "tree": "b" * 40,
+                                    "passes": [{"lane": "lint", "secs": 1}, {"lane": "tests", "secs": 2}]}))
+        self.assertIsNone(load_receipt(path, tree=TREE, expected_lanes=expected).evidence)
+        link = self.tmp / "link.json"
+        link.symlink_to(path)
+        self.assertIsNone(load_receipt(link, tree=TREE, expected_lanes=expected).evidence)
 
 
 class KeyTest(LanedRepo):
