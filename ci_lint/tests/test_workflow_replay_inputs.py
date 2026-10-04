@@ -55,6 +55,27 @@ class ReplayInputIdentityTest(unittest.TestCase):
         self.assertEqual({job.key for job in proof.jobs}, {
             "linux/nested/Check/Test (linux-x64)", "linux/nested/Check/Prepare linux-x64"})
 
+    def test_nested_caller_display_name_uses_parent_input_binding(self):
+        inner = workflow(".github/workflows/inner.yml", copy.deepcopy(self.called.document))
+        self.entry.document["jobs"]["linux"]["name"] = "Linux x64"
+        self.called.document["jobs"] = {
+            "nested": {"name": "Prepare ${{ inputs.target }}",
+                       "uses": "./.github/workflows/inner.yml",
+                       "with": {"target": "${{ inputs.target }}"}}}
+        proof = expand_selection((self.entry, self.called, inner), self.entry.path, "linux")
+        self.assertIsNone(proof.problem)
+        self.assertEqual(proof.jobs[0].key,
+                         "Linux x64/Prepare linux-x64/Check/Test (linux-x64)")
+
+    def test_duplicate_caller_display_names_never_hide_different_inputs(self):
+        first = self.entry.document["jobs"]["linux"]
+        first["name"] = "Same"
+        second = copy.deepcopy(first)
+        second["with"]["target"] = "another-target"
+        self.entry.document["jobs"]["other"] = second
+        proof = expand_selection((self.entry, self.called), self.entry.path, None)
+        self.assertIsNotNone(proof.problem)
+
     def test_unknown_name_syntax_and_undeclared_inputs_are_not_resolved(self):
         self.called.document["jobs"]["test"]["name"] = "${{ inputs.target || 'fallback' }}"
         self.assertIsNotNone(self.proof().problem)

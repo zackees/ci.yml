@@ -44,6 +44,18 @@ class ReplayExpansionTest(unittest.TestCase):
         self.assertEqual({job.key for job in proof.jobs},
                          {"CI/Verify", "linux/Check/Workspace", "linux/Check/Python facade"})
 
+    def test_reusable_prefix_uses_caller_display_name(self):
+        self.entry.document["jobs"]["linux"]["name"] = "Linux x64"
+        proof = expand_selection((self.entry, self.called), self.entry.path, "linux")
+        self.assertIsNone(proof.problem)
+        self.assertEqual({job.key for job in proof.jobs}, {
+            "CI/Verify", "Linux x64/Check/Workspace", "Linux x64/Check/Python facade"})
+
+    def test_dynamic_caller_display_name_is_unproven(self):
+        self.entry.document["jobs"]["linux"]["name"] = "${{ github.ref }}"
+        self.assertIsNotNone(expand_selection(
+            (self.entry, self.called), self.entry.path, "linux").problem)
+
     def test_whole_workflow_includes_every_root_and_its_dependencies(self):
         proof = expand_selection((self.entry, self.called), self.entry.path, None)
         self.assertIsNone(proof.problem)
