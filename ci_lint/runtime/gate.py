@@ -206,17 +206,30 @@ class DefaultBranchReuse:
     tree: str | None
     jobs: tuple[DefaultBranchReuseJob, ...]
 
-    def job_for(self, candidates: tuple[str, ...]) -> DefaultBranchReuseJob | None:
-        """The proving job whose display name is one of `candidates`, if any.
+    def job_for(self, job_id: str, digests: tuple[str, ...]) -> DefaultBranchReuseJob | None:
+        """The proving job that belongs to `job_id`, if any.
 
-        `candidates` is ordered most-specific first, so a document that
-        somehow lists both a bare id and a digest-qualified name resolves to
-        the same job either way; the first match wins and is the one
-        re-verified live."""
+        Plan-derived display names are not one fixed shape. They come as
+        the bare id (`fast`), the digest-qualified form (`fast [abc123]`),
+        and the matrix form carrying the platform, its host, and its tool
+        (`platform-build (linux-x64) (on ubuntu-24.04, soldr) [def456]`),
+        whose middle this gate cannot reconstruct from the plan.
 
-        wanted = set(candidates)
+        So match on the two halves that ARE decidable here: the name must
+        belong to `job_id`, and it must carry a lane digest this plan
+        actually selected. The digest is the mechanical "same tier" proof,
+        so a differently-tiered or stale lane cannot match even when the
+        job id is right. Nothing else is accepted."""
+
         for job in self.jobs:
-            if job.name in wanted:
+            name = job.name
+            if name == job_id:
+                return job
+            if not name.endswith("]"):
+                continue
+            if not (name.startswith(f"{job_id} [") or name.startswith(f"{job_id} (")):
+                continue
+            if any(name.endswith(f"[{digest}]") for digest in digests):
                 return job
         return None
 
@@ -308,25 +321,19 @@ def parse_default_branch_reuse(doc: JsonValue, *, sha: str | None) -> ParsedDefa
     )
 
 
-def _default_branch_candidate_names(job_id: str, plan: dict[str, JsonValue]) -> tuple[str, ...]:
-    """Display names that could belong to the plan's `job_id`.
+def _default_branch_lane_digests(plan: dict[str, JsonValue]) -> tuple[str, ...]:
+    """Every lane digest this plan selected.
 
-    The bare id covers a workflow whose job display name *is* its id. The
-    digest-qualified form covers the plan-derived naming that
-    `[reuse.default-branch] required-jobs = "plan"` produces, where the
-    display name is `<id> [<lane digest>]` and the digest is the mechanical
-    "same tier" proof. Nothing else is guessed: a repository that sets an
-    unrelated display name gets a `fail` (a skip is not a pass), which is the
-    safe direction -- it can never turn a skip into a silent pass.
-    """
+    Used only to decide whether a proving job's display name carries a
+    digest the current run actually selected -- the "same tier" proof. A
+    repository whose display names are unrelated to the plan's lanes simply
+    matches nothing, which is a `fail` (a skip is not a pass), the safe
+    direction."""
 
-    names = [job_id]
     digests_raw = plan.get("lane_digests")
-    if isinstance(digests_raw, dict):
-        for digest in digests_raw.values():
-            if isinstance(digest, str) and digest:
-                names.append(f"{job_id} [{digest}]")
-    return tuple(names)
+    if not isinstance(digests_raw, dict):
+        return ()
+    return tuple(d for d in digests_raw.values() if isinstance(d, str) and d)
 
 
 def _verify_default_branch_reuse(
@@ -339,8 +346,7 @@ def _verify_default_branch_reuse(
 ) -> ReuseVerdict:
     if reuse is None:
         return ReuseVerdict(status="fail", run_id=None)
-    candidates = _default_branch_candidate_names(job_id, plan)
-    job = reuse.job_for(candidates)
+    job = reuse.job_for(job_id, _default_branch_lane_digests(plan))
     if job is None:
         return ReuseVerdict(status="fail", run_id=None)
     if fetch is None or token is None or repo is None:

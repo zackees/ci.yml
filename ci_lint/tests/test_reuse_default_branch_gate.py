@@ -68,6 +68,11 @@ def _doc(**overrides: JsonValue) -> dict[str, JsonValue]:
     return doc
 
 
+def _matrix_fetch(url: str, token: str) -> JsonValue:
+    assert token
+    return {"conclusion": "success", "head_sha": HEAD_SHA, "name": "platform-build"}
+
+
 def _good_fetch(url: str, token: str) -> JsonValue:
     assert token
     if "9001" in url:
@@ -162,6 +167,43 @@ class GateDefaultBranchReuseTest(unittest.TestCase):
 
         report = _gate(_doc(jobs=[{"name": "fast", "job_id": 9001}]))
         self.assertTrue(_skipped_ok(report, "fast"))
+
+    def test_matching_the_matrix_display_name_shape(self) -> None:
+        """A matrix lane's display name carries the platform, its host, and
+        its tool between the job id and the digest -- a middle this gate
+        cannot reconstruct. It must still match, on the id plus the digest."""
+
+        plan = {"required_jobs": ["platform-build"], "lane_digests": {"platform:linux-x64": "pb01"}, "mergeable": True}
+        doc = _doc(
+            sha=PUSH_SHA,
+            jobs=[{"name": "platform-build (linux-x64) (on ubuntu-24.04, soldr) [pb01]", "job_id": 9100}],
+        )
+        report = compute_gate(
+            plan, {"platform-build": {"result": "skipped"}}, fetch=_matrix_fetch, token="t",
+            repo="owner/repo", default_branch_reuse=doc, push_sha=PUSH_SHA,
+        )
+        self.assertTrue(report.ok)
+        self.assertTrue(_skipped_ok(report, "platform-build"))
+
+    def test_a_matrix_name_for_another_lane_digest_is_rejected(self) -> None:
+        """The shape matches but the tier does not -- which is exactly what
+        the digest is there to catch."""
+
+        plan = {"required_jobs": ["platform-build"], "lane_digests": {"platform:linux-x64": "pb01"}, "mergeable": True}
+        doc = _doc(jobs=[{"name": "platform-build (linux-x64) (on ubuntu-24.04, soldr) [OLD]", "job_id": 9100}])
+        report = compute_gate(
+            plan, {"platform-build": {"result": "skipped"}}, fetch=_matrix_fetch, token="t",
+            repo="owner/repo", default_branch_reuse=doc, push_sha=PUSH_SHA,
+        )
+        self.assertFalse(_skipped_ok(report, "platform-build"))
+        self.assertFalse(report.ok)
+
+    def test_a_name_merely_containing_the_id_is_not_a_match(self) -> None:
+        """Guarding against a permissive prefix match letting an unrelated
+        job's proof stand in for this one."""
+
+        report = _gate(_doc(jobs=[{"name": "fast-extra [abc123]", "job_id": 9001}]))
+        self.assertFalse(_skipped_ok(report, "fast"))
 
     def test_a_wrong_lane_digest_is_not_a_proof(self) -> None:
         """The digest is the "same tier" proof. A document naming a digest
