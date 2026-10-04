@@ -1216,3 +1216,67 @@ still owns reliable cross-run compiler reuse and the staged Dylint migration:
 existing bare tool installs, source driver builds, native Dylint lanes and
 whole-target Dylint caching remain findings. The merged attestation rollout
 does not claim full policy compliance or a completed warm-cache improvement.
+
+
+### Running-process managed Dylint measurement (2026-10-03)
+
+The next staged candidate replaces manual Dylint provisioning and persistent
+fixture/workspace target snapshots with setup-soldr's managed prebuilt Dylint
+6.0.3, nightly-2026-05-28, and reusable compiler units. Driver fallback is off;
+target/output persistence is off. Both negative-fixture suites and both
+workspace passes remain required. Failed jobs cannot publish, and remote
+writers remain main-only. Native-lane and cross-target findings remain open;
+this candidate does not establish RUST-002/003 compliance.
+
+Two actual isolated runs of the existing reusable Dylint job completed:
+
+| Run | Result | Engine summary | Receipt started-to-finished |
+| --- | --- | --- | --- |
+| `f4c107ce-ba5d-4474-9e9e-e7b6958e2d5b` | Cold success | 557.2 s | 557.564 s |
+| `1e4ead30-fbf2-45b6-8a81-5748dee4aa43` | Fresh-engine warm success | 258.3 s | 265.337 s |
+
+The warm run restored the exact foundation and 435.5 MB compiler archives.
+Its env fixture reported 391 hits/0 misses, boundary fixture 36/0, and first
+workspace pass 416/39. Repeated cumulative summaries are not added together.
+The engine summary was 54% lower; the complete receipt interval was 52%
+lower. Both real logs pass `ci-lint rust toolchain-build-check` with zero
+findings. No whole target tree was retained.
+
+These runs were dirty diagnostic snapshots on merge `809a319`. Their Rust
+sources, dependency locks, commands and job environment match, while Python
+helper/tests/comments differ. They demonstrate compiler reuse, not a
+source-bound full-gate attestation of the final candidate. The normal
+preflight compiler-reuse gap remains distinct and unresolved.
+
+The compatibility constraints are explicit: `SOLDR_LINKER=default` respects
+the lint crates' declared `cfg(all())` dylint-link while
+[soldr#3483](https://github.com/zackees/soldr/issues/3483) remains open. Cargo
+registry caching is disabled after an exact restore lacked
+`dylint_internal 6.0.1/template.tar`; the workaround passes, but does not
+implement the self-healing fix in
+[setup-soldr#492](https://github.com/zackees/setup-soldr/issues/492).
+
+The first full candidate run `80e3e6ae-380d-4f76-86e3-72c83008b173` failed
+before publication: actual Dylint checks, lint, all 2,354 Rust tests and the
+6/15-case feature passes succeeded, but Python reported 837 passed and one
+failed. A stale workflow regression still expected the removed manual
+Dylint cache paths. Its correction retains the Bash requirement and checks
+the managed setup plus both pinned tool versions. Primary review is clean.
+Corrected clean commit `4f235bb0e19f60ade79ca3935c464fe5ba19c776` passed the
+complete gate in run `d886e1e4-cff9-4c42-b04d-128e73fdb523`: engine summary
+913.0 s, complete receipt 913.210 s, outer attesting gate 917 s. All four
+required jobs and their required steps passed. Rust reported 2,354 passed
+(one flaky retry, one leaky test, nine existing skips), with 6/6 and 15/15
+selected feature cases. Python reported 838 passed, 26 skipped, 127
+deselected and 120 passing subtests in 53.80 s. Hello used 10,000 samples:
+P50 111.26 µs and P99 282.534 µs, below unchanged 200/1,000 µs budgets.
+Successful preflight compiler publication saved cache id 8; target caching
+remained disabled. The complete log has zero RUST-009 findings.
+
+The attesting wrapper stamped `c65968180acaedd296dcdaad7a3a1de6d8d61476`
+with the identical Git tree `bb2850262f22fb187ad243edb87912e276c33d7b` and
+seven scoped attestations. Source/check-push checks and primary review pass.
+[PR #1311](https://github.com/zackees/running-process/pull/1311) is open;
+first-head remote CI run 37174970554 is still in progress on attempt 1.
+Remote rollout is not yet complete. Evidence and remaining findings are
+tracked in [running-process#1306](https://github.com/zackees/running-process/issues/1306#issuecomment-5976181493).
