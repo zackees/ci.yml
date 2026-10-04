@@ -6,7 +6,8 @@ from pathlib import Path
 from ci_lint.finding import Finding, Status
 from ci_lint.workflow_replay_dependencies import check_selection_dependencies
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig
-from ci_lint.workflow_scan import as_dict, jobs_of, load_workflows, steps_of
+from ci_lint.workflow_replay_expansion import expand_selection
+from ci_lint.workflow_scan import ParsedYamlFile, as_dict, jobs_of, load_workflows, steps_of
 from ci_lint.yaml_io import YamlValue
 
 
@@ -58,7 +59,8 @@ def _check_job(declared: DeclaredReplayJob, job: dict[str, YamlValue],
 
 
 def _check_identity(declared: DeclaredReplayJob, document: dict[str, YamlValue],
-                    job: dict[str, YamlValue], path: str) -> list[Finding]:
+                    job: dict[str, YamlValue], path: str,
+                    expanded_keys: tuple[str, ...] = ()) -> list[Finding]:
     workflow, job_id = declared.source_job.split(":", 1)
     workflow_name = document.get("name", workflow)
     job_name = job.get("name", job_id)
@@ -67,7 +69,7 @@ def _check_identity(declared: DeclaredReplayJob, document: dict[str, YamlValue],
         return [Finding(rule="GATE-001", path=path, status=Status.NEEDS_REVIEW,
                         message="replay execution key depends on a nonliteral workflow or job name",
                         fix="resolve the execution identity before proving replay coverage")]
-    expected = f"{workflow_name}/{job_name}"
+    expected = expanded_keys[0] if len(expanded_keys) == 1 else f"{workflow_name}/{job_name}"
     if declared.proof.key != expected:
         return [Finding(rule="GATE-001", path=path,
                         message=f"replay execution key {declared.proof.key!r} differs from workflow identity {expected!r}",
@@ -75,16 +77,29 @@ def _check_identity(declared: DeclaredReplayJob, document: dict[str, YamlValue],
     return []
 
 
+def _expanded_keys(config: ReplayConfig, declared: DeclaredReplayJob,
+                   files: tuple[ParsedYamlFile, ...]) -> tuple[str, ...]:
+    keys: set[str] = set()
+    for selection in config.selections:
+        if selection.lane not in declared.lanes:
+            continue
+        proof = expand_selection(files, config.workflow, selection.selected_job)
+        keys.update(job.key for job in proof.jobs if job.source_job == declared.source_job)
+    return tuple(sorted(keys))
+
+
 def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
-    workflows = {item.path: item for item in load_workflows(repo)}
+    files = tuple(load_workflows(repo))
+    workflows = {item.path: item for item in files}
     findings: list[Finding] = []
     entry = workflows.get(config.workflow)
     if entry is not None and entry.document is not None:
-        findings.extend(check_selection_dependencies(config, as_dict(entry.document)))
+        findings.extend(check_selection_dependencies(config, as_dict(entry.document), files))
     for declared in config.jobs:
         workflow, job_id = declared.source_job.split(":", 1)
         path = f".github/workflows/{workflow}"
-        if path != config.workflow:
+        keys = _expanded_keys(config, declared, files)
+        if path != config.workflow and len(keys) != 1:
             findings.append(Finding(rule="GATE-001", path=path, status=Status.NEEDS_REVIEW,
                                     message="replay job belongs to another workflow; entrypoint reachability is unproven",
                                     fix="prove reusable-workflow expansion and execution coverage"))
@@ -107,6 +122,6 @@ def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
                                     fix="declare an existing workflow job"))
             continue
         if "uses" not in job and "strategy" not in job:
-            findings.extend(_check_identity(declared, document, job, path))
+            findings.extend(_check_identity(declared, document, job, path, keys))
         findings.extend(_check_job(declared, job, path, document.get("defaults")))
     return findings

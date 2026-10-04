@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from ci_lint.finding import Finding, Status
 from ci_lint.workflow_replay_config import ReplayConfig
-from ci_lint.workflow_scan import jobs_of
+from ci_lint.workflow_scan import ParsedYamlFile, jobs_of
 from ci_lint.yaml_io import YamlValue
 
 
@@ -47,18 +47,20 @@ def dependency_closure(document: dict[str, YamlValue], selected: str) -> Depende
     return DependencyProof(tuple(sorted(seen)))
 
 
-def check_selection_dependencies(config: ReplayConfig, document: dict[str, YamlValue]) -> list[Finding]:
+def check_selection_dependencies(config: ReplayConfig, document: dict[str, YamlValue],
+                                 files: tuple[ParsedYamlFile, ...] | None = None) -> list[Finding]:
     findings: list[Finding] = []
     workflow = config.workflow.rsplit("/", 1)[-1]
     for selection in config.selections:
-        proof = dependency_closure(document, selection.selected_job)
+        proof = _selection_closure(config, document, selection.selected_job, files)
         if proof.problem:
             findings.append(Finding(rule="GATE-001", path=config.workflow, status=Status.NEEDS_REVIEW,
                                     message=f"replay selection {selection.lane}: {proof.problem}",
                                     fix="resolve the selected job's complete dependency graph"))
             continue
-        declared = {job.source_job.split(":", 1)[1] for job in config.jobs
-                    if selection.lane in job.lanes and job.source_job.startswith(workflow + ":")}
+        declared = {job.source_job if files is not None else job.source_job.split(":", 1)[1]
+                    for job in config.jobs if selection.lane in job.lanes
+                    and (files is not None or job.source_job.startswith(workflow + ":"))}
         missing = set(proof.jobs) - declared
         extra = declared - set(proof.jobs)
         if missing or extra:
@@ -66,3 +68,14 @@ def check_selection_dependencies(config: ReplayConfig, document: dict[str, YamlV
                                     message=f"replay dependency coverage differs for {selection.lane}: omitted={sorted(missing)}, unreachable={sorted(extra)}",
                                     fix="declare the selected job and every dependency for that lane"))
     return findings
+
+
+def _selection_closure(config: ReplayConfig, document: dict[str, YamlValue], selected: str,
+                       files: tuple[ParsedYamlFile, ...] | None) -> DependencyProof:
+    if files is None:
+        return dependency_closure(document, selected)
+    # Lazy import keeps the literal-needs parser shared with the resolver.
+    from ci_lint.workflow_replay_expansion import expand_selection
+
+    proof = expand_selection(files, config.workflow, selected)
+    return DependencyProof(tuple(job.source_job for job in proof.jobs), proof.problem)
