@@ -235,7 +235,7 @@ Measured on a 16-core host (soldr):
    - the author is OWNER, MEMBER or COLLABORATOR;
    - the head is attested for its **exact** tree (an attested first parent is not enough);
    - the trailer covers every base-declared lane;
-   - no path in the merge-base diff matches a surface: the declaration, files named in the gate's or a lane's argv, the skip and verify workflows, the local reusable workflows and actions they reference, and the declared `surfaces`;
+   - no path in the merge-base diff matches a surface: the declaration, files named in the gate's or a lane's argv, their statically resolvable tracked Python imports (transitively, from the base revision), the skip and verify workflows, the local reusable workflows and actions they reference, and the declared `surfaces`; dynamic imports require explicit `surfaces`;
    - the head is not in the 1-in-N audit sample (default 10, keyed by head SHA).
 
    Every other case outputs a reason code, and the jobs run as before.
