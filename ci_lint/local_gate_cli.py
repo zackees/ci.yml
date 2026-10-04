@@ -32,11 +32,12 @@ from ci_lint.github_api import GitHubApiError, default_fetch
 from ci_lint.gate_bare_tools import check_no_bare_rust
 from ci_lint.remote_only import check_gate_012
 from ci_lint.rules.swatinem_ban import check_cache_025
-from ci_lint.gate_trust import TrustInput
+from ci_lint.gate_trust import TrustDecision, TrustInput
 from ci_lint.gate_trust import decide as decide_trust
 from ci_lint.lane_cache import ToolVersions, lane_key, lookup, run_audit, simulate, tree_entries
 from ci_lint.local_gate import (
     GateConfig,
+    VerifyOutcome,
     check_gate_static,
     check_push,
     default_launcher,
@@ -98,14 +99,24 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     if not sha:
         print("ci-lint local-gate verify: --sha is required outside GitHub Actions", file=sys.stderr)
         return 2
-    outcome = verify(repo, config, sha=sha, event=event, author=author)
+    # ACT is the fleet's local-runner signal. A replay creates proof only
+    # after its checks finish; a previous stamp must never skip those checks.
+    local_replay = os.environ.get("ACT", "").strip().lower() == "true"
+    outcome = (
+        VerifyOutcome(0, False, "local-replay",
+                      "[GATE-003] local workflow replay: run checks before creating attestation")
+        if local_replay else verify(repo, config, sha=sha, event=event, author=author)
+    )
     print(outcome.message)
     if outcome.exit_code and os.environ.get("GITHUB_ACTIONS") == "true":
         print(f"::error title=GATE-003 local gate not run::{outcome.message.splitlines()[0]}")
     lines = [f"attested={'true' if outcome.attested else 'false'}", f"state={outcome.state}"]
     if args.trust:
         trust_input = _trust_input(args, payload, event, sha)
-        decision = decide_trust(repo, trust_input)
+        decision = (
+            TrustDecision(False, False, "local-replay", "local execution never reuses a commit attestation")
+            if local_replay else decide_trust(repo, trust_input)
+        )
         print(decision.render())
         lines += [
             f"trusted={'true' if decision.trusted else 'false'}",
