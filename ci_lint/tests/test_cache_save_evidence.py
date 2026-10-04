@@ -9,6 +9,25 @@ from ci_lint.tests.helpers import fixture
 
 
 class Cache011Test(unittest.TestCase):
+    def test_real_github_job_fields_and_action_elapsed_time(self) -> None:
+        """Clud main 37189270080: two successful Dylint layers saved nothing."""
+        log = fixture("CACHE-011", "github") / "red.log"
+        events, findings = check_cache_011([log], conclusion="success")
+        self.assertEqual([e.layer for e in events], ["dylint-cache", "dylint-output-cache"])
+        self.assertEqual(len(findings), 2)
+
+    def test_prefixed_exact_hits_remain_healthy(self) -> None:
+        log = fixture("CACHE-011", "github") / "green.log"
+        events, findings = check_cache_011([log], conclusion="success")
+        self.assertEqual(events, ())
+        self.assertEqual(findings, ())
+
+    def test_prefixed_failed_or_cancelled_runs_do_not_fire(self) -> None:
+        log = fixture("CACHE-011", "github") / "red.log"
+        for conclusion in ("failure", "cancelled"):
+            with self.subTest(conclusion=conclusion):
+                self.assertEqual(check_cache_011([log], conclusion=conclusion), ((), ()))
+
     def test_successful_run_that_saved_nothing_is_flagged(self) -> None:
         """RED: zackees/clud main run 36463271709, job 109067163056 --
         conclusion 'success', but both Dylint layers skip their save and
@@ -36,6 +55,12 @@ class Cache011Test(unittest.TestCase):
 
 
 class Cache012Test(unittest.TestCase):
+    def test_prefixed_unusable_restore_evidence_is_detected(self) -> None:
+        log = fixture("CACHE-012", "github") / "red.log"
+        events, findings = check_cache_012([log, log])
+        self.assertEqual(len(events), 2)
+        self.assertEqual([f.rule for f in findings], ["CACHE-012"])
+
     def test_two_consecutive_unusable_restores_is_flagged(self) -> None:
         """RED: the same layer restores an unusable 22B archive on two
         consecutive runs with no intervening save (issue #7's PR-restore
