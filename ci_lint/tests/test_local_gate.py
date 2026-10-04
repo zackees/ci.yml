@@ -214,6 +214,37 @@ class VerifyAndHookTest(TempRepoCase):
         self.assertEqual(install_hook(repo, "ci-lint").exit_code, 1)
         self.assertEqual(install_hook(repo, "ci-lint", force=True).exit_code, 0)
 
+    def test_hook_probes_its_launcher_before_gating(self) -> None:
+        """A hook whose launcher has died must refuse loudly.
+
+        `install-hook` records the interpreter that installed it, and under
+        `uvx` that is a temporary path inside uv's cache, which uv
+        garbage-collects. The hook then silently stops gating every later push
+        -- the worst failure a gate can have.
+        """
+
+        repo = _repo(self.tmp, "print('ok')\n")
+        self.assertEqual(install_hook(repo, "ci-lint").exit_code, 0)
+        script = (repo / ".git" / "hooks" / "pre-push").read_text(encoding="utf-8")
+        # The probe must precede the real check-push exec, or a dead launcher
+        # is discovered only by exec'ing a missing binary.
+        self.assertIn("local-gate --help", script)
+        self.assertLess(script.index("local-gate --help"), script.index("check-push"))
+        # `--version` is not a valid ci_lint invocation (argparse exits 2), so
+        # probing on it would report every healthy hook as broken.
+        self.assertNotIn("--version", script)
+
+    def test_dead_launcher_hook_refuses_loudly(self) -> None:
+        repo = _repo(self.tmp, "print('ok')\n")
+        dead = f"{self.tmp / 'no-such-python'} -m ci_lint"
+        self.assertEqual(install_hook(repo, dead).exit_code, 0)
+        hook = repo / ".git" / "hooks" / "pre-push"
+        hook.chmod(0o755)
+        line = f"refs/heads/main {'a' * 40} refs/heads/main {'0' * 40}\n"
+        proc = run_captured([str(hook)], input_text=line)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("can no longer run ci-lint", proc.stderr)
+
 
 WORKFLOW_GREEN = """\
 name: CI
