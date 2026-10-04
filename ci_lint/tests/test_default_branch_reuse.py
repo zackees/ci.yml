@@ -525,6 +525,46 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(rows[36631561921].outcome, "must-run")
         self.assertEqual(rows[36631561921].decision.reason, "required-job-missing")
 
+    def test_a_failure_in_a_job_reuse_would_still_run_is_not_a_candidate(self) -> None:
+        """The candidate metric must blame the decision, not the run.
+
+        A red push run is evidence against reuse only if reuse would have
+        skipped one of the jobs that actually failed. Measured on
+        kernal-api: 5 of 19 runs were red purely because `Retire
+        superseded and disabled cache generations` (cache housekeeping,
+        which runs identically under reuse) flaked, while `verify`, `linux`
+        and `Dylint workspace` all succeeded. Counting those made the
+        repository look permanently unsafe on a 29% "false reuse" rate that
+        was not false reuse at all."""
+
+        from ci_lint.default_branch_reuse import _outcome
+
+        proved = frozenset({"linux", "Dylint workspace"})
+        self.assertEqual(
+            _outcome(True, "failure", 1, frozenset(), proved,
+                     frozenset({"Retire superseded and disabled cache generations"})),
+            "must-run",
+        )
+
+    def test_a_failure_in_a_skippable_job_is_still_a_candidate(self) -> None:
+        from ci_lint.default_branch_reuse import _outcome
+
+        self.assertEqual(
+            _outcome(True, "failure", 1, frozenset(), frozenset({"linux"}), frozenset({"linux"})),
+            "false-reuse-candidate",
+        )
+
+    def test_an_unattributable_failure_stays_a_candidate(self) -> None:
+        """Unknown must not read as innocent: with no job list to place the
+        failure against, the run stays a candidate for someone to analyse."""
+
+        from ci_lint.default_branch_reuse import _outcome
+
+        self.assertEqual(
+            _outcome(True, "failure", 1, frozenset(), frozenset({"linux"}), frozenset()),
+            "false-reuse-candidate",
+        )
+
     def test_listing_error_is_an_error_verdict(self) -> None:
         report = run_report(replay_fetch({}), "t", req(jobs=STABLE), "2026-09-29")
         self.assertEqual((report.verdict, report.rows), ("error", ()))
