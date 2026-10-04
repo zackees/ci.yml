@@ -16,6 +16,7 @@ class ExpandedJob:
     path: str
     document: YamlValue
     job: YamlValue
+    inputs: tuple[BoundInput, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,7 @@ def _resolve_job(files: tuple[ParsedYamlFile, ...], path: str, job_id: str, pref
         raise ValueError("matrix expansion is not statically proven")
     basename = path.rsplit("/", 1)[-1]
     key = prefix + _literal_name(document.get("name", basename)) + "/" + bound_name(job.get("name", job_id), inputs)
-    return ExpandedJob(f"{basename}:{job_id}", key, path, document, job)
+    return ExpandedJob(f"{basename}:{job_id}", key, path, document, job, inputs)
 
 
 @dataclass(frozen=True)

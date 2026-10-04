@@ -54,6 +54,7 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     minimal_skips = cursor.list_str("minimal-skip-steps", required=False)
     mode_step = cursor.str_("minimal-mode-step", required=False) or ""
     pr_saves = cursor.list_str("pr-cache-save-steps", required=False)
+    input_skips = cursor.list_str("input-skip-steps", required=False)
     lanes = cursor.list_str("lanes", required=False)
     cursor.finish()
     if ref is None or re.fullmatch(JOB_REF, ref) is None:
@@ -72,10 +73,13 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     if (len(set(pr_saves)) != len(pr_saves) or not set(pr_saves).issubset(steps)
             or set(pr_saves).intersection((*cache_saves, *minimal_skips, mode_step))):
         _bad(findings, source, path, "PR-only cache saves must be distinct disjoint declared steps")
+    if (len(set(input_skips)) != len(input_skips) or not set(input_skips).issubset(steps)
+            or set(input_skips).intersection((*cache_saves, *minimal_skips, *pr_saves, mode_step))):
+        _bad(findings, source, path, "input exclusions must be distinct disjoint declared steps")
     if len(findings) != start or ref is None or key is None:
         return None
     return DeclaredReplayJob(ref, ReplayJob(key, tuple(steps), tuple(cache_saves), tuple(minimal_skips), mode_step,
-                                          tuple(pr_saves)), tuple(lanes))
+                                          tuple(pr_saves), tuple(input_skips)), tuple(lanes))
 
 
 def _selected_job(cursor: Cursor, source: str, path: str,

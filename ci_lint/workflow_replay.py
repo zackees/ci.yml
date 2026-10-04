@@ -21,6 +21,7 @@ class ReplayJob:
     minimal_skip_steps: tuple[str, ...] = ()
     minimal_mode_step: str = ""
     pr_cache_save_steps: tuple[str, ...] = ()
+    input_skip_steps: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -140,7 +141,7 @@ def _prove_job(raw: dict[str, JsonValue], expected: ReplayJob) -> None:
                         and named[0].get("status") == "completed" and named[0].get("conclusion") == "skipped")
         skipped_profile = (len(named) == 1 and named[0].get("status") == "completed"
                            and named[0].get("conclusion") == "skipped")
-        excluded = name in expected.minimal_skip_steps or name in expected.pr_cache_save_steps
+        excluded = name in (*expected.minimal_skip_steps, *expected.pr_cache_save_steps, *expected.input_skip_steps)
         accepted = skipped_profile if excluded else (_step(named[0], name) if len(named) == 1 else False) or skipped_save
         if len(named) != 1 or not accepted:
             raise ValueError(f"workflow replay lacks an unambiguous executed check: {expected.key}: {name}")
@@ -171,6 +172,15 @@ def _pr_cache_saves(expected: ReplayExpectation) -> None:
             raise ValueError("PR-only cache saves require distinct exclusions and a PR selection")
 
 
+def _input_skips(expected: ReplayExpectation) -> None:
+    for job in expected.required_jobs:
+        skips = set(job.input_skip_steps)
+        if (len(skips) != len(job.input_skip_steps) or not skips.issubset(job.steps)
+                or skips.intersection((*job.cache_save_steps, *job.minimal_skip_steps, *job.pr_cache_save_steps))
+                or job.minimal_mode_step in skips):
+            raise ValueError("input exclusions require distinct disjoint declared steps")
+
+
 def prove_replay(raw: JsonValue, expected: ReplayExpectation) -> ReplayProof:
     if not isinstance(raw, dict):
         raise ValueError("workflow replay evidence must be a JSON object")
@@ -178,6 +188,7 @@ def prove_replay(raw: JsonValue, expected: ReplayExpectation) -> ReplayProof:
         raise ValueError("workflow replay requires distinct named jobs")
     _minimal_skips(expected)
     _pr_cache_saves(expected)
+    _input_skips(expected)
     if any(not job.key or not job.steps or len(set(job.steps)) != len(job.steps) for job in expected.required_jobs):
         raise ValueError("workflow replay requires distinct executed checks in each job")
     if re.fullmatch(r"[0-9a-f]{40}", expected.sha) is None or re.fullmatch(r"[0-9a-f]{40}", expected.git_tree) is None:
