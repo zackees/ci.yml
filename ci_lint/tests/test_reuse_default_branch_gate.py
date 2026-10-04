@@ -290,10 +290,20 @@ class ReuseSchemaTest(unittest.TestCase):
     # The canonical example, so the only findings under test are the ones
     # this table causes. Its placeholder `linter` is the one field that is
     # not a real value, so it is pinned to a real-looking SHA here.
-    BASE = (
+    _RAW = (
         pathlib.Path(__file__).resolve().parents[2] / "examples" / "rust-pypi-app" / "ci.toml"
     ).read_text(encoding="utf-8").replace(
         "zackees/ci.yml@<40-hex-sha>", "zackees/ci.yml@" + "a" * 40
+    )
+    # The example now carries its own `[reuse.default-branch]` (issue #160),
+    # which every case here would then collide with by appending a second
+    # table. Drop it so each case's table is the only one under test.
+    _START = "# ── Default-branch verified reuse"
+    _END = "# ── Allowlists"
+    BASE = (
+        _RAW[: _RAW.index(_START)] + _RAW[_RAW.index(_END) :]
+        if _START in _RAW and _END in _RAW
+        else _RAW
     )
 
     def _load(self, body: str) -> tuple[object, list[str]]:
