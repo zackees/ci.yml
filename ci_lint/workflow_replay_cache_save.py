@@ -1,0 +1,42 @@
+"""Recognize only exact-hit guarded saves of the same restored cache family."""
+
+import re
+
+from ci_lint.workflow_scan import as_dict, steps_of
+from ci_lint.yaml_io import YamlValue
+
+
+def _action(step: dict[str, YamlValue], verb: str) -> bool:
+    value = step.get("uses")
+    return isinstance(value, str) and re.fullmatch(
+        rf"actions/cache/{verb}@(?:v[0-9]+|[0-9a-f]{{40}})", value) is not None
+
+
+def _guard(value: YamlValue) -> str | None:
+    if not isinstance(value, str):
+        return None
+    expression = value.strip()
+    if expression.startswith("${{") and expression.endswith("}}"):
+        expression = expression[3:-2].strip()
+    match = re.fullmatch(r"steps\.([A-Za-z0-9_-]+)\.outputs\.cache-hit\s*!=\s*'true'", expression)
+    return match[1] if match is not None else None
+
+
+def approved_cache_save(job: dict[str, YamlValue], name: str) -> bool:
+    steps = steps_of(job)
+    saves = [step for step in steps if step.get("name") == name]
+    if len(saves) != 1 or not _action(saves[0], "save") or "run" in saves[0]:
+        return False
+    save = saves[0]
+    identity = _guard(save.get("if"))
+    restores = [step for step in steps if step.get("id") == identity]
+    if identity is None or len(restores) != 1 or not _action(restores[0], "restore"):
+        return False
+    restore = restores[0]
+    save_inputs = as_dict(save.get("with"))
+    restore_inputs = as_dict(restore.get("with"))
+    key = save_inputs.get("key")
+    path = save_inputs.get("path")
+    return (steps.index(restore) < steps.index(save) and "run" not in restore
+            and isinstance(path, str) and bool(path.strip()) and path == restore_inputs.get("path")
+            and isinstance(key, str) and key.strip() == "${{ steps." + identity + ".outputs.cache-primary-key }}")

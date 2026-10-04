@@ -17,6 +17,7 @@ from ci_lint.cargo_messages import JsonValue
 class ReplayJob:
     key: str
     steps: tuple[str, ...]
+    cache_save_steps: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -123,13 +124,18 @@ def _step(section: JsonValue, name: str) -> bool:
 def _prove_job(raw: dict[str, JsonValue], expected: ReplayJob) -> None:
     if raw.get("status") != "completed" or raw.get("conclusion") != "success":
         raise ValueError(f"workflow replay job did not pass: {expected.key}")
+    if (len(set(expected.cache_save_steps)) != len(expected.cache_save_steps)
+            or not set(expected.cache_save_steps).issubset(expected.steps)):
+        raise ValueError("cache-save steps must be distinct declared steps")
     sections = raw.get("sections")
     if not isinstance(sections, list):
         raise ValueError(f"workflow replay job has no executed steps: {expected.key}")
     for name in expected.steps:
         named = [section for section in sections if isinstance(section, dict) and section.get("name") == name
                  and section.get("stage") == "Main"]
-        if len(named) != 1 or not _step(named[0], name):
+        skipped_save = (name in expected.cache_save_steps and len(named) == 1
+                        and named[0].get("status") == "completed" and named[0].get("conclusion") == "skipped")
+        if len(named) != 1 or not (_step(named[0], name) or skipped_save):
             raise ValueError(f"workflow replay lacks an unambiguous executed check: {expected.key}: {name}")
 
 

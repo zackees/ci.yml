@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
+from ci_lint.workflow_replay_cache_save import approved_cache_save
 from ci_lint.workflow_replay_dependencies import check_selection_dependencies
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig
 from ci_lint.workflow_replay_expansion import expand_selection
@@ -34,6 +35,11 @@ def _check_job(declared: DeclaredReplayJob, job: dict[str, YamlValue],
         return [Finding(rule="GATE-001", path=path, status=Status.NEEDS_REVIEW,
                         message=f"replay job {declared.source_job} has reusable or matrix coverage",
                         fix="prove expanded job and step coverage before attesting this replay")]
+    for name in declared.proof.cache_save_steps:
+        if not approved_cache_save(job, name):
+            findings.append(Finding(rule="GATE-001", path=path,
+                                    message=f"cache-save skip is not a matching exact-hit guarded cache save: {name}",
+                                    fix="do not waive validation steps; bind the save to its earlier matching restore"))
     names: list[str] = []
     for index, step in enumerate(steps_of(job)):
         if "run" not in step and "uses" not in step:
