@@ -50,7 +50,7 @@ The verify job runs `ci-lint local-gate verify --trust --github-output` with ful
 4. It is not a fork, and the author is OWNER, MEMBER or COLLABORATOR.
 5. The head carries a `Local-Gate:` trailer for its **exact** tree.
 6. The trailer's lane provenance covers every lane the base declares.
-7. No path in the merge-base diff matches a surface. Surfaces are the declaration, files named in the gate's or a lane's argv, the skip and verify workflows, the local reusable workflows and actions they reference (transitively), and the declared `surfaces`.
+7. No path in the merge-base diff matches a surface. Surfaces are the declaration, files named in the gate's or a lane's argv, their statically resolvable tracked Python imports (transitively, from the base), the skip and verify workflows, the local reusable workflows and actions they reference (transitively), and the declared `surfaces`. Dynamic imports require explicit surfaces.
 8. The head is not in the 1-in-N audit sample (hash of the head SHA).
 
 Each declared skip job adds `needs.<verify>.outputs.trusted != 'true'` to its job-level `if:`. A job that should still report the protected status name, such as soldr's `lint-docs` → `Lint`, runs as a no-op when trusted.
