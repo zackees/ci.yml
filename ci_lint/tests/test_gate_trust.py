@@ -119,6 +119,63 @@ class TrustCase(unittest.TestCase):
 
 
 class DecideTest(TrustCase):
+    def test_symlinked_gate_helper_fails_closed(self) -> None:
+        self.commit("base with symlink helper data", {
+            "gate.py": "import helper\n",
+            "helper.py": "actual.py\n",
+            "actual.py": "value = 1\n",
+        }, lanes=None)
+        blob = _git(self.repo, "rev-parse", "HEAD:helper.py")
+        _git(self.repo, "update-index", "--cacheinfo", "120000", blob, "helper.py")
+        _git(self.repo, "commit", "-q", "--amend", "--no-edit")
+        # Keep the Git symlink mode on hosts without symlink privileges.
+        _git(self.repo, "update-index", "--skip-worktree", "helper.py")
+        self.base = _git(self.repo, "rev-parse", "HEAD")
+        head = self.commit("change symlink target", {"actual.py": "value = 2\n"})
+        self.assertEqual(_git(self.repo, "diff", "--name-only", self.base, head), "actual.py")
+        self.assertReason(head, "surface-changed")
+
+    def test_transitive_import_retains_entrypoint_search_directory(self) -> None:
+        self.base = self.commit("base with nested script imports", {
+            "local-gate.toml": _gate(TRUST, lanes=True).replace('"gate.py"', '"ci/gate.py"'),
+            "ci/gate.py": "from pkg.helper import check\n",
+            "ci/pkg/__init__.py": "",
+            "ci/pkg/helper.py": "from evidence import check\n",
+            "ci/evidence.py": "def check():\n    return True\n",
+        }, lanes=None)
+        head = self.commit("change helper on script search path", {
+            "ci/evidence.py": "def check():\n    return False\n",
+        })
+        self.assertReason(head, "surface-changed")
+
+    def test_transitive_local_import_change_forces_remote(self) -> None:
+        self.base = self.commit("base with imported gate helpers", {
+            "gate.py": "def check():\n    from support.platform import native\n    return native()\n",
+            "support/__init__.py": "",
+            "support/platform.py": "from .evidence import native\n",
+            "support/evidence.py": "def native():\n    return True\n",
+        }, lanes=None)
+        head = self.commit("weaken imported evidence", {
+            "support/evidence.py": "def native():\n    return False\n",
+        })
+        self.assertReason(head, "surface-changed")
+
+    def test_import_cycle_is_bounded_and_helpers_are_not_executed(self) -> None:
+        self.base = self.commit("base with cyclic gate helpers", {
+            "gate.py": "import first\n",
+            "first.py": "import second\n",
+            "second.py": "import first\nraise RuntimeError('never execute this')\n",
+        }, lanes=None)
+        head = self.commit("change cyclic helper", {"second.py": "import first\n"})
+        self.assertReason(head, "surface-changed")
+
+    def test_unrelated_python_source_is_still_eligible(self) -> None:
+        self.base = self.commit("base with an unrelated module", {
+            "unused.py": "value = 1\n",
+        }, lanes=None)
+        head = self.commit("change unrelated source", {"unused.py": "value = 2\n"})
+        self.assertTrue(self.decide(head).trusted)
+
     def test_attested_in_policy_head_is_trusted(self) -> None:
         head = self.commit("feature", {"src.txt": "two\n"})
         decision = self.decide(head)

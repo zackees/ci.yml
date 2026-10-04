@@ -47,7 +47,14 @@ from ci_lint.github_api import FetchStatusFn, GitHubApiError
 API_ROOT = "https://api.github.com"
 SCHEMA_VERSION = 1
 DEFAULT_MAX_AGE_HOURS = 24.0
-DEFAULT_MIN_RUNS = 100
+# A single decisive run with a verified safe skip is enough to promote.
+# The per-run decision is sound on its own terms -- one merged PR, an
+# identical tree, a green and fresh proving run -- so requiring a shadow
+# *quota* before trusting it bought confidence in the tool rather than
+# soundness in the decision, and permanently locked low-traffic
+# repositories out of the mechanism entirely. Raise it with `--min-runs N`
+# when staging a rollout deliberately.
+DEFAULT_MIN_RUNS = 1
 PER_PAGE = 100
 # Pagination cap for one listing (runs on a head SHA, jobs of a run, push
 # runs in a report page walk). Hitting it fails closed rather than
@@ -601,19 +608,64 @@ class ReuseReport:
             return "blocked"
         if self.decisive < self.min_runs:
             return "insufficient-sample"
+        if not self.count("safe-skip"):
+            # Decisive runs happened but reuse never actually fired on one
+            # (every push was a must-run: a squash-merge batch, a drifted
+            # tree, a failed proving job). That is not evidence the
+            # mechanism works -- it is evidence it has never been used, so
+            # there is nothing to promote.
+            return "no-op"
         return "promotable"
 
 
 _FAILED_CONCLUSIONS: frozenset[str] = frozenset({"failure", "timed_out", "startup_failure"})
 
 
-def _outcome(verdict: bool, conclusion: str, run_id: int, accepted: frozenset[int]) -> str:
+def _failed_job_names(api: _Api, repo: str, run_id: int) -> frozenset[str]:
+    """Display names of the jobs that did not succeed in a run.
+
+    Used only to attribute a red push run to a job, so the report can tell
+    "reuse would have lost coverage" from "an unrelated job failed anyway".
+    """
+
+    names: set[str] = set()
+    for raw in _paged(api, f"/repos/{repo}/actions/runs/{run_id}/jobs?filter=latest", "jobs", "too-many-jobs"):
+        job = _as_dict(raw)
+        name = _str(job.get("name"))
+        if name is None:
+            continue
+        if _str(job.get("conclusion")) not in ("success", "skipped", "neutral", ""):
+            names.add(name)
+    return frozenset(names)
+
+
+def _outcome(
+    verdict: bool,
+    conclusion: str,
+    run_id: int,
+    accepted: frozenset[int],
+    reuse_would_skip: frozenset[str] = frozenset(),
+    failed: frozenset[str] = frozenset(),
+) -> str:
     if conclusion not in _FAILED_CONCLUSIONS and conclusion != "success":
         return "no-signal"
     if not verdict:
         return "must-run"
     if conclusion == "success":
         return "safe-skip"
+    # A red push run is only evidence against reuse if reuse would have
+    # skipped one of the jobs that actually failed. A job that keeps running
+    # under reuse -- a cache-retirement sweep, a housekeeping step, an
+    # unrelated matrix leg -- fails identically whether or not the decision
+    # reused, so it says nothing about the decision. Counting those made a
+    # repository with one flaky maintenance job look permanently unsafe.
+    #
+    # Only downgrade when the failing jobs are KNOWN and none of them is
+    # skippable. An unreadable or empty job list means the run is
+    # unattributable, and unattributable stays a candidate: a decision
+    # nobody can place against the evidence is not a decision to trust.
+    if reuse_would_skip and failed and not (reuse_would_skip & failed):
+        return "must-run"
     return "accepted-flaky" if run_id in accepted else "false-reuse-candidate"
 
 
@@ -669,6 +721,16 @@ def run_report(
         req = replace(template, sha=sha, now=created_at, mode="shadow")
         decision = _decide(req, api)
         conclusion = _str(run.get("conclusion")) or "unknown"
+        failed: frozenset[str] = frozenset()
+        reuse_would_skip: frozenset[str] = frozenset()
+        if conclusion != "success":
+            # Only red runs need attribution; a green one is already a
+            # safe skip or a must-run on the verdict alone.
+            try:
+                failed = _failed_job_names(api, template.repo, run_id)
+            except _Stop:
+                failed = frozenset()
+            reuse_would_skip = frozenset(j.name for j in decision.jobs)
         rows.append(
             ReportRow(
                 run_id=run_id,
@@ -677,7 +739,7 @@ def run_report(
                 created_at=_iso(created_at),
                 conclusion=conclusion,
                 run_attempt=_int(run.get("run_attempt")) or 1,
-                outcome=_outcome(decision.verdict, conclusion, run_id, accept_flaky),
+                outcome=_outcome(decision.verdict, conclusion, run_id, accept_flaky, reuse_would_skip, failed),
                 decision=decision,
             )
         )
@@ -758,5 +820,8 @@ def render_report_text(report: ReuseReport) -> str:
     if report.error:
         lines.append(f"error: {report.error}")
     lines.append(f"api calls: {report.api_calls}")
-    lines.append(f"verdict: {report.verdict} (promotion needs >= {report.min_runs} decisive runs and 0 candidates)")
+    lines.append(
+        f"verdict: {report.verdict} (promotion needs >= {report.min_runs} decisive run(s), at "
+        "least one safe skip, and 0 false-reuse candidates)"
+    )
     return "\n".join(lines)

@@ -40,3 +40,23 @@ def approved_cache_save(job: dict[str, YamlValue], name: str) -> bool:
     return (steps.index(restore) < steps.index(save) and "run" not in restore
             and isinstance(path, str) and bool(path.strip()) and path == restore_inputs.get("path")
             and isinstance(key, str) and key.strip() == "${{ steps." + identity + ".outputs.cache-primary-key }}")
+
+
+def approved_pr_cache_save(job: dict[str, YamlValue], name: str) -> bool:
+    """Prove an official save is excluded on PRs, without waiving validation."""
+    saves = [step for step in steps_of(job) if step.get("name") == name]
+    if len(saves) != 1 or not _action(saves[0], "save") or "run" in saves[0]:
+        return False
+    save = saves[0]
+    expression = save.get("if")
+    if not isinstance(expression, str):
+        return False
+    expression = expression.strip()
+    if expression.startswith("${{") and expression.endswith("}}"):
+        expression = expression[3:-2].strip()
+    guard = re.fullmatch(
+        r"(?:github\.event_name != 'pull_request'|github\.ref == 'refs/heads/main')"
+        r"(?: && steps\.[A-Za-z0-9_-]+\.outputs\.cache-hit != 'true')?", expression)
+    inputs = as_dict(save.get("with"))
+    return guard is not None and all(
+        isinstance(inputs.get(key), str) and bool(str(inputs[key]).strip()) for key in ("key", "path"))

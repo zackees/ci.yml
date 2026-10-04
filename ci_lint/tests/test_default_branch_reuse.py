@@ -36,7 +36,10 @@ from unittest import mock
 
 from ci_lint import cli
 from ci_lint.default_branch_reuse import (
+    DEFAULT_MIN_RUNS,
     REASONS,
+    ReportRow,
+    ReuseReport,
     ReuseRequest,
     decide,
     github_output_lines,
@@ -477,12 +480,90 @@ class ReportTest(unittest.TestCase):
         report = self._report(min_runs=3, accept_flaky=frozenset({36631561921}))
         self.assertEqual(report.verdict, "promotable")
         self.assertEqual(report.count("accepted-flaky"), 1)
-        self.assertEqual(self._report(accept_flaky=frozenset({36631561921})).verdict, "insufficient-sample")
+
+    def test_default_bar_promotes_on_the_first_verified_safe_skip(self) -> None:
+        """GEN-021 rollout decision (2026-10-04): a single green, attested PR
+        merge is sufficient evidence. The per-run decision is sound on its
+        own terms, so the old multi-run quota bought confidence in the tool
+        rather than soundness in the decision -- and permanently locked
+        low-traffic repositories out of the mechanism. One verified safe
+        skip with no false-reuse candidate now promotes."""
+
+        report = self._report(accept_flaky=frozenset({36631561921}))
+        self.assertEqual(report.verdict, "promotable")
+        self.assertEqual(report.min_runs, 1)
+        self.assertEqual(DEFAULT_MIN_RUNS, 1)
+
+    def test_an_explicitly_raised_bar_still_stages_a_rollout(self) -> None:
+        """`--min-runs N` remains available for a deliberate staged rollout;
+        only the default moved."""
+
+        report = self._report(min_runs=99, accept_flaky=frozenset({36631561921}))
+        self.assertEqual(report.verdict, "insufficient-sample")
+
+    def test_runs_that_never_reuse_are_a_no_op_not_a_promotion(self) -> None:
+        """Every push must-run (squash batches, drifted trees) means reuse
+        never fired -- no evidence the mechanism works, so nothing to
+        promote, even though decisive runs exist and no candidate fired."""
+
+        report = self._report()
+        self.assertTrue(report.decisive > 0)
+        self.assertEqual(report.count("safe-skip"), 1)
+        only_must_run = ReuseReport(
+            report.repo, report.workflow, report.since, report.until, report.min_runs,
+            tuple(
+                ReportRow(r.run_id, r.run_url, r.sha, r.created_at, r.conclusion,
+                          r.run_attempt, "must-run", r.decision)
+                for r in report.rows
+            ),
+            report.api_calls,
+        )
+        self.assertEqual(only_must_run.verdict, "no-op")
 
     def test_current_job_names_make_the_pre_shard_run_must_run(self) -> None:
         rows = {r.run_id: r for r in self._report(jobs=SHARDED).rows}
         self.assertEqual(rows[36631561921].outcome, "must-run")
         self.assertEqual(rows[36631561921].decision.reason, "required-job-missing")
+
+    def test_a_failure_in_a_job_reuse_would_still_run_is_not_a_candidate(self) -> None:
+        """The candidate metric must blame the decision, not the run.
+
+        A red push run is evidence against reuse only if reuse would have
+        skipped one of the jobs that actually failed. Measured on
+        kernal-api: 5 of 19 runs were red purely because `Retire
+        superseded and disabled cache generations` (cache housekeeping,
+        which runs identically under reuse) flaked, while `verify`, `linux`
+        and `Dylint workspace` all succeeded. Counting those made the
+        repository look permanently unsafe on a 29% "false reuse" rate that
+        was not false reuse at all."""
+
+        from ci_lint.default_branch_reuse import _outcome
+
+        proved = frozenset({"linux", "Dylint workspace"})
+        self.assertEqual(
+            _outcome(True, "failure", 1, frozenset(), proved,
+                     frozenset({"Retire superseded and disabled cache generations"})),
+            "must-run",
+        )
+
+    def test_a_failure_in_a_skippable_job_is_still_a_candidate(self) -> None:
+        from ci_lint.default_branch_reuse import _outcome
+
+        self.assertEqual(
+            _outcome(True, "failure", 1, frozenset(), frozenset({"linux"}), frozenset({"linux"})),
+            "false-reuse-candidate",
+        )
+
+    def test_an_unattributable_failure_stays_a_candidate(self) -> None:
+        """Unknown must not read as innocent: with no job list to place the
+        failure against, the run stays a candidate for someone to analyse."""
+
+        from ci_lint.default_branch_reuse import _outcome
+
+        self.assertEqual(
+            _outcome(True, "failure", 1, frozenset(), frozenset({"linux"}), frozenset()),
+            "false-reuse-candidate",
+        )
 
     def test_listing_error_is_an_error_verdict(self) -> None:
         report = run_report(replay_fetch({}), "t", req(jobs=STABLE), "2026-09-29")

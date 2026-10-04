@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 
 from ci_lint.workflow_replay_dependencies import _needs
+from ci_lint.workflow_replay_inputs import BoundInput, bind_call_inputs, bound_name
 from ci_lint.workflow_scan import ParsedYamlFile, as_dict, get_on_section, jobs_of
 from ci_lint.yaml_io import YamlValue
 
@@ -15,6 +16,7 @@ class ExpandedJob:
     path: str
     document: YamlValue
     job: YamlValue
+    inputs: tuple[BoundInput, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -42,7 +44,8 @@ def _document(files: tuple[ParsedYamlFile, ...], path: str) -> dict[str, YamlVal
     return matching[0].document
 
 
-def _resolve_job(files: tuple[ParsedYamlFile, ...], path: str, job_id: str, prefix: str) -> ExpandedJob:
+def _resolve_job(files: tuple[ParsedYamlFile, ...], path: str, job_id: str, prefix: str,
+                 inputs: tuple[BoundInput, ...]) -> ExpandedJob:
     document = _document(files, path)
     job = jobs_of(document).get(job_id)
     if job is None:
@@ -50,8 +53,8 @@ def _resolve_job(files: tuple[ParsedYamlFile, ...], path: str, job_id: str, pref
     if "strategy" in job:
         raise ValueError("matrix expansion is not statically proven")
     basename = path.rsplit("/", 1)[-1]
-    key = prefix + _literal_name(document.get("name", basename)) + "/" + _literal_name(job.get("name", job_id))
-    return ExpandedJob(f"{basename}:{job_id}", key, path, document, job)
+    key = prefix + _literal_name(document.get("name", basename)) + "/" + bound_name(job.get("name", job_id), inputs)
+    return ExpandedJob(f"{basename}:{job_id}", key, path, document, job, inputs)
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,7 @@ class _ExpansionState:
     jobs: list[ExpandedJob]
     visited: set[str]
     active: set[str]
+    caller_prefixes: set[str]
 
 
 def _record(state: _ExpansionState, resolved: ExpandedJob) -> None:
@@ -83,18 +87,18 @@ def _begin(state: _ExpansionState, identity: str) -> bool:
 
 
 def _visit(state: _ExpansionState, current: str, job_id: str,
-           prefix: str, ancestry: tuple[str, ...]) -> None:
+           prefix: str, ancestry: tuple[str, ...], inputs: tuple[BoundInput, ...] = ()) -> None:
     identity = f"{prefix}|{current}:{job_id}"
     if not _begin(state, identity):
         return
     if len(ancestry) > 8:
         raise ValueError("reusable expansion exceeds the bounded graph limit")
-    resolved = _resolve_job(state.files, current, job_id, prefix)
+    resolved = _resolve_job(state.files, current, job_id, prefix, inputs)
     job = as_dict(resolved.job)
     for dependency in _needs(job):
-        _visit(state, current, dependency, prefix, ancestry)
+        _visit(state, current, dependency, prefix, ancestry, inputs)
     if "uses" in job:
-        _called(state, current, job, job_id, prefix, ancestry)
+        _called(state, current, job, job_id, prefix, ancestry, inputs)
     else:
         _record(state, resolved)
     state.active.remove(identity)
@@ -102,7 +106,7 @@ def _visit(state: _ExpansionState, current: str, job_id: str,
 
 
 def _called(state: _ExpansionState, current: str, job: dict[str, YamlValue],
-            job_id: str, prefix: str, ancestry: tuple[str, ...]) -> None:
+            job_id: str, prefix: str, ancestry: tuple[str, ...], inputs: tuple[BoundInput, ...]) -> None:
     callee = _callee_path(job.get("uses"))
     if callee in ancestry or callee == current:
         raise ValueError("reusable workflow graph contains a cycle")
@@ -110,8 +114,14 @@ def _called(state: _ExpansionState, current: str, job: dict[str, YamlValue],
     jobs = jobs_of(document)
     if "workflow_call" not in get_on_section(document) or not jobs:
         raise ValueError("called workflow has no workflow_call contract or executable jobs")
+    bound = bind_call_inputs(document, job, inputs)
+    caller_name = bound_name(job.get("name", job_id), inputs)
+    caller_prefix = prefix + caller_name + "/"
+    if caller_prefix in state.caller_prefixes:
+        raise ValueError("reusable callers have an ambiguous display-name prefix")
+    state.caller_prefixes.add(caller_prefix)
     for child in jobs:
-        _visit(state, callee, child, prefix + job_id + "/", ancestry + (current,))
+        _visit(state, callee, child, caller_prefix, ancestry + (current,), bound)
 
 
 def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str | None) -> ReplayExpansion:
@@ -120,7 +130,7 @@ def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str
     A source-job declaration cannot disambiguate two invocations of the same
     called job, so repeated calls with distinct prefixes remain unproven.
     """
-    state = _ExpansionState(files, [], set(), set())
+    state = _ExpansionState(files, [], set(), set(), set())
     try:
         roots = (selected,) if selected is not None else tuple(jobs_of(_document(files, path)))
         if not roots:

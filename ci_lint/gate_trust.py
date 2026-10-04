@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
+from ci_lint.gate_python_surfaces import python_surfaces
 from ci_lint.toml_cursor import Cursor, TomlValue
 
 TRUST_MODES: tuple[str, ...] = ("never", "shadow", "enforce")
@@ -150,7 +151,8 @@ def automatic_surfaces(repo: Path, rev: str, config_source: str, gate_run: tuple
                        lane_runs: tuple[tuple[str, ...], ...], workflows: tuple[str, ...]) -> tuple[str, ...]:
     """Files whose change alters what "passed locally" or the skipped jobs
     mean: the declaration, every repository file named in the gate's or a
-    lane's argv, each named workflow, and every local reusable workflow or
+    lane's argv, their statically resolvable tracked Python imports, each
+    named workflow, and every local reusable workflow or
     action those workflows reference (transitively, over-approximated by a
     text scan of the whole file)."""
 
@@ -163,6 +165,7 @@ def automatic_surfaces(repo: Path, rev: str, config_source: str, gate_run: tuple
     out: set[str] = {config_source, "ci-attestations.yml"}
     for argv in (gate_run, *lane_runs):
         out.update(token for token in argv if token in tracked)
+    out.update(python_surfaces(repo, rev, tracked, tuple(sorted(out))))
     todo = [f".github/workflows/{wf}" for wf in workflows]
     seen: set[str] = set()
     while todo:

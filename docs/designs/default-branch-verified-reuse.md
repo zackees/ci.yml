@@ -78,7 +78,7 @@ When the pushed tree equals the head tree, the base changes present at merge tim
 1. **Fail closed.** Every step of section 5 that cannot prove its condition returns `reuse=false`, and the workflow runs everything. A bug in the decision can only waste runner time, never skip a check, as long as the wiring consumes `reuse` as `!= 'true'` (checked statically, section 4.4).
 2. **Freshness.** Every proving job must have completed within `max_age_hours` (default 24 h) before the decision, and not after it. Drift older than that forces a full run.
 3. **Scheduled full run.** In `enforce` mode a scheduled full default-branch run at least daily re-validates `main` in the current environment regardless of reuse (section 8), so any drift is caught within a day, with a small blame window.
-4. **Shadow before enforce.** Promotion requires evidence that reuse would have lost nothing over at least 14 days and 100 decisive runs (section 9).
+4. **Shadow before enforce, briefly.** Promotion requires one verified, attested merge with no false-reuse candidate (section 9); the run quota that used to sit in front of it was removed on 2026-10-04.
 
 ### 3.5 Same tier, not just same workflow
 
@@ -443,7 +443,7 @@ Every reason `reuse-check` can report. All except `verified` mean `reuse=false`,
 
 ## 7. Configuration design (`[reuse.default-branch]`, Phase 2)
 
-Phase 0 ships the command with CLI flags only. The schema-3 table below is specified exactly for Phase 2 (#158); it is not implemented in this PR because the static cross-checks and the planner's `"plan"` derivation must land with it to be useful.
+Phase 0 ships the command with CLI flags only. The schema-3 table below was specified exactly for Phase 2 (#158) and **is implemented** (`ci_lint.schema.ReuseConfig`/`_parse_reuse`, consumed by `ci-lint gate --default-branch-reuse`) -- see docs/ci-toml.md's `[reuse.default-branch]` section for the shipped field semantics. The planner's `"plan"` derivation of `required_jobs` and the static cross-checks listed at the end of this section remain candidates.
 
 ```toml
 [reuse.default-branch]
@@ -517,15 +517,19 @@ Per push run it reports one outcome:
 | `must-run` | No proof (any reason); the push run's result is its own. |
 | `no-signal` | The push run was cancelled/skipped/neutral; excluded from the sample. |
 
-Summary: decisive runs, `would_reuse` count and rate, safe skips, candidate URLs, accepted flakes, must-run reasons histogram, API calls, and a verdict: `promotable`, `insufficient-sample`, `blocked`, or `error`. Exit code 0 only for `promotable`.
+Summary: decisive runs, `would_reuse` count and rate, safe skips, candidate URLs, accepted flakes, must-run reasons histogram, API calls, and a verdict: `promotable`, `no-op`, `insufficient-sample`, `blocked`, or `error`. Exit code 0 only for `promotable`.
 
 ### 9.3 Promotion criteria (shadow -> enforce)
 
 All of:
 
-1. `reuse-report --since <shadow start>` over a window of **at least 14 days** reports verdict `promotable` with `--min-runs 100` (at least 100 decisive default-branch runs; clud produces ~30/day). A low-volume repository that cannot reach 100 runs in 30 days may promote at 30 decisive runs over at least 30 days with the owner's sign-off recorded in its promotion issue.
+1. **One verified, attested merge is enough.** `reuse-report` reports verdict `promotable` — meaning at least one decisive run was a `safe-skip` and there are zero `false-reuse-candidate`s. This is the default (`--min-runs 1`).
+
+   *Revised 2026-10-04.* The original criterion here demanded 100 decisive runs (30 for low-volume repositories, with owner sign-off). That quota bought confidence in the **tool**, not soundness in the **decision**: each individual decision already stands on its own (exactly one merged PR, an identical tree, a green and fresh per-job proving run). Requiring a large sample before trusting that bought very little -- by the rule of three, 100 clean runs only bounds the false-reuse rate at ~3%, and even 12 bounds it at ~25% -- while permanently excluding low-traffic repositories, which can never accumulate the quota and therefore could never adopt the mechanism at all. Measured on clud, the reuse rate is 42.5% (17 safe skips in 40 decisive runs) with 0 candidates.
+
+   `--min-runs N` remains available to stage a rollout deliberately; only the default moved. The `no-op` verdict exists so a window in which reuse never fired once (every push a must-run: squash batches, drifted trees) reports honestly that there is nothing to promote rather than looking like a clean pass.
 2. Every `false-reuse-candidate` in the window is analysed in the promotion issue. It may be passed with `--accept-flaky` only if it is a **known flake**: (a) the same test failed on an unrelated run (different tree, PR or default branch) within 7 days, or (b) re-running the same SHA passed (the push run's own re-run, or a manual re-run). Any candidate that is not a known flake blocks promotion: find why tree identity plus per-job proof missed it (environment drift -> consider a smaller `max-age-hours` or moving the test to the scheduled lane; a job missing from the required list -> fix the list), fix it, and restart the window.
-3. The scheduled full default-branch run exists and is green on the last 3 days.
+3. The scheduled full default-branch run exists and is green on the last 3 days. **This, not the run count, is the real drift backstop** — which is why the run count above can be small.
 4. For clud specifically: the `test_codex_installer_rm` flake (7 of 12 red `main` runs, 09-29/30) shows zero recurrences after clud#1596 (merged 2026-09-30T04:46Z), tracked in zackees/clud#1651.
 
 Replayed on the recorded clud sample (test `ReportTest`), the flake-class push run for PR #1575 is exactly a `false-reuse-candidate` that analysis accepts as a known flake, the PR #1630 push run is `must-run` (a real catch reuse would never have skipped), and the PR #1643 push run is a `safe-skip`.
