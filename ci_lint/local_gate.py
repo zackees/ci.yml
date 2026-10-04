@@ -831,7 +831,32 @@ def check_push(repo: Path, stdin_text: str) -> PushCheck:
 
 
 def hook_script(launcher: str) -> str:
-    return f"#!/bin/sh\n{HOOK_MARKER}\nexec {launcher} local-gate check-push \"$@\"\n"
+    # The launcher names the interpreter that installed the hook, which under
+    # `uvx` is a temporary path inside uv's cache. uv garbage-collects that
+    # cache, so the hook silently stops gating every later push once the
+    # interpreter is gone -- the worst failure a gate can have. Probe the
+    # launcher first and refuse loudly if it died, rather than exec'ing a
+    # missing binary and failing opaquely at push time.
+    #
+    # The probe is `local-gate --help`, not `--version`: `--version` is not a
+    # valid ci_lint invocation (argparse rejects it with exit 2), so probing on
+    # it would report every healthy hook as broken.
+    probe = f"{launcher} local-gate --help >/dev/null 2>&1"
+    lines = [
+        "#!/bin/sh",
+        HOOK_MARKER.rstrip("\n"),
+        f"if ! {probe}; then",
+        '  echo "ci-lint local-gate: this pre-push hook can no longer run ci-lint." >&2',
+        '  echo "  The interpreter that installed it was probably a temporary uv/venv path." >&2',
+        '  echo "  Reinstall with a durable launcher, for example:" >&2',
+        '  echo "    ci-lint local-gate install-hook --force --launcher \\"env PYTHONPATH=/path/to/ci.yml python3 -m ci_lint\\"" >&2',
+        '  echo "  or run the gate by hand before pushing: ci-lint local-gate run" >&2',
+        "  exit 1",
+        "fi",
+        f'exec {launcher} local-gate check-push "$@"',
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def default_launcher() -> str:
