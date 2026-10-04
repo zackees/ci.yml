@@ -1460,3 +1460,40 @@ The version guard refused before engine submission. An isolated Python
 run retained the intended 0.1.12 executable; the candidate now adds
 `--isolated` consistently to the gate and all lane commands. Its full
 committed-source validation and publication remain pending.
+
+
+### Bosn trusted skip verified; Clud proof hardening (2026-10-04)
+
+[Bosn PR #468](https://github.com/zackees/bosn/pull/468) merged the isolated
+launcher fix at `5a5040fa5ca2c56b2dbbd14d3c3d5950bfa37ec7`. Its full local gate
+passed in 555 s (Rust 304 s, Linux 250 s), with 709 Rust passes / 26 ignored
+and 257 Python passes / 10 skips. First-head CI 37184218298 and main CI
+37184362567 both passed on attempt 1.
+
+The ordinary documentation follow-up,
+[PR #470](https://github.com/zackees/bosn/pull/470), proved actual trusted
+remote skipping: first-head CI 37185552435 passed on attempt 1, and its
+verifier logged GATE-008 trusted skip plus GATE-010 skips for the mapped
+policy and Rust jobs. Both jobs were actually skipped. The stamped head
+`336e1590f9709891eaedd8cb3d3cacb50391b2a7` has the same tree
+`91559ff9631e46e6030f03750cb964f1a0d11cf1` as executed source `0194111`.
+Its local gate took 984 s (Rust 495 s, Linux 489 s) under concurrent load;
+unchanged Python-static inputs reused a prior pass. This is successful
+proof, not a latency improvement claim. PR #470 merged at
+`0ec80624c597a572ae0c68ff9b277579bfb2795b`; main CI 37185618301 passed.
+Default audit sampling and remote main/native/release coverage remain.
+
+Clud is the next migration by measured PR volume and remaining shadow
+proof enforcement. Seven adversarial receipt cases reproduced acceptance
+of an incorrect engine/workspace, old act2, and Boolean schema/exit metadata.
+The fast static workflow established RED (7 failed, 3 passed in 0.37 s);
+a stricter candidate passed all 10 tests. Complete gate validation and
+publication are still pending. The first isolated unit attempt compiled
+successfully but failed all three stock artifact downloads before pytest.
+Focused released-act2 reproductions passed plain, reusable, and large
+216 MB uncompressed reusable/composite transfers with three matching
+checksums; the original cause remains unknown. A smaller composite run
+passed transfers but failed Docker cleanup and is not a gate success.
+Clud's initial build restored 637.1 MB yet reported 1 compiler-unit hit /
+450 misses: archive presence is not proof of compile reuse. A successful
+warm comparison is still required; whole-target caching remains disabled.
