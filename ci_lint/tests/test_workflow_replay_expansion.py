@@ -44,6 +44,28 @@ class ReplayExpansionTest(unittest.TestCase):
         self.assertEqual({job.key for job in proof.jobs},
                          {"CI/Verify", "linux/Check/Workspace", "linux/Check/Python facade"})
 
+    def test_whole_workflow_includes_every_root_and_its_dependencies(self):
+        proof = expand_selection((self.entry, self.called), self.entry.path, None)
+        self.assertIsNone(proof.problem)
+        self.assertEqual({job.source_job for job in proof.jobs},
+                         {"ci.yml:verify", "check.yml:check", "check.yml:facade"})
+        empty = workflow(".github/workflows/empty.yml", {"jobs": {}})
+        self.assertIsNotNone(expand_selection((empty,), empty.path, None).problem)
+
+    def test_alternate_whole_workflow_cannot_omit_any_job(self):
+        config = ReplayConfig("owner/repo", self.entry.path, "minimal", (
+            DeclaredReplayJob("check.yml:check", ReplayJob("Check/Workspace", ("Tests",)), ("dylint",)),
+            DeclaredReplayJob("check.yml:facade", ReplayJob("Check/Python facade", ("Tests",)), ("dylint",)),
+        ), (ReplaySelection("dylint", None, "pull_request", (), self.called.path),))
+        files = tuple(replace(item, document={**item.document, "jobs": {
+            key: {**job, "steps": [{"name": "Tests", "run": "true"}]}
+            for key, job in item.document["jobs"].items()}}) for item in (self.entry, self.called))
+        with patch("ci_lint.workflow_replay_static.load_workflows", return_value=files):
+            self.assertEqual(check_replay_static(config, Path("/unused")), [])
+            missing = replace(config, jobs=config.jobs[:1])
+            self.assertTrue(check_replay_static(missing, Path("/unused")))
+        self.assertTrue(check_selection_dependencies(config, self.entry.document))
+
     def test_unresolvable_calls_are_unproven(self):
         for uses in ("owner/repo/.github/workflows/check.yml@main", "${{ inputs.workflow }}",
                      "./.github/workflows/missing.yml", "./.github/workflows/../check.yml"):

@@ -83,7 +83,7 @@ def _expanded_keys(config: ReplayConfig, declared: DeclaredReplayJob,
     for selection in config.selections:
         if selection.lane not in declared.lanes:
             continue
-        proof = expand_selection(files, config.workflow, selection.selected_job)
+        proof = expand_selection(files, selection.workflow or config.workflow, selection.selected_job)
         keys.update(job.key for job in proof.jobs if job.source_job == declared.source_job)
     return tuple(sorted(keys))
 
@@ -93,8 +93,8 @@ def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
     workflows = {item.path: item for item in files}
     findings: list[Finding] = []
     entry = workflows.get(config.workflow)
-    if entry is not None and entry.document is not None:
-        findings.extend(check_selection_dependencies(config, as_dict(entry.document), files))
+    document = as_dict(entry.document) if entry is not None else {}
+    findings.extend(check_selection_dependencies(config, document, files))
     for declared in config.jobs:
         workflow, job_id = declared.source_job.split(":", 1)
         path = f".github/workflows/{workflow}"

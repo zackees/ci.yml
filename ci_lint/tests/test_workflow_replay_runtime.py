@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace
 
 from ci_lint.tests.test_workflow_replay import WorkflowReplayTest
-from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig
+from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig, ReplaySelection
 from ci_lint.workflow_replay_runtime import _read_report, run_checked_command
 
 
@@ -41,6 +42,24 @@ class ReplayRuntimeTest(WorkflowReplayTest):
                                        head=self.expected.sha, tree=self.expected.git_tree)
         self.assertEqual(rejected.returncode, 1)
         self.assertIn("dirty", rejected.error or "")
+
+    def test_alternate_whole_workflow_requires_exact_report_selection(self) -> None:
+        config = replace(self.config(), selections=(
+            ReplaySelection("tests", None, "pull_request", (), ".github/workflows/dylint.yml"),))
+        fixture = self.workspace / "alternate.json"
+        command = self.command(
+            "pathlib.Path(os.environ['CI_LINT_GATE_REPLAY_REPORT']).write_text("
+            f"pathlib.Path({str(fixture)!r}).read_text())\n")
+        for workflow, job, accepted in (
+            (".github/workflows/dylint.yml", None, True),
+            (".github/workflows/ci.yml", None, False),
+            (".github/workflows/dylint.yml", "tests", False),
+        ):
+            with self.subTest(workflow=workflow, job=job):
+                fixture.write_text(json.dumps({**self.raw, "workflow": workflow, "job": job}))
+                outcome = run_checked_command(self.workspace, command, config,
+                                              head=self.expected.sha, tree=self.expected.git_tree, lane="tests")
+                self.assertEqual(outcome.returncode == 0, accepted, outcome.error)
 
     def test_report_symlink_and_duplicate_keys_are_rejected(self) -> None:
         fixture = self.workspace / "report.json"
