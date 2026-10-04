@@ -107,6 +107,21 @@ class Cursor:
             return default
         return value
 
+    def number_(self, key: str, *, required: bool = True, default: float | None = None) -> float | None:
+        """A field that is an int or a float (TOML has one number type, so
+        `24` and `24.0` both arrive as int/float). bool is rejected: it is
+        an int subclass in Python but never a number a user means here."""
+
+        if key not in self._remaining:
+            if required:
+                self._missing(key, "a number")
+            return default
+        value = self._remaining.pop(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            self._ct002(key, "a number", value)
+            return default
+        return float(value)
+
     def list_str(
         self, key: str, *, required: bool = True, default: tuple[str, ...] = ()
     ) -> tuple[str, ...]:

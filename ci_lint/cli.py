@@ -602,14 +602,37 @@ def _cmd_gate(args: argparse.Namespace) -> int:
             return 1
         reuse = reuse_raw
 
+    db_reuse: JsonValue | None = None
+    if getattr(args, "default_branch_reuse", None):
+        try:
+            with open(args.default_branch_reuse, encoding="utf-8") as fh:
+                db_reuse = json.load(fh)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(
+                f"ci-lint gate: cannot read --default-branch-reuse {args.default_branch_reuse!r}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
     event = _load_event(args.event)
     head_sha = _head_sha_from_event(event)
+    # A default-branch push has no pull_request event, so the document's
+    # sha is checked against the pushed commit itself.
+    push_sha = os.environ.get("GITHUB_SHA") or head_sha
     token = os.environ.get("GITHUB_TOKEN")
     repo_slug = os.environ.get("GITHUB_REPOSITORY")
     fetch = default_fetch if token and repo_slug else None
 
     report = compute_gate(
-        plan, needs, reuse=reuse, head_sha=head_sha, fetch=fetch, token=token, repo=repo_slug
+        plan,
+        needs,
+        reuse=reuse,
+        head_sha=head_sha,
+        fetch=fetch,
+        token=token,
+        repo=repo_slug,
+        default_branch_reuse=db_reuse,
+        push_sha=push_sha,
     )
     print(json.dumps(gate_to_json_dict(report), indent=2) if args.json else render_gate_text(report))
     if report.not_mergeable_message:
@@ -1268,6 +1291,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--event",
         default=None,
         help="pull_request event JSON, to read the PR head SHA for reuse re-verification",
+    )
+    p_gate.add_argument(
+        "--default-branch-reuse",
+        default=None,
+        help="path to a 'ci-lint reuse-check --out' document (GEN-021, zackees/ci.yml#158). A "
+        "required job that is skipped counts as success only when that document proves it "
+        "(reuse == true, this push's sha, a push event) AND a live job re-fetch still shows "
+        "conclusion == 'success' on the PR head. This is NOT the same as --reuse above, which "
+        "proves a lane of the same PR from its own earlier attempt",
     )
     p_gate.add_argument("--json", action="store_true")
     p_gate.set_defaults(func=_cmd_gate)

@@ -700,6 +700,35 @@ A finding matching a non-expired exception is printed with status
 `approved_exception` on every run (never silent); it does not count toward
 precheck's exit code.
 
+## `[reuse.default-branch]` (GEN-021 phase 2, zackees/ci.yml#158)
+
+Declares how a **default-branch push** may skip a required job because a `pull_request` run already proved a tree-identical tree. This is the consumer half of `ci-lint reuse-check` (Phase 0, #156): without it the decision is computed and then thrown away. Background and evidence: [designs/default-branch-verified-reuse.md](designs/default-branch-verified-reuse.md), [case study](case-studies/clud-main-push-ci-burn.md).
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `mode` | `"off"` \| `"shadow"` \| `"enforce"` | `"off"` | `shadow` computes and reports the decision but never skips; `enforce` skips. `off` disables the mechanism. Promote to `enforce` only on `ci-lint reuse-report` evidence (`>= 12` decisive runs, 0 false-reuse candidates). |
+| `workflows` | array of string | `["ci.yml"]` | Workflow files whose `pull_request` runs can prove a tree. Non-empty; each must be a key of `[allow].workflows`, else `CT-002` (a decision reading a workflow the repository does not ship would silently prove nothing). |
+| `required-jobs` | `"plan"` or array of string | `"plan"` | Exact **job display names** the proving run must have green. `"plan"` means the list is the plan's main-flow lane digests, not a hand-maintained array. |
+| `exempt-jobs` | array of string | `[]` | Job ids that never skip on reuse (cache writers -- see the design's section 8 cache-writer strategies). |
+| `max-age-hours` | number | `24` | Every proving job must have completed within this many hours of the decision. `0 < x <= 168`. |
+| `nightly` | bool | `true` | A scheduled full default-branch run exists and is the drift backstop. Required in `enforce`. |
+
+An absent table -- or a bare `[reuse]` with no `default-branch` sub-table -- is `mode = "off"`, so every `ci.toml` that predates this one loads unchanged and skips nothing. Parsed by `ci_lint.schema._parse_reuse` into `CiToml.reuse: ReuseConfig` (frozen); unknown keys are `CT-001` like every other table, bad values `CT-002`.
+
+### Consuming the decision: `ci-lint gate --default-branch-reuse`
+
+```
+python3 -m ci_lint gate --plan plan.json --needs needs.json --default-branch-reuse reuse-check.json
+```
+
+This is a **separate** mechanism from `ci-lint gate --reuse`, which proves a lane of the same pull request from an earlier attempt of its own head. A skipped required job counts as success only when every one of these holds:
+
+1. the document is schema 1, `reuse == true`, `event_name == "push"`, and `sha` equals `$GITHUB_SHA` (a shadow document, which sets `reuse = false` and `would_reuse = true`, is never evidence);
+2. it names a proving job whose display name is this job's id, or its plan-derived `<id> [<lane digest>]` form -- so a lane digest mismatch is what makes a stale proof fail;
+3. a live `GET /repos/{r}/actions/jobs/{job_id}` still returns `conclusion == "success"` and `head_sha` equal to the document's `pr_head_sha`.
+
+Anything unverifiable (no `GITHUB_TOKEN`, unreachable API, a job with no id to re-fetch) is `needs_review`, never a silent pass; any mismatch is the pre-existing `TEST-001` "a skip is not a pass" failure. An accepted job is reported with its provenance -- `reused from PR #<n> run <id>` in the text and `reused_from_pr`/`reused_from_run` in `--json` -- so a green default-branch commit is never an unexplained skip.
+
 ## `[fleet]` (round M2-42, zackees/ci.yml#98)
 
 | Field | Type | Meaning |
@@ -988,6 +1017,9 @@ behavior is unchanged): `ci_lint.default_branch_reuse` decides whether a
 validated the identical tree. Policy: docs/policy-general.md "Default-branch
 validation"; full design, threat model, rollout, and reference wiring:
 [docs/designs/default-branch-verified-reuse.md](designs/default-branch-verified-reuse.md).
+The decision is only worth computing once something consumes it: the
+consumer is `ci-lint gate --default-branch-reuse`, declared by
+`[reuse.default-branch]` in `ci.toml` (see above).
 
 Procedure (stdlib `urllib` through the injectable `FetchStatusFn`, GET only;
 the typical verified decision is 5 calls):
