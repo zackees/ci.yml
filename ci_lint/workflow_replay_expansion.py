@@ -63,6 +63,7 @@ class _ExpansionState:
     jobs: list[ExpandedJob]
     visited: set[str]
     active: set[str]
+    caller_prefixes: set[str]
 
 
 def _record(state: _ExpansionState, resolved: ExpandedJob) -> None:
@@ -114,8 +115,13 @@ def _called(state: _ExpansionState, current: str, job: dict[str, YamlValue],
     if "workflow_call" not in get_on_section(document) or not jobs:
         raise ValueError("called workflow has no workflow_call contract or executable jobs")
     bound = bind_call_inputs(document, job, inputs)
+    caller_name = bound_name(job.get("name", job_id), inputs)
+    caller_prefix = prefix + caller_name + "/"
+    if caller_prefix in state.caller_prefixes:
+        raise ValueError("reusable callers have an ambiguous display-name prefix")
+    state.caller_prefixes.add(caller_prefix)
     for child in jobs:
-        _visit(state, callee, child, prefix + job_id + "/", ancestry + (current,), bound)
+        _visit(state, callee, child, caller_prefix, ancestry + (current,), bound)
 
 
 def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str | None) -> ReplayExpansion:
@@ -124,7 +130,7 @@ def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str
     A source-job declaration cannot disambiguate two invocations of the same
     called job, so repeated calls with distinct prefixes remain unproven.
     """
-    state = _ExpansionState(files, [], set(), set())
+    state = _ExpansionState(files, [], set(), set(), set())
     try:
         roots = (selected,) if selected is not None else tuple(jobs_of(_document(files, path)))
         if not roots:
