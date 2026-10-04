@@ -95,8 +95,8 @@ def _check_identity(declared: DeclaredReplayJob, document: dict[str, YamlValue],
     workflow, job_id = declared.source_job.split(":", 1)
     workflow_name = document.get("name", workflow)
     job_name = job.get("name", job_id)
-    if any(not isinstance(name, str) or not name.strip() or "${{" in name
-           for name in (workflow_name, job_name)):
+    identity_names = (workflow_name,) if len(expanded_keys) == 1 else (workflow_name, job_name)
+    if any(not isinstance(name, str) or not name.strip() or "${{" in name for name in identity_names):
         return [Finding(rule="GATE-001", path=path, status=Status.NEEDS_REVIEW,
                         message="replay execution key depends on a nonliteral workflow or job name",
                         fix="resolve the execution identity before proving replay coverage")]
