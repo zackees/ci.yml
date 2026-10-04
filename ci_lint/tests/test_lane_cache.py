@@ -32,6 +32,7 @@ from ci_lint.local_gate import (
     load_gate_config,
     parse_attestation,
     run_gate,
+    run_lanes,
 )
 from ci_lint.proc import run_captured
 
@@ -289,6 +290,26 @@ if not pathlib.Path("no-receipt").exists():
         self.commit("docs")
         self.assertRegex(self.gate(), r"^lint:reused@.*,tests:reused@")
         self.assertEqual(self.runs(), [])
+
+    def test_optional_unavailable_full_run_never_records_a_pass(self) -> None:
+        py = sys.executable
+        path = self.repo / "local-gate.toml"
+        path.write_text(path.read_text() +
+                        f'\n[gate.lanes.winvm]\nrun = ["{py}", "gate.py", "--lane", "winvm", "--log", "{self.log}"]\n'
+                        'tools = ["git"]\noptional = true\n')
+        script = self.repo / "full.py"
+        script.write_text(script.read_text().replace(
+            'pathlib.Path(os.environ["CI_LINT_GATE_RECEIPT"]).write_text(json.dumps(receipt))',
+            'receipt["not-applicable"] = ["winvm"]\n'
+            '    pathlib.Path(os.environ["CI_LINT_GATE_RECEIPT"]).write_text(json.dumps(receipt))'))
+        self.commit("optional host lane")
+        cfg = self.config()
+        result = run_lanes(self.repo, cfg, _git(self.repo, "rev-parse", "HEAD"),
+                           _git(self.repo, "rev-parse", "HEAD^{tree}"), use_cache=False)
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.provenance, ["lint:run", "tests:run", "winvm:n/a"])
+        self.assertEqual(tuple(p.lane for p in result.passed), ("lint", "tests"))
+        self.assertEqual(list((cache_dir(self.repo) / "winvm").glob("*.json")), [])
 
     def test_one_miss_runs_only_that_lane(self) -> None:
         self.gate()
