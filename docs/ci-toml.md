@@ -475,6 +475,10 @@ evidence instead (`gh run view --job <id> --log`, or any captured stdout of
 the same -- same "no live network assumed, inject `--log`" convention as
 `ci-lint dylint coverage`/`ci-lint suite check`):
 
+The reader accepts bare action stdout and GitHub CLI logs with tab-delimited
+job/step fields, ISO timestamps, and setup-soldr's elapsed-time prefixes.
+These wrappers are removed before matching the layer's evidence.
+
 | Rule | Fires on |
 | --- | --- |
 | `CACHE-011` | `--conclusion` is exactly `success`, and the log shows a declared layer's save skipped for a reason other than an exact hit (`<layer>: ... skipping save`, `final <layer> session stats: missing`), or a `final ... summary: ...` line reporting `saved id=-1`. Never fires on a non-`success` conclusion -- a failed/cancelled build legitimately skips saving. |

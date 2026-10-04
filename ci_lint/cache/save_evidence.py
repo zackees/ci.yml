@@ -69,18 +69,20 @@ _UNUSABLE_RE = re.compile(
 
 DEFAULT_UNUSABLE_STREAK_THRESHOLD = 2
 
-# GitHub Actions' own `gh run view --job <id> --log` output prefixes every
-# line with an ISO-8601 timestamp ("2026-07-06T18:10:45.0000000000Z "),
-# which would otherwise land inside the `^(?P<layer>...)` anchors above.
-# Strip it before matching -- this is the ONLY preprocessing done to a log;
-# ANSI stripping is deliberately NOT needed here (unlike
-# `ci_lint.runtime.dylint`), since none of these signals are ever printed
-# with cargo/rustc's colorized output.
+# GitHub CLI logs have two tab-delimited job/step fields before their
+# ISO timestamp; setup-soldr adds an elapsed MM:SS prefix to its messages.
+# Remove only those anchored wrappers, preserving the layer/reason payload.
+_GITHUB_PREFIX_RE = re.compile(
+    r"^[^\t\n]+\t[^\t\n]+\t(?=\d{4}-\d{2}-\d{2}T[\d:.]+Z )", re.MULTILINE
+)
 _TIMESTAMP_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T[\d:.]+Z ", re.MULTILINE)
+_ELAPSED_PREFIX_RE = re.compile(r"^\d{2,}:\d{2}(?::\d{2})? ", re.MULTILINE)
 
 
-def _strip_timestamps(text: str) -> str:
-    return _TIMESTAMP_PREFIX_RE.sub("", text)
+def _normalize_log_prefixes(text: str) -> str:
+    text = _GITHUB_PREFIX_RE.sub("", text)
+    text = _TIMESTAMP_PREFIX_RE.sub("", text)
+    return _ELAPSED_PREFIX_RE.sub("", text)
 
 
 class SaveEvidenceError(Exception):
@@ -108,7 +110,7 @@ def _read(path: Path) -> str:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         raise SaveEvidenceError(f"cannot read --log {path}: {exc}") from exc
-    return _strip_timestamps(text)
+    return _normalize_log_prefixes(text)
 
 
 def check_cache_011(
