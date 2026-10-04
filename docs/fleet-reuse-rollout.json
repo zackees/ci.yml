@@ -486,7 +486,7 @@
     {
       "repo": "zackees/template-python-rust-cmd",
       "pr": 66,
-      "state": "open (CI running)",
+      "state": "MERGED (68c580c)",
       "skips": [
         "fast"
       ],
