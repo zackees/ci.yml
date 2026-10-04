@@ -51,6 +51,8 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     key = cursor.str_("key")
     steps = cursor.list_str("steps")
     cache_saves = cursor.list_str("cache-save-steps", required=False)
+    minimal_skips = cursor.list_str("minimal-skip-steps", required=False)
+    mode_step = cursor.str_("minimal-mode-step", required=False) or ""
     lanes = cursor.list_str("lanes", required=False)
     cursor.finish()
     if ref is None or re.fullmatch(JOB_REF, ref) is None:
@@ -59,11 +61,16 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
         _bad(findings, source, path, "key and distinct executed check names must be nonempty")
     if len(set(cache_saves)) != len(cache_saves) or not set(cache_saves).issubset(steps):
         _bad(findings, source, path, "cache-save-steps must be distinct declared steps")
+    if (len(set(minimal_skips)) != len(minimal_skips) or not set(minimal_skips).issubset(steps)
+            or set(minimal_skips).intersection(cache_saves)
+            or bool(minimal_skips) != bool(mode_step)
+            or (mode_step and (mode_step not in steps or mode_step in minimal_skips or mode_step in cache_saves))):
+        _bad(findings, source, path, "minimal exclusions require distinct declared steps and a mandatory mode producer")
     if len(set(lanes)) != len(lanes) or any(not lane.strip() for lane in lanes):
         _bad(findings, source, path, "lane names must be nonempty and distinct")
     if len(findings) != start or ref is None or key is None:
         return None
-    return DeclaredReplayJob(ref, ReplayJob(key, tuple(steps), tuple(cache_saves)), tuple(lanes))
+    return DeclaredReplayJob(ref, ReplayJob(key, tuple(steps), tuple(cache_saves), tuple(minimal_skips), mode_step), tuple(lanes))
 
 
 def _selected_job(cursor: Cursor, source: str, path: str,
