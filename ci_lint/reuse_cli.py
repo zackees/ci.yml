@@ -11,8 +11,10 @@ record/replay plumbing `ci-lint fleet scan` already has.
 Exit codes. `reuse-check`: 0 whenever the arguments are valid -- including
 every "cannot prove reuse" outcome, which is reported as `reuse=false` so the
 calling workflow runs everything -- and 2 for a usage error only.
-`reuse-report`: 0 = promotable, 1 = not promotable yet (insufficient sample,
-unanalysed false-reuse candidates, or a listing error), 2 = usage error.
+`reuse-report`: 0 = promotable (at least one verified safe skip and no
+unanalysed false-reuse candidate), 1 = not promotable yet (insufficient
+sample, a `no-op` window in which reuse never fired, unanalysed false-reuse
+candidates, or a listing error), 2 = usage error.
 """
 
 from __future__ import annotations
@@ -235,7 +237,14 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     _shared(p_report)
     p_report.add_argument("--since", required=True, help="YYYY-MM-DD (push runs created on/after)")
     p_report.add_argument("--until", default=None, help="YYYY-MM-DD (push runs created on/before)")
-    p_report.add_argument("--min-runs", type=int, default=DEFAULT_MIN_RUNS)
+    p_report.add_argument(
+        "--min-runs",
+        type=int,
+        default=DEFAULT_MIN_RUNS,
+        help="decisive runs required before promotion (default 1: a single verified, "
+        "attested PR merge is enough, because the per-run decision is sound on its own "
+        "terms). Raise it only to stage a rollout deliberately.",
+    )
     p_report.add_argument("--limit", type=int, default=300, help="most push runs to evaluate")
     p_report.add_argument(
         "--accept-flaky",

@@ -47,7 +47,14 @@ from ci_lint.github_api import FetchStatusFn, GitHubApiError
 API_ROOT = "https://api.github.com"
 SCHEMA_VERSION = 1
 DEFAULT_MAX_AGE_HOURS = 24.0
-DEFAULT_MIN_RUNS = 100
+# A single decisive run with a verified safe skip is enough to promote.
+# The per-run decision is sound on its own terms -- one merged PR, an
+# identical tree, a green and fresh proving run -- so requiring a shadow
+# *quota* before trusting it bought confidence in the tool rather than
+# soundness in the decision, and permanently locked low-traffic
+# repositories out of the mechanism entirely. Raise it with `--min-runs N`
+# when staging a rollout deliberately.
+DEFAULT_MIN_RUNS = 1
 PER_PAGE = 100
 # Pagination cap for one listing (runs on a head SHA, jobs of a run, push
 # runs in a report page walk). Hitting it fails closed rather than
@@ -601,6 +608,13 @@ class ReuseReport:
             return "blocked"
         if self.decisive < self.min_runs:
             return "insufficient-sample"
+        if not self.count("safe-skip"):
+            # Decisive runs happened but reuse never actually fired on one
+            # (every push was a must-run: a squash-merge batch, a drifted
+            # tree, a failed proving job). That is not evidence the
+            # mechanism works -- it is evidence it has never been used, so
+            # there is nothing to promote.
+            return "no-op"
         return "promotable"
 
 
@@ -758,5 +772,8 @@ def render_report_text(report: ReuseReport) -> str:
     if report.error:
         lines.append(f"error: {report.error}")
     lines.append(f"api calls: {report.api_calls}")
-    lines.append(f"verdict: {report.verdict} (promotion needs >= {report.min_runs} decisive runs and 0 candidates)")
+    lines.append(
+        f"verdict: {report.verdict} (promotion needs >= {report.min_runs} decisive run(s), at "
+        "least one safe skip, and 0 false-reuse candidates)"
+    )
     return "\n".join(lines)
