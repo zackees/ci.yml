@@ -1374,3 +1374,50 @@ was unavailable; Python/Docker tests did not execute. The candidate keeps
 format checks, provisions rustfmt/Clippy and managed compiler-unit reuse,
 and requires exact-source and executed-step receipts. Enforcement is not
 yet promoted: full candidate execution and primary review remain pending.
+
+
+### Bosn exact-source candidate passes (2026-10-03)
+
+[Bosn PR #464](https://github.com/zackees/bosn/pull/464) replaces the heavy
+stack lanes with published Bosn 0.1.12 / act2.3 replays of the existing
+workflow. Receipts must identify the clean checkout and exact source SHA,
+selected tier, every required job, and completed successful required steps.
+An old runner, dirty source, skipped test step, or minimal Linux placeholder
+cannot prove the test lane. The light static and guard lanes stay local.
+
+The full gate passed in **701 s** on committed source `83f1666` and stamped
+`bf11f24d8bc4e7e494b97c6cb365745efd9ca0b5`. Executed and attested Git trees
+both equal `8459de4a6f8c2b99fd90afa82293b1834245301e`. Rust run
+`9096dd30-c22c-4453-ae3d-937f2c90aa75` took 165 s and passed 707 cases,
+with 26 existing ignored cases. Format, Clippy, boundary/locked resolution,
+and both workspace and embedded-Python test commands executed. Linux run
+`de846300-6798-41d9-b3b7-a25005f1d209` took 536 s and passed 257 Python
+cases with 10 skips in 172.66 s, including Docker tests and the clean-wheel
+install smoke. Both engines were removed. Twenty-eight isolated receipt,
+tier and wiring regressions, Ruff, pre-push verification and primary review
+passed. Remote first-head CI and enforcement promotion remain pending.
+
+The actual gate found three problems before publication: the short stdin
+reap test could reach its deadline before a child existed; direct pytest
+could not import the new receipt helper; and a toolchain assertion required
+an explicit workflow field while setup-soldr reads rust-toolchain.toml.
+The stdin test now establishes its owned blocked session before checking
+reaping, without raising its deadline or changing the public timeout.
+The helper loads by file, and the assertion validates the declared toolchain.
+The clean-wheel smoke also exposed missing patchelf in the stock runner;
+the workflow now provisions it. Failed candidates issued no attestation.
+
+Rust restored 358.2 MB of compiler units. Per-unit traces record 316 hits /
+39 misses for format and Clippy, then 240 hits / 40 misses for tests.
+Aggregate summaries report zero misses but document a global fallback;
+they are not complete reuse proof. Linux's separate cold cache family
+saved a 695 MB compiler archive (id 6, 2.1 GB payload). Whole-target and
+registry caches remain disabled, failed runs do not publish, and remote
+writers remain restricted to main. A warm Linux comparison is still needed.
+
+Gate and trust remain shadow; native/release coverage is unchanged. Static
+local-gate lint reports zero violations and one GATE-001 needs_review:
+no command-style mirrors are declared. These lanes replay the existing
+remote commands with executed-step validation; declaring those same jobs
+as command-style mirrors would recurse through Bosn. This finding is
+explicit and unwaived. The first-head 100% fleet target remains open.
