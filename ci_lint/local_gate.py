@@ -39,10 +39,12 @@ push run and a 1-in-N audit sample play that role.
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 from collections.abc import Callable
@@ -54,6 +56,7 @@ from ci_lint.attestations import load_definition as load_attestation_definition
 from ci_lint.attestations import make as make_attestation
 from ci_lint.attestations import strip_trailers as strip_attestation_trailers
 from ci_lint.finding import Finding, Status
+from ci_lint.full_run_receipt import FullRunConfig, load_receipt, parse_full_run
 from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
 from ci_lint.gate_trust import TrustConfig, WorkflowFacts, WorkflowJob, check_trust_static, parse_trust
 from ci_lint.lane_cache import (
@@ -133,6 +136,9 @@ class GateConfig:
     # GATE-007 (zackees/ci.yml#177): the gate split into cacheable lanes, in
     # declared order. Empty: `run` executes as one opaque command.
     lanes: tuple[LaneConfig, ...] = ()
+    # One full command may seed individual lane passes only with an exact
+    # tree-bound receipt from the command (GATE-007).
+    full_run: FullRunConfig | None = None
     # GATE-008 (zackees/ci.yml#190): when an attested head may stand in for
     # the remote quick-gate jobs. None: never.
     trust: TrustConfig | None = None
@@ -158,6 +164,7 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
     mode = sub.str_("mode", required=False, default="enforce") or "enforce"
     isolation_raw = sub.table_("isolation", required=False)
     lanes_raw = sub.table_("lanes", required=False)
+    full_run_raw = sub.table_("full-run", required=False)
     trust_raw = sub.table_("trust", required=False)
     sub.finish()
     trust = (
@@ -165,6 +172,10 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
     )
     lanes = (
         parse_lanes(lanes_raw, path=f"{path}.lanes", source=source, findings=findings) if lanes_raw is not None else ()
+    )
+    full_run = (
+        parse_full_run(full_run_raw, path=f"{path}.full-run", source=source, findings=findings)
+        if full_run_raw is not None else None
     )
     isolation = (
         parse_isolation(isolation_raw, path=f"{path}.isolation", source=source, findings=findings)
@@ -181,6 +192,10 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
     if mode not in MODES:
         bad(f"'mode' is {mode!r}", f"set 'mode' to one of {', '.join(MODES)}")
         mode = "enforce"
+    if full_run is not None and (len(lanes) < 2 or any(lane.optional for lane in lanes)):
+        bad("full-run receipts require at least two non-optional lanes",
+            "declare two or more required lanes, or remove [gate.full-run]")
+        full_run = None
     mirrors: list[JobRef] = []
     for text in mirrors_raw:
         ref = JobRef.parse(text)
@@ -204,6 +219,7 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
         source=source,
         isolation=isolation,
         lanes=lanes,
+        full_run=full_run,
         trust=trust,
     )
 
@@ -535,6 +551,62 @@ def _report(outcome: LaneOutcome) -> None:
     print("\n".join(lines[-150:]), file=sys.stderr, flush=True)
 
 
+def _run_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, reused: dict[str, str],
+                    pending: list[_Pending], log_dir: Path) -> LaneRun:
+    """Seed narrow lane keys from one full run only after its exact receipt."""
+
+    with tempfile.TemporaryDirectory(prefix="full-run-", dir=log_dir) as scratch:
+        return _execute_full_lanes(repo, config, head, tree, reused, pending, log_dir, Path(scratch) / "receipt.json")
+
+
+def _execute_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, reused: dict[str, str],
+                        pending: list[_Pending], log_dir: Path, receipt_path: Path) -> LaneRun:
+    log = log_dir / "full-run.log"
+    env = os.environ.copy()
+    env["CI_LINT_GATE_RECEIPT"] = str(receipt_path)
+    env["CI_LINT_GATE_TREE"] = tree
+    env["CI_LINT_GATE_HEAD"] = head
+    print(f"local-gate: full run started for {len(pending)} cold lanes", file=sys.stderr, flush=True)
+    start = time.monotonic()
+    try:
+        with open(log, "wb") as fh:
+            proc = subprocess.run(list(config.run), cwd=repo, env=env, stdin=subprocess.DEVNULL,
+                                  stdout=fh, stderr=subprocess.STDOUT, check=False)
+    except OSError as exc:
+        print(f"local-gate: full run could not start: {exc}", file=sys.stderr)
+        return LaneRun(2, [], 0)
+    secs = int(round(time.monotonic() - start))
+    if proc.returncode != 0:
+        lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+        print(f"local-gate: full run FAILED after {secs}s (exit {proc.returncode}); full log: {log}", file=sys.stderr)
+        print("\n".join(lines[-150:]), file=sys.stderr, flush=True)
+        return LaneRun(proc.returncode or 1, [], secs)
+    loaded = load_receipt(receipt_path, tree=tree, expected_lanes=tuple(lane.id for lane in config.lanes))
+    if loaded.evidence is None:
+        print(f"local-gate: full run has no usable lane proof: {loaded.error}; full log: {log}", file=sys.stderr)
+        return LaneRun(1, [], secs)
+    problem = _changed(repo, head)
+    if problem is not None:
+        print(f"local-gate: {problem}", file=sys.stderr)
+        return LaneRun(1, [], secs)
+    proofs = {item.lane: item for item in loaded.evidence.passes}
+    cold = {item.lane.id: item for item in pending}
+    for item in pending:
+        record(repo, item.lane, item.key, secs=proofs[item.lane.id].secs, head=head, tree=tree)
+    provenance: list[str] = []
+    passed: list[LanePass] = []
+    for lane in config.lanes:
+        if lane.id in reused:
+            provenance.append(f"{lane.id}:reused@{reused[lane.id][:12]}")
+            passed.append(LanePass(lane.id, reused[lane.id], "reused", None))
+        else:
+            item = cold[lane.id]
+            provenance.append(f"{lane.id}:run")
+            passed.append(LanePass(lane.id, item.key, "run", proofs[lane.id].secs))
+    print(f"local-gate: full run passed in {secs}s; receipt proved {len(proofs)} lanes", file=sys.stderr, flush=True)
+    return LaneRun(0, provenance, secs, tuple(passed))
+
+
 def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache: bool) -> LaneRun:  # noqa: C901
     """Run (or reuse) every declared lane (GATE-007). Cache hits are
     resolved first; then `light` lanes run concurrently alongside the
@@ -561,6 +633,8 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
             reused[lane.id] = key.key
         else:
             pending.append(_Pending(lane, key.key))
+    if config.full_run is not None and len(pending) >= config.full_run.min_misses:
+        return _run_full_lanes(repo, config, head, tree, reused, pending, log_dir)
     light = [p for p in pending if p.lane.weight == "light"]
     heavy = [p for p in pending if p.lane.weight != "light"]
     outcomes: list[LaneOutcome] = []
