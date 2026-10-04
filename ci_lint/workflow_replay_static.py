@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
-from ci_lint.workflow_replay_cache_save import approved_cache_save
+from ci_lint.workflow_replay_cache_save import approved_cache_save, approved_pr_cache_save
 from ci_lint.workflow_replay_minimal_skip import classify_minimal_skip
 from ci_lint.workflow_replay_dependencies import check_selection_dependencies
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig
@@ -41,6 +41,22 @@ def _check_minimal_skips(declared: DeclaredReplayJob, job: dict[str, YamlValue],
     return findings
 
 
+def _check_cache_saves(declared: DeclaredReplayJob, job: dict[str, YamlValue],
+                       path: str) -> list[Finding]:
+    findings: list[Finding] = []
+    for name in declared.proof.cache_save_steps:
+        if not approved_cache_save(job, name):
+            findings.append(Finding(rule="GATE-001", path=path,
+                                    message=f"cache-save skip is not a matching exact-hit guarded cache save: {name}",
+                                    fix="do not waive validation steps; bind the save to its earlier matching restore"))
+    for name in declared.proof.pr_cache_save_steps:
+        if not approved_pr_cache_save(job, name):
+            findings.append(Finding(rule="GATE-001", path=path,
+                                    message=f"PR-only cache save has no recognized non-PR source guard: {name}",
+                                    fix="only official cache-save actions excluded by a finite event/ref guard may skip"))
+    return findings
+
+
 def _check_job(declared: DeclaredReplayJob, job: dict[str, YamlValue],
                path: str, workflow_defaults: YamlValue = None, mode: str = "minimal") -> list[Finding]:
     findings = _check_minimal_skips(declared, job, path, mode)
@@ -48,11 +64,7 @@ def _check_job(declared: DeclaredReplayJob, job: dict[str, YamlValue],
         return [Finding(rule="GATE-001", path=path, status=Status.NEEDS_REVIEW,
                         message=f"replay job {declared.source_job} has reusable or matrix coverage",
                         fix="prove expanded job and step coverage before attesting this replay")]
-    for name in declared.proof.cache_save_steps:
-        if not approved_cache_save(job, name):
-            findings.append(Finding(rule="GATE-001", path=path,
-                                    message=f"cache-save skip is not a matching exact-hit guarded cache save: {name}",
-                                    fix="do not waive validation steps; bind the save to its earlier matching restore"))
+    findings.extend(_check_cache_saves(declared, job, path))
     names: list[str] = []
     for index, step in enumerate(steps_of(job)):
         if "run" not in step and "uses" not in step:
@@ -107,6 +119,19 @@ def _expanded_keys(config: ReplayConfig, declared: DeclaredReplayJob,
     return tuple(sorted(keys))
 
 
+def _check_pr_selections(config: ReplayConfig) -> list[Finding]:
+    findings: list[Finding] = []
+    for declared in config.jobs:
+        if not declared.proof.pr_cache_save_steps:
+            continue
+        for selection in config.selections:
+            if selection.lane in declared.lanes and selection.event != "pull_request":
+                findings.append(Finding(rule="GATE-001", path=config.workflow,
+                                        message=f"PR-only cache saves are declared for non-PR lane {selection.lane}",
+                                        fix="require normal execution proof on non-PR selections"))
+    return findings
+
+
 def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
     files = tuple(load_workflows(repo))
     workflows = {item.path: item for item in files}
@@ -114,6 +139,7 @@ def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
     entry = workflows.get(config.workflow)
     document = as_dict(entry.document) if entry is not None else {}
     findings.extend(check_selection_dependencies(config, document, files))
+    findings.extend(_check_pr_selections(config))
     for declared in config.jobs:
         workflow, job_id = declared.source_job.split(":", 1)
         path = f".github/workflows/{workflow}"
