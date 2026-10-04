@@ -29,8 +29,10 @@ _COMPILING_STD_RE = re.compile(
     r"^\s*Compiling (core|std|alloc|compiler_builtins) v", re.MULTILINE
 )
 _BUILD_STD_FLAG_RE = re.compile(r"-Z\s*build-std\b")
+# Cargo prints the driver's package name as `dylint_driver`; retain the
+# hyphenated spelling used by existing setup/tool diagnostics too.
 _DRIVER_SOURCE_BUILD_RE = re.compile(
-    r"Compiling dylint-driver|Building dylint-driver from source|"
+    r"Compiling dylint[-_]driver(?=\s|$)|Building dylint-driver from source|"
     r"error: dylint-driver .* not found.*building from source",
     re.IGNORECASE,
 )

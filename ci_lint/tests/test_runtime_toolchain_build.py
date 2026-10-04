@@ -62,6 +62,20 @@ class ToolchainBuildCheckTest(unittest.TestCase):
         self.assertIn("RUST-009", rule_ids(report.findings))
         self.assertTrue(all(f.status == Status.NEEDS_REVIEW for f in report.findings))
 
+    def test_actual_cargo_driver_name_is_detected_with_ansi(self) -> None:
+        log = self._write(
+            "job.log",
+            "\x1b[1m\x1b[92m   Compiling\x1b[0m dylint_driver v6.0.1\n"
+            "SOLDR_ALLOW_DYLINT_DRIVER_BUILD=1\n",
+        )
+        report = compute_toolchain_build_report([log])
+        self.assertEqual(["RUST-009"], rule_ids(report.findings))
+        self.assertEqual(Status.VIOLATION, report.findings[0].status)
+
+    def test_driver_name_prefix_is_not_a_driver_build(self) -> None:
+        log = self._write("job.log", "   Compiling dylint_driver_support v1.0.0\n")
+        self.assertEqual((), compute_toolchain_build_report([log]).findings)
+
     def test_clean_log_has_no_findings(self) -> None:
         log = self._write(
             "job.log",
