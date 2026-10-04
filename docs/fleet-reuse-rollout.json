@@ -480,8 +480,25 @@
       ],
       "max_age_hours": 12,
       "nightly": false,
-      "measured": "14.9 runner-min per main push, 7.1 (48%) skippable; 42.5-60% reuse rate",
-      "note": "Drove the skip_* outputs CI OK already understood (GATE-008/010), so CI OK needed no change. No nightly: it would cost 3-12x what it saves at 1.63 pushes/day."
+      "measured": "14.9 runner-min per main push, 7.1 (48%) skippable; first reused push 14.9 -> 4 runner-min",
+      "note": "Drove the skip_* outputs CI OK already understood (GATE-008/010). No nightly: it would cost 3-12x what it saves at 1.63 pushes/day."
+    },
+    {
+      "repo": "zackees/kernal-api",
+      "pr": 419,
+      "state": "MERGED (e72e0da)",
+      "skips": [
+        "linux",
+        "dylints"
+      ],
+      "keeps_running": [
+        "verify",
+        "cache-retention"
+      ],
+      "max_age_hours": 24,
+      "nightly": false,
+      "measured": "6.6 runner-min per main push, Dylint is 4.5 (68%); 89.5% reuse rate",
+      "note": "Drove the skip_* outputs verify already emitted for attestation. No nightly: at 89.5% reuse the ~10.5% must-run pushes refresh the caches themselves, about one full run every six days."
     },
     {
       "repo": "zackees/template-python-rust-cmd",
@@ -498,7 +515,22 @@
       ],
       "max_age_hours": 24,
       "nightly": true,
-      "note": "The fleet reference; also pins ci-lint at a commit carrying the reuse schema, and its own CT-001/CT-004 drift checks caught the stale pin."
+      "note": "The fleet reference; first adopter of the ci.toml half. Drift backstop is its existing daily schedule."
+    },
+    {
+      "repo": "zackees/running-process",
+      "pr": null,
+      "state": "branch ci/gen-021-reuse, blocked on its local gate",
+      "skips": [
+        "linux-quick"
+      ],
+      "keeps_running": [
+        "daily full matrix on schedule"
+      ],
+      "max_age_hours": 24,
+      "nightly": true,
+      "measured": "15.6 runner-min per main push (preflight 13.4, dylint 2.1); 66.7% reuse rate",
+      "note": "Biggest single prize measured in the fleet (~10.4 runner-min/day). Its reuse step was confirmed correct in an act2 replay -- it reports conclusion=skipped on a PR -- but the replay's own Unit Tests step fails in this environment while main is 8/8 green on GitHub."
     }
   ],
   "tooling_prereqs": {
@@ -507,10 +539,11 @@
     "ci.yml#311": "gate now matches plan-derived matrix lane display names (merged)"
   },
   "result": {
-    "adopted_now": 2,
+    "adopted_now": 3,
+    "in_flight": 1,
     "repos_listed": 34,
-    "still_blocked": 32,
-    "blocker": "no CI-OK aggregator, so no consumer; ci-lint gate IS that aggregator"
+    "not_worth_adopting": 30,
+    "blocker_remaining": "no CI-OK aggregator in most of the tail, and the measured saving there is under 0.5 runner-min/day"
   },
   "measured_eligibility": {
     "method": "ci-lint reuse-report --limit 10..20 --since 2026-09-20, required-job = the dominant main-push job; costs are mean runner-minutes per successful main push over 5-12 runs.",
