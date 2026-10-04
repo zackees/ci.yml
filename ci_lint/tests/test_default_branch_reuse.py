@@ -36,7 +36,10 @@ from unittest import mock
 
 from ci_lint import cli
 from ci_lint.default_branch_reuse import (
+    DEFAULT_MIN_RUNS,
     REASONS,
+    ReportRow,
+    ReuseReport,
     ReuseRequest,
     decide,
     github_output_lines,
@@ -477,7 +480,45 @@ class ReportTest(unittest.TestCase):
         report = self._report(min_runs=3, accept_flaky=frozenset({36631561921}))
         self.assertEqual(report.verdict, "promotable")
         self.assertEqual(report.count("accepted-flaky"), 1)
-        self.assertEqual(self._report(accept_flaky=frozenset({36631561921})).verdict, "insufficient-sample")
+
+    def test_default_bar_promotes_on_the_first_verified_safe_skip(self) -> None:
+        """GEN-021 rollout decision (2026-10-04): a single green, attested PR
+        merge is sufficient evidence. The per-run decision is sound on its
+        own terms, so the old multi-run quota bought confidence in the tool
+        rather than soundness in the decision -- and permanently locked
+        low-traffic repositories out of the mechanism. One verified safe
+        skip with no false-reuse candidate now promotes."""
+
+        report = self._report(accept_flaky=frozenset({36631561921}))
+        self.assertEqual(report.verdict, "promotable")
+        self.assertEqual(report.min_runs, 1)
+        self.assertEqual(DEFAULT_MIN_RUNS, 1)
+
+    def test_an_explicitly_raised_bar_still_stages_a_rollout(self) -> None:
+        """`--min-runs N` remains available for a deliberate staged rollout;
+        only the default moved."""
+
+        report = self._report(min_runs=99, accept_flaky=frozenset({36631561921}))
+        self.assertEqual(report.verdict, "insufficient-sample")
+
+    def test_runs_that_never_reuse_are_a_no_op_not_a_promotion(self) -> None:
+        """Every push must-run (squash batches, drifted trees) means reuse
+        never fired -- no evidence the mechanism works, so nothing to
+        promote, even though decisive runs exist and no candidate fired."""
+
+        report = self._report()
+        self.assertTrue(report.decisive > 0)
+        self.assertEqual(report.count("safe-skip"), 1)
+        only_must_run = ReuseReport(
+            report.repo, report.workflow, report.since, report.until, report.min_runs,
+            tuple(
+                ReportRow(r.run_id, r.run_url, r.sha, r.created_at, r.conclusion,
+                          r.run_attempt, "must-run", r.decision)
+                for r in report.rows
+            ),
+            report.api_calls,
+        )
+        self.assertEqual(only_must_run.verdict, "no-op")
 
     def test_current_job_names_make_the_pre_shard_run_must_run(self) -> None:
         rows = {r.run_id: r for r in self._report(jobs=SHARDED).rows}
