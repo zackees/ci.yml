@@ -1157,3 +1157,62 @@ read helper removes a new 101-line unwinder complexity offender without an
 exception. No attestation or migration success is claimed before full
 validation. The earlier Hello latency failure also remains part of the pilot
 record; the sampler fix does not prove that performance gate.
+
+## Running-process rollout: October 4 UTC
+
+The pending observations above are historical. The recovered and corrected
+candidate completed the real gate, and
+[running-process#1310](https://github.com/zackees/running-process/pull/1310)
+merged as `809a3197706a1acf8952aaeab04f3a433bf34da0`. All seven PR workflows
+passed on the first attested head; main CI
+[37170075638](https://github.com/zackees/running-process/actions/runs/37170075638)
+passed on attempt 1. This establishes one successful rollout head, not a new
+fleet-wide 100% historical pass rate. The seven-workflow result also has a
+different scope from the selected-workflow cohort table above.
+
+Bosn run `40ae8167-c8a2-4bc3-b557-cbfbdc59d440` executed clean commit
+`4bbdf210308c4b3e92e0f18f90af2e8802428061` and passed all four selected jobs
+in 1,564.7 seconds. Ci-lint then stamped
+`4cedbb2316aee2e65c9eae3b33440153557bce3d`, with the identical Git tree
+`76accfaebee1368567346825de5647ed73d5567f`, and seven scoped attestations.
+The stamped SHA was not the SHA executed by that run.
+
+The actual gate passed 2,354 Rust cases (one retry and nine existing skips),
+838 selected Python cases (26 skipped and 127 deselected), real lint, both
+Dylint fixtures and workspace Dylint. Hello P50 was 118.875 microseconds and
+P99 was 231.547 microseconds, inside the unchanged 200/1,000-microsecond
+budgets. The pilot additionally reproduced a beacon handshake failure while
+SQLite held a writer lock; serving the beacon before crash-store reconciliation
+and giving daemon fixtures private stores resolved it without relaxing the
+handshake or shutdown assertions. Source ratchets now run before engine
+submission. Every PR entrypoint depends on the pinned verifier; trust remains
+in shadow mode and remote coverage still executes.
+
+The successful run saved 757.6 MB of compiler units with preflight target-tree
+caching disabled. Rechecking its already attested head took 0.763 seconds and
+started no engine. This measures unchanged-head proof reuse, not warm compiler
+execution.
+
+The forced warm run `3c0d9e5b-afb2-439f-9bab-e850c3cc181c` restored that exact
+archive in 6.5 seconds (2.83 GB extracted, 2,943 files), but its initial
+workspace build still reported 0 hits and 411 misses. Later stage hit/miss
+counts matched the cold run, so they do not establish improved cross-run reuse.
+The retained archive contains its index, metadata and dependency graph, but
+its saved index lacks the representative initial-build
+`pin_project_lite-c530514e9062bf77` outputs. The cause remains unknown; an
+archive hit must not be reported as a compiler hit.
+
+That warm attempt is failed infrastructure evidence. Act exited 137 after
+952.7 seconds before Unit Tests completed; cleanup reported its engine was
+already being removed, and the engine was absent on subsequent inspection.
+Bosn returned failure with a cleanup failure and no new attestation. The
+run's storage report peaked at 1,709.1/1,830.7 GiB used with 28.5 GiB free.
+The measurement issued no engine removal, global prune/restart or cache
+deletion. The removal actor and cause are unknown; evidence is recorded in
+[bosn#456](https://github.com/zackees/bosn/issues/456#issuecomment-5975780726).
+
+[running-process#1306](https://github.com/zackees/running-process/issues/1306)
+still owns reliable cross-run compiler reuse and the staged Dylint migration:
+existing bare tool installs, source driver builds, native Dylint lanes and
+whole-target Dylint caching remain findings. The merged attestation rollout
+does not claim full policy compliance or a completed warm-cache improvement.
