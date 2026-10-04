@@ -1280,3 +1280,56 @@ seven scoped attestations. Source/check-push checks and primary review pass.
 first-head remote CI run 37174970554 is still in progress on attempt 1.
 Remote rollout is not yet complete. Evidence and remaining findings are
 tracked in [running-process#1306](https://github.com/zackees/running-process/issues/1306#issuecomment-5976181493).
+
+### Running-process enforcement and actual trusted skip (2026-10-03)
+
+The staged managed Dylint candidate above is now merged as
+[PR #1311](https://github.com/zackees/running-process/pull/1311)
+(`a601eff51ad25c7afbbcefdfddbb88487a353a5f`). Its first-head CI run
+37174970554 and main-push run 37175670414 both passed on attempt 1.
+
+[PR #1312](https://github.com/zackees/running-process/pull/1312) then
+promoted both gate and trust modes to enforce, keeping the 10% remote audit.
+The local helper executes the real workflow with `workflow_dispatch` and
+`full=false`: this bootstrap runs the checks before an attestation exists.
+The receipt requires that event, the exact clean source, native Linux x64,
+act2, all four required jobs and every required step. The `ci-integration`
+label joins `ci-full` as a protected full-coverage request: its extra live
+integration checks cannot be skipped using a minimal local proof. The
+focused missing-proof check fails in enforce mode; dispatch remains able
+to build the proof. Primary review and ten source-proof regressions passed.
+
+Its clean full gate ran in `3f31a6d3-1d4e-4d4c-b964-8b285d92e2bb`
+(656.250 s receipt, 659 s outer gate). Rust passed 2,354 tests in 24.655 s
+without retries, with nine existing skips; feature passes ran 6/6 and
+15/15 cases, and Python passed 840 tests in 57.72 s. The first normal
+workspace build reported **389 compiler hits / 22 misses (95%)**, providing
+new positive cross-run reuse evidence distinct from the earlier failed
+zero-hit experiment. That old experiment's root cause remains unknown.
+Linked whole-target caching stays disabled. The seven attestations stamped
+head `08fc4b78f794c97efd29b558138530a3000adfbe` for the unchanged executed
+tree `6907adcfcb142d4adf47b9f36456ac6554eac8d1`. First-head CI
+37176545944 passed, and merge `b881278e34875fc252e7cee349187c2117634671`
+passed main-push CI 37177306836; neither run was retried.
+
+The README follow-up,
+[PR #1313](https://github.com/zackees/running-process/pull/1313), provides
+an actual PR against that merged enforcement policy. Its clean local run
+`1fd089a2-1b83-4dff-81b0-c548e1a4da9a` completed with successful cleanup:
+944.230 s receipt, 950 s outer gate. Rust passed 2,354 tests in 28.295 s,
+the 6/15-case feature passes succeeded, and Python passed 840 tests in
+69.31 s (26 skips, 127 deselections, 120 passing subtests). Hello's 10,000
+samples gave P50 133.022 µs / P99 479.631 µs under unchanged 200/1,000 µs
+budgets. Dylint passed; the normal build again reported 389/22 compiler
+hits/misses. The wrapper stamped `15f6224e07258e7cddec66eff0d3773ff437fe78`
+for the same executed Git tree `b79239e6b051aa2e61adc385dc8b82d4d4f932f3`.
+
+First-head remote CI [37178215072](https://github.com/zackees/running-process/actions/runs/37178215072)
+succeeded on attempt 1. The verifier logged `skip remote quick gate
+(trusted)`: the head attests its exact tree, one README path changed, and
+no gate surface changed. The verifier ran from 04:51:44 to 04:51:50 UTC;
+the Linux quick job was actually skipped. This is remote behavioral proof,
+not a local simulation or a trailer-presence count. Full labels, changed
+gate surfaces, untrusted authors, audit samples and non-PR events retain
+the required remote checks. Native/cross-target Dylint findings remain
+open in #1306; the fleet-wide 100% target is not yet achieved.
