@@ -51,6 +51,39 @@ class WorkflowReplayTest(unittest.TestCase):
         proof = prove_replay(self.raw, self.expected)
         self.assertEqual(proof.jobs, ("CI/Tests",))
 
+    def test_declared_exact_hit_cache_save_may_be_skipped(self) -> None:
+        expected = replace(self.expected, required_jobs=(ReplayJob(
+            "CI/Tests", ("Run tests", "Save compile cache"),
+            cache_save_steps=("Save compile cache",)),))
+        tree = self.raw["tree"]
+        assert isinstance(tree, dict)
+        groups = tree["groups"]
+        assert isinstance(groups, list) and isinstance(groups[0], dict)
+        jobs = groups[0]["jobs"]
+        assert isinstance(jobs, list) and isinstance(jobs[0], dict)
+        sections = jobs[0]["sections"]
+        assert isinstance(sections, list)
+        sections.append({"name": "Save compile cache", "stage": "Main",
+                         "status": "completed", "conclusion": "skipped",
+                         "first_seq": None, "last_seq": None})
+        self.assertEqual(prove_replay(self.raw, expected).jobs, ("CI/Tests",))
+        save = sections[-1]
+        assert isinstance(save, dict)
+        for conclusion in ("failure", "cancelled"):
+            save["conclusion"] = conclusion
+            with self.subTest(conclusion=conclusion), self.assertRaises(ValueError):
+                prove_replay(self.raw, expected)
+        save["conclusion"] = "skipped"
+        sections.pop()
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, expected)
+        sections.append(save)
+        # The save concession never admits a skipped validation step.
+        assert isinstance(sections[0], dict)
+        sections[0]["conclusion"] = "skipped"
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, expected)
+
     def test_metadata_failures_cannot_prove_a_gate(self) -> None:
         for change in (
             MetadataChange("schema_version", True), MetadataChange("engine", "native"),

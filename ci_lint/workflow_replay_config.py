@@ -50,17 +50,20 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     ref = cursor.str_("source-job")
     key = cursor.str_("key")
     steps = cursor.list_str("steps")
+    cache_saves = cursor.list_str("cache-save-steps", required=False)
     lanes = cursor.list_str("lanes", required=False)
     cursor.finish()
     if ref is None or re.fullmatch(JOB_REF, ref) is None:
         _bad(findings, source, path, "source-job must be a workflow basename and job id")
     if not key or not key.strip() or not steps or len(set(steps)) != len(steps) or any(not step.strip() for step in steps):
         _bad(findings, source, path, "key and distinct executed check names must be nonempty")
+    if len(set(cache_saves)) != len(cache_saves) or not set(cache_saves).issubset(steps):
+        _bad(findings, source, path, "cache-save-steps must be distinct declared steps")
     if len(set(lanes)) != len(lanes) or any(not lane.strip() for lane in lanes):
         _bad(findings, source, path, "lane names must be nonempty and distinct")
     if len(findings) != start or ref is None or key is None:
         return None
-    return DeclaredReplayJob(ref, ReplayJob(key, tuple(steps)), tuple(lanes))
+    return DeclaredReplayJob(ref, ReplayJob(key, tuple(steps), tuple(cache_saves)), tuple(lanes))
 
 
 def _selected_job(cursor: Cursor, source: str, path: str,
