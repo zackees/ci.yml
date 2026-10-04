@@ -1,0 +1,1404 @@
+{
+  "repo": "zackees/clud",
+  "workflow": "ci.yml",
+  "since": "2026-10-02T00:00:00+00:00",
+  "target": 0.8,
+  "rate": 0.6491228070175439,
+  "merged_total": 57,
+  "scanned": 57,
+  "without_runs": 0,
+  "limit": 0,
+  "first_head": {
+    "summary": {
+      "passed": 35,
+      "failed": 9,
+      "unknown": 13,
+      "known_rate": 0.7954545454545454,
+      "coverage": 0.7719298245614035,
+      "attested_passed": 4,
+      "attested_failed": 0,
+      "attested_unknown": 0
+    },
+    "prs": [
+      {
+        "number": 1707,
+        "title": "fix(terminal): split-sequence and terminal-restore follow-ups to #1697 (Fixes #1704)",
+        "evidence": {
+          "head_sha": "eb9a202d369e3081612fbd6eec3200b9f7ff657c",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T01:59:22+00:00",
+          "run_ids": [
+            36953507574,
+            36953507805
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 1709,
+        "title": "fix(session): undo a Ctrl+C-killed child's terminal modes; remove the out-of-process guard",
+        "evidence": {
+          "head_sha": "3f117ae34c516559cd7c8a89e106a83f34bfcc9c",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T03:53:19+00:00",
+          "run_ids": [
+            36962129823,
+            36962129763
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 1712,
+        "title": "fix(gc): repair corrupt uv-cache wheel entries under uv's locks (Fixes #1711)",
+        "evidence": {
+          "head_sha": "3dbc99bbee221b9619edd8e0e32f72e6b3b190f6",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T07:22:30+00:00",
+          "run_ids": [
+            36978217877
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1713,
+        "title": "fix(pr-watch): a concurrency-superseded run is never the PR's failure and never gets the live run cancelled (#1710)",
+        "evidence": {
+          "head_sha": "c7cb7a058cb77866bc8ee3eff98ac2d876a04f1f",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T07:55:11+00:00",
+          "run_ids": [
+            36981125361,
+            36981125492
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 1716,
+        "title": "docs(ci): local act is one pre-push check; the PR's CI is the record (Fixes #1715)",
+        "evidence": {
+          "head_sha": "9a6f9514132ed2d47a6df565be35418d563ed151",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T08:02:54+00:00",
+          "run_ids": [
+            36981831728
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1717,
+        "title": "docs+test(pty): per-platform terminal/PTY agent skills and an end-to-end input fidelity sweep",
+        "evidence": {
+          "head_sha": "b66cb323522a5b99c69c10d56f391b444be3b3a9",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T08:20:52+00:00",
+          "run_ids": [
+            36983510654,
+            36983509531
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 1719,
+        "title": "fix(soldr): a configured soldr version is a minimum; a launch never downgrades soldr",
+        "evidence": {
+          "head_sha": "97bc890a77d21fd9718813b2e86d720e0566553b",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T08:32:00+00:00",
+          "run_ids": [
+            36984561534
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1720,
+        "title": "fix(pr-watch): a protected check skipped by a run that succeeded is green, not pending forever",
+        "evidence": {
+          "head_sha": "43ced65d769b060dabff373cfdad6b1b07526c15",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T09:00:55+00:00",
+          "run_ids": [
+            36987332638
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1721,
+        "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+        "evidence": {
+          "head_sha": "6e3dd09beb336baea1ac6ff40068efb7fc3a09b0",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T09:15:04+00:00",
+          "run_ids": [
+            36988693867
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1722,
+        "title": "fix(pr-watch): a missing or suppressed CodeRabbit never stalls green",
+        "evidence": {
+          "head_sha": "352f4d5b5cb32e7792620dc760a28c92f7e5bf5f",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T09:31:18+00:00",
+          "run_ids": [
+            36990255793
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1723,
+        "title": "chore(release): prepare 2.8.22",
+        "evidence": {
+          "head_sha": "4bb0da5b34097df6dd00ad0ef151d040080750b3",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T09:39:06+00:00",
+          "run_ids": [
+            36991004277
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1725,
+        "title": "ci(build): no empty test harnesses; test = false on targets without tests (#1714)",
+        "evidence": {
+          "head_sha": "0c1f891b8bf40f2aed17b32e2204fedbea9bc598",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T13:52:44+00:00",
+          "run_ids": [
+            37015959349
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1727,
+        "title": "ci(build): one integration harness; clud builds two test harnesses, not eight (#1726)",
+        "evidence": {
+          "head_sha": "1ac5fc1cd9752f0c04728b715303a84910d09e7c",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T16:10:45+00:00",
+          "run_ids": [
+            37032144999,
+            37032146266
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 1733,
+        "title": "ci: cache uv wheels in static under act; pass job.status to setup-soldr",
+        "evidence": {
+          "head_sha": "2cd371fbf99f53ba898e319325aac96b6e325f01",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T18:37:16+00:00",
+          "run_ids": [
+            37048663939
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1734,
+        "title": "fix(ci): CI reliability and doc debt from the cross-platform PTY baseline (Fixes #1728)",
+        "evidence": {
+          "head_sha": "a9e53561aee2fe34d0c3d4423567ad1b70b472fc",
+          "outcome": "unknown",
+          "reason": "rerun-history",
+          "attested": false,
+          "created_at": "2026-10-02T18:40:25+00:00",
+          "run_ids": [
+            37049015658,
+            37049016231
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 1735,
+        "title": "fix(ci): race-free act action cache under concurrent bosn; require bosn >= 0.1.7",
+        "evidence": {
+          "head_sha": "2c555895464ee524bc0f1fb349eabab4e919fc23",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T18:47:40+00:00",
+          "run_ids": [
+            37049840192
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1736,
+        "title": "chore(release): prepare 2.8.23",
+        "evidence": {
+          "head_sha": "8946bcc78baa255446416572bbae5829c0cb6b58",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T19:02:30+00:00",
+          "run_ids": [
+            37051479322
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1737,
+        "title": "ci: under act keep uv's downloaded wheels in the static job's cache",
+        "evidence": {
+          "head_sha": "9cdc10610bfba2d60ae74354aef23f6a817b0e61",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T19:25:47+00:00",
+          "run_ids": [
+            37054048432
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1744,
+        "title": "feat(gh-broker): route session gh api GETs through a daemon ETag cache (#1743 phase 1)",
+        "evidence": {
+          "head_sha": "96d968f4edb40b49fc090bf79e354e805571cce0",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T22:54:27+00:00",
+          "run_ids": [
+            37074951719
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1745,
+        "title": "chore(release): prepare 2.8.24",
+        "evidence": {
+          "head_sha": "4105eb08a3fd02b8088b891c0153f06d28bae4c3",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T23:18:20+00:00",
+          "run_ids": [
+            37076929031
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1747,
+        "title": "feat(gh-broker): incremental since=/created>= merges, frozen listings, targeted invalidation (#1743 phase 2)",
+        "evidence": {
+          "head_sha": "faa9f85d258245d2cce5004cb3802e2f209203d6",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T00:01:02+00:00",
+          "run_ids": [
+            37080220169
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1748,
+        "title": "ci: run local CI through bosn ci -> act2 with stock workflows (#1740)",
+        "evidence": {
+          "head_sha": "2cc4f362c2864e7762c2d7184e6ab1df2c964f9c",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T00:06:55+00:00",
+          "run_ids": [
+            37080660638
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1749,
+        "title": "chore(release): prepare 2.8.25",
+        "evidence": {
+          "head_sha": "b83606db4d2e659043ca6fbfb4be01348d846517",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T00:43:19+00:00",
+          "run_ids": [
+            37083241764
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1750,
+        "title": "fix(windows): tree kills must not follow a recycled parent PID (#1738)",
+        "evidence": {
+          "head_sha": "a37d343dd5f075b8c167fae757931ad5367b1a6d",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T01:40:10+00:00",
+          "run_ids": [
+            37086970646,
+            37086970626
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 1751,
+        "title": "fix(pr-watch): watch origin's PR in a fork; gh shim and rollup never cancel the live run (#1741, #1742)",
+        "evidence": {
+          "head_sha": "b95c1a6bf16e6152fb9b63f077abcd77d462e08d",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T01:41:37+00:00",
+          "run_ids": [
+            37087066195
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1752,
+        "title": "lint: adopt the function-complexity ratchet (RUST-018, PY-004)",
+        "evidence": {
+          "head_sha": "e0fcccf1faa4e217afa8540a71553bc2c68436e7",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T02:01:23+00:00",
+          "run_ids": [
+            37088303046
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1753,
+        "title": "fix(gh-shim): resolve a branch or URL PR selector on origin, not the fork's parent (refs #1741)",
+        "evidence": {
+          "head_sha": "e5db3e6755e4fa059689daeea7736aa292ac47a8",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T02:18:11+00:00",
+          "run_ids": [
+            37089324596
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1754,
+        "title": "ci: attested PR heads skip the routine Linux lanes (zackees/ci.yml GATE-008/010)",
+        "evidence": {
+          "head_sha": "0c30fd04ee062895b13cffcf6af2b92a33d1ea88",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T02:18:52+00:00",
+          "run_ids": [
+            37089363122
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1756,
+        "title": "fix(shim): running sessions pick up the gh read broker after an upgrade (#1743)",
+        "evidence": {
+          "head_sha": "de0dace0a4d829351125f39792bdcbacf837ed4a",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T02:41:44+00:00",
+          "run_ids": [
+            37090683849
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1757,
+        "title": "fix(process): wait for capture EOF after exit instead of a fixed 5 ms drain",
+        "evidence": {
+          "head_sha": "2ebd2b4ed8408cf50095208118de4eeeab1c1534",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T02:44:22+00:00",
+          "run_ids": [
+            37090840390
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1758,
+        "title": "ci(unit): refresh pytest shard weights (slow shard ~57 s -> ~49 s)",
+        "evidence": {
+          "head_sha": "16b0404bc211cddfc3757201ae3aae9043291463",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T02:46:14+00:00",
+          "run_ids": [
+            37090950634
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1759,
+        "title": "ci(build): drop the mold apt install (~8 s per build job, dead since soldr 0.9.20)",
+        "evidence": {
+          "head_sha": "1b1ae68c55deacc5740dac20cf9004d9402ac00a",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T02:56:01+00:00",
+          "run_ids": [
+            37091495337
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1760,
+        "title": "test(large-file-guard): time the 100k classification budget by thread CPU, not wall clock",
+        "evidence": {
+          "head_sha": "86e540a278ad005048b1af268acd0442b37d46e5",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T03:01:31+00:00",
+          "run_ids": [
+            37091810147,
+            37091810399
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 1762,
+        "title": "ci: run doc-tests in the Linux x64 Clippy job, off the critical path (~7 s)",
+        "evidence": {
+          "head_sha": "c1f30e77c4c033d15ae9b9b782dddb2e3c34ea60",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T03:15:56+00:00",
+          "run_ids": [
+            37092620112
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1763,
+        "title": "fix(gh-broker): revalidate every page by ETag; deletions, reactions and reruns seen on the next refresh (#1743)",
+        "evidence": {
+          "head_sha": "b4b476cd9599fe529ae3db14c94cf405cfe9fc7c",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T03:19:06+00:00",
+          "run_ids": [
+            37092793940
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1764,
+        "title": "refactor(main): split run() into ordered phase functions (complexity ratchet)",
+        "evidence": {
+          "head_sha": "d9b53aa47fc9e2120077084f8ec70ec53ec9e9ca",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T03:24:44+00:00",
+          "run_ids": [
+            37093107063
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1765,
+        "title": "ci: the mode job installs nothing; Static checks runs beside the builds (zackees/ci.yml GEN-018)",
+        "evidence": {
+          "head_sha": "d6b6fc29a1aacf2855d36cfa8eafe171378e7268",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T03:45:54+00:00",
+          "run_ids": [
+            37094292282
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1766,
+        "title": "feat(gh-broker): subscriptions and a rate-limit floor; pr_merge_watch waits on the broker (#1743 phase 3)",
+        "evidence": {
+          "head_sha": "7ccbe5c0a566959c9ea88b10be2f9de16acc79c0",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T03:47:50+00:00",
+          "run_ids": [
+            37094392118
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1767,
+        "title": "ci(build): route rustup target add through soldr (RUST-001)",
+        "evidence": {
+          "head_sha": "838adc574bfcd58338ab18afa18d7168f8ecee71",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T03:54:50+00:00",
+          "run_ids": [
+            37094765294
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1768,
+        "title": "refactor(codex_bridge): split the four largest request handlers (complexity ratchet)",
+        "evidence": {
+          "head_sha": "ccb284f66d3ff1ec90835e62be22f7086f8717e8",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T03:55:55+00:00",
+          "run_ids": [
+            37094825768
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1769,
+        "title": "refactor(session): split the raw PTY pump into helpers (complexity ratchet)",
+        "evidence": {
+          "head_sha": "730f6704d2978bb49440ed4bc77180192ce1f4df",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T03:56:17+00:00",
+          "run_ids": [
+            37094846141,
+            37094846268
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 1770,
+        "title": "docs(CLAUDE): make the local gate the default pre-push pass",
+        "evidence": {
+          "head_sha": "90104ed3e74936915f3a1c328c882209acb31b36",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T04:15:24+00:00",
+          "run_ids": [
+            37095932262
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1771,
+        "title": "chore(release): prepare 2.8.26",
+        "evidence": {
+          "head_sha": "1e5c48c67fd519805aba0b5b28e07e4be15a5efb",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T04:22:18+00:00",
+          "run_ids": [
+            37096314711
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1772,
+        "title": "docs(ci): reserve native full coverage for platform implementation changes",
+        "evidence": {
+          "head_sha": "abfea0820e052fb60db261bff7f2cbdb640f3bf8",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T04:24:03+00:00",
+          "run_ids": [
+            37096411014
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1773,
+        "title": "docs(skills): check additional platforms only for implementation changes",
+        "evidence": {
+          "head_sha": "2f23f02751a98aa95a49dfaad3ca76c9d5e5ef57",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T04:32:52+00:00",
+          "run_ids": [
+            37096904875
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1774,
+        "title": "skills(pty): run the full PR pass through the local gate",
+        "evidence": {
+          "head_sha": "49f416bef7c9e7596f8eacc20502892b9e837725",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T04:35:11+00:00",
+          "run_ids": [
+            37097032338
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1775,
+        "title": "test(gc): serialize the extern-repo veto tests on TEST_LOCK",
+        "evidence": {
+          "head_sha": "2f15aebda3df7de1fa2318e0984597c42413e7f2",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T04:53:57+00:00",
+          "run_ids": [
+            37098059502
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1776,
+        "title": "docs(ci): installer public-host and Pages build run locally on bosn 0.1.10",
+        "evidence": {
+          "head_sha": "9e04c27447ec9cf54f5c2b8a22d59770d418a8dc",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T05:01:50+00:00",
+          "run_ids": [
+            37098488682
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1777,
+        "title": "chore(release): prepare 2.8.27",
+        "evidence": {
+          "head_sha": "d0d3743ca6512322a1db4da4d79e95d6908091c8",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T05:44:45+00:00",
+          "run_ids": [
+            37100806128
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1778,
+        "title": "lint: C901 ratchet over every Python tree (ci.yml#229)",
+        "evidence": {
+          "head_sha": "c85c386b35866d4859ba5ef384468d93f544e89a",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T05:54:33+00:00",
+          "run_ids": [
+            37101337575
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1779,
+        "title": "test(pr-watch): dead-daemon fallback deadline relative to monotonic now",
+        "evidence": {
+          "head_sha": "9d70c5b5b0ea1eaaa0eb4f0269a14ba7ced53ecd",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T05:54:46+00:00",
+          "run_ids": [
+            37101350100
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1780,
+        "title": "test(gc): uv entry-lock release tolerates a sibling test's fork",
+        "evidence": {
+          "head_sha": "e5507e4bdc657445ab0b74a45b50d60deca6c52f",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T05:57:22+00:00",
+          "run_ids": [
+            37101480786
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1781,
+        "title": "ci: measure verified default-branch reuse in shadow mode",
+        "evidence": {
+          "head_sha": "eb8994258e558b25677a6aab1b78b97452fa1c47",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T08:19:05+00:00",
+          "run_ids": [
+            37109292374
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1782,
+        "title": "docs(ci): record measured local gate and fail-closed validation",
+        "evidence": {
+          "head_sha": "7994e15ab06abed5ea9ce73d241f9ffea5a2b965",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T08:38:54+00:00",
+          "run_ids": [
+            37110407536
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1783,
+        "title": "docs(ci): select the actual static lint job for focused checks",
+        "evidence": {
+          "head_sha": "f3df6f1f6977787453a20d42662d51a67a76a666",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T08:55:16+00:00",
+          "run_ids": [
+            37111302599
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1786,
+        "title": "Fix ChatGPT Codex bridge model rollback and explicit pins",
+        "evidence": {
+          "head_sha": "dc8977c6958e301916ae818fddb44b9d439baf7d",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T19:55:02+00:00",
+          "run_ids": [
+            37149623735
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1788,
+        "title": "Fix explicit daemon stop across version skew",
+        "evidence": {
+          "head_sha": "c6f8d4015c084524fa885f7143787b11817c767b",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T22:12:18+00:00",
+          "run_ids": [
+            37157625568
+          ],
+          "cohort_size": 1
+        }
+      }
+    ]
+  },
+  "prs": [
+    {
+      "number": 1707,
+      "title": "fix(terminal): split-sequence and terminal-restore follow-ups to #1697 (Fixes #1704)",
+      "head_shas": 4,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1709,
+      "title": "fix(session): undo a Ctrl+C-killed child's terminal modes; remove the out-of-process guard",
+      "head_shas": 3,
+      "failures": 0,
+      "reruns": 1,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1712,
+      "title": "fix(gc): repair corrupt uv-cache wheel entries under uv's locks (Fixes #1711)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1713,
+      "title": "fix(pr-watch): a concurrency-superseded run is never the PR's failure and never gets the live run cancelled (#1710)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1716,
+      "title": "docs(ci): local act is one pre-push check; the PR's CI is the record (Fixes #1715)",
+      "head_shas": 2,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1717,
+      "title": "docs+test(pty): per-platform terminal/PTY agent skills and an end-to-end input fidelity sweep",
+      "head_shas": 7,
+      "failures": 5,
+      "reruns": 1,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1719,
+      "title": "fix(soldr): a configured soldr version is a minimum; a launch never downgrades soldr",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1720,
+      "title": "fix(pr-watch): a protected check skipped by a run that succeeded is green, not pending forever",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1721,
+      "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1722,
+      "title": "fix(pr-watch): a missing or suppressed CodeRabbit never stalls green",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1723,
+      "title": "chore(release): prepare 2.8.22",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1725,
+      "title": "ci(build): no empty test harnesses; test = false on targets without tests (#1714)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1727,
+      "title": "ci(build): one integration harness; clud builds two test harnesses, not eight (#1726)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1733,
+      "title": "ci: cache uv wheels in static under act; pass job.status to setup-soldr",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1734,
+      "title": "fix(ci): CI reliability and doc debt from the cross-platform PTY baseline (Fixes #1728)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 1,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1735,
+      "title": "fix(ci): race-free act action cache under concurrent bosn; require bosn >= 0.1.7",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1736,
+      "title": "chore(release): prepare 2.8.23",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1737,
+      "title": "ci: under act keep uv's downloaded wheels in the static job's cache",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1744,
+      "title": "feat(gh-broker): route session gh api GETs through a daemon ETag cache (#1743 phase 1)",
+      "head_shas": 2,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1745,
+      "title": "chore(release): prepare 2.8.24",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1747,
+      "title": "feat(gh-broker): incremental since=/created>= merges, frozen listings, targeted invalidation (#1743 phase 2)",
+      "head_shas": 4,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1748,
+      "title": "ci: run local CI through bosn ci -> act2 with stock workflows (#1740)",
+      "head_shas": 3,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1749,
+      "title": "chore(release): prepare 2.8.25",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1750,
+      "title": "fix(windows): tree kills must not follow a recycled parent PID (#1738)",
+      "head_shas": 7,
+      "failures": 6,
+      "reruns": 1,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1751,
+      "title": "fix(pr-watch): watch origin's PR in a fork; gh shim and rollup never cancel the live run (#1741, #1742)",
+      "head_shas": 2,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1752,
+      "title": "lint: adopt the function-complexity ratchet (RUST-018, PY-004)",
+      "head_shas": 4,
+      "failures": 1,
+      "reruns": 1,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1753,
+      "title": "fix(gh-shim): resolve a branch or URL PR selector on origin, not the fork's parent (refs #1741)",
+      "head_shas": 2,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1754,
+      "title": "ci: attested PR heads skip the routine Linux lanes (zackees/ci.yml GATE-008/010)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1756,
+      "title": "fix(shim): running sessions pick up the gh read broker after an upgrade (#1743)",
+      "head_shas": 4,
+      "failures": 3,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1757,
+      "title": "fix(process): wait for capture EOF after exit instead of a fixed 5 ms drain",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1758,
+      "title": "ci(unit): refresh pytest shard weights (slow shard ~57 s -> ~49 s)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1759,
+      "title": "ci(build): drop the mold apt install (~8 s per build job, dead since soldr 0.9.20)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1760,
+      "title": "test(large-file-guard): time the 100k classification budget by thread CPU, not wall clock",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1762,
+      "title": "ci: run doc-tests in the Linux x64 Clippy job, off the critical path (~7 s)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1763,
+      "title": "fix(gh-broker): revalidate every page by ETag; deletions, reactions and reruns seen on the next refresh (#1743)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1764,
+      "title": "refactor(main): split run() into ordered phase functions (complexity ratchet)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1765,
+      "title": "ci: the mode job installs nothing; Static checks runs beside the builds (zackees/ci.yml GEN-018)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1766,
+      "title": "feat(gh-broker): subscriptions and a rate-limit floor; pr_merge_watch waits on the broker (#1743 phase 3)",
+      "head_shas": 5,
+      "failures": 2,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1767,
+      "title": "ci(build): route rustup target add through soldr (RUST-001)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1768,
+      "title": "refactor(codex_bridge): split the four largest request handlers (complexity ratchet)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 1,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1769,
+      "title": "refactor(session): split the raw PTY pump into helpers (complexity ratchet)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1770,
+      "title": "docs(CLAUDE): make the local gate the default pre-push pass",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1771,
+      "title": "chore(release): prepare 2.8.26",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1772,
+      "title": "docs(ci): reserve native full coverage for platform implementation changes",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1773,
+      "title": "docs(skills): check additional platforms only for implementation changes",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1774,
+      "title": "skills(pty): run the full PR pass through the local gate",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1775,
+      "title": "test(gc): serialize the extern-repo veto tests on TEST_LOCK",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1776,
+      "title": "docs(ci): installer public-host and Pages build run locally on bosn 0.1.10",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1777,
+      "title": "chore(release): prepare 2.8.27",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1778,
+      "title": "lint: C901 ratchet over every Python tree (ci.yml#229)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1779,
+      "title": "test(pr-watch): dead-daemon fallback deadline relative to monotonic now",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1780,
+      "title": "test(gc): uv entry-lock release tolerates a sibling test's fork",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1781,
+      "title": "ci: measure verified default-branch reuse in shadow mode",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1782,
+      "title": "docs(ci): record measured local gate and fail-closed validation",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1783,
+      "title": "docs(ci): select the actual static lint job for focused checks",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1786,
+      "title": "Fix ChatGPT Codex bridge model rollback and explicit pins",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1788,
+      "title": "Fix explicit daemon stop across version skew",
+      "head_shas": 2,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "collected_at": "2026-10-04T00:00:56.874708+00:00",
+  "since": "2026-10-02",
+  "root_checker_sha": "8cca4b9d3a2d49ebd35f5f7d6640f330eb79d12f",
+  "objective_target": 1.0,
+  "method": "python3 -m ci_lint local-gate first-pass --slug <repo> --since 2026-10-02 --json; ci-minimal.yml for fbuild, ci.yml otherwise; default policy target 0.8",
+  "limits": [
+    "Selected workflow only; this is not an all-workflow or required-check audit.",
+    "Unknown first-head evidence is neither success nor failure.",
+    "Attested means a trailer is present; this rate query does not validate its proof.",
+    "The policy target in raw reports is 0.8; the user objective remains 1.0."
+  ]
+}

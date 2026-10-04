@@ -1089,3 +1089,71 @@ no attestation was issued. The frozen latency budgets and test selection were
 preserved. The cause of the latency failure remains unconfirmed; focused APE
 success does not establish full routine validation, rollout or a first-head
 or fleet-rate improvement. The attestation pilot remains pending.
+
+
+## Evening fleet refresh and sampler shutdown candidate
+
+The [2026-10-03 UTC refresh metadata](fleet-refresh-2026-10-03/metadata.json)
+records the same merged-PR start date, October 2, using `ci-minimal.yml` for
+fbuild and `ci.yml` elsewhere. The raw checker uses the policy's default 80%
+threshold; the requested objective remains 100%. These are selected-workflow
+measurements, not an all-workflow or required-check audit.
+
+| Repository | GATE-004 single-head successes / sampled PRs | First-head pass / fail / unknown | Trailer-present first-head pass / fail / unknown |
+| --- | --- | --- | --- |
+| [zccache](fleet-refresh-2026-10-03/zccache.json) | 12/17 | 16 / 1 / 0 | 6 / 0 / 0 |
+| [soldr](fleet-refresh-2026-10-03/soldr.json) | 20/21 | 19 / 0 / 2 | 19 / 0 / 2 |
+| [fbuild](fleet-refresh-2026-10-03/fbuild.json) | 9/19 | 11 / 6 / 2 | 2 / 0 / 0 |
+| [bosn](fleet-refresh-2026-10-03/bosn.json) | 42/56 | 8 / 2 / 46 | 5 / 0 / 9 |
+| [clud](fleet-refresh-2026-10-03/clud.json) | 37/57 | 35 / 9 / 13 | 4 / 0 / 0 |
+| [kernal-api](fleet-refresh-2026-10-03/kernal-api.json) | 7/14 | 5 / 2 / 7 | 2 / 1 / 2 |
+| [running-process](fleet-refresh-2026-10-03/running-process.json) | 0/4 | 1 / 0 / 3 | 0 / 0 / 0 |
+
+Unknown evidence remains unresolved. Trailer presence alone does not validate
+an attestation. Historical failures remain in the cohort after a rollout;
+these counts do not establish a fleet-wide 100% pass rate. The initially
+mis-scoped fbuild `ci.yml` query found no matching runs and is excluded here.
+
+Running-process remains the next pilot. Cache candidate
+`325fde6e7335774e1ee519c0aa97aa8314dbf92f` permits successful local compiler-unit
+publication, explicitly supplies `job-status`, selects `ci-tests`, and retains
+main-only remote saves and nextest CPU parallelism. Its real Linux quick run
+`cb458ed6-d386-454a-812f-6bbb52a396ec` failed in 1,204.406 seconds. The workspace
+nextest pass ran 1,975/2,347 cases: 1,974 passed, one failed, nine skipped; fail-fast
+cancelled the remaining cases. The guard-drop case failed all three configured
+attempts at the unchanged five-second budget. Setup-soldr correctly skipped
+build publication with `job status failure`; its target cache was disabled.
+That proves failed-job save suppression, not a successful warm-cache cycle.
+
+A queued-only attempt never executed and was explicitly cancelled. Restarting
+only the owned private Bosn daemon restored admission. The unknown queue-stall
+cause is tracked in [bosn#453](https://github.com/zackees/bosn/issues/453).
+
+Separate native teardown instrumentation measured worker shutdown at 149
+microseconds and crash-sampler shutdown at 1.40 seconds. Under an 8-CPU quota,
+24 concurrent unchanged guard cases failed 21/24: worker shutdown stayed below
+23 milliseconds, while sampler shutdown took about five to seven seconds.
+This contention diagnostic initially omitted the workflow's GNU build-id flags;
+it is not an exact replay of the full workflow.
+
+Candidate `d8f4b457f525b0be63b3dde0e562bb4ef075474e` adds cancellation after
+native capture resumes all siblings, between module/frame stages, and between
+64-KiB image-read chunks. It discards cancelled snapshots and preserves normal
+capture, identity checks, image-size limits, test selection and timing budgets.
+Deterministic reader regressions were RED (one passed, two failed) before the
+implementation and GREEN afterward. With the actual workflow build-id flags,
+all 63 probe unit tests and Clippy with warnings treated as errors pass. The
+fixed guard case passed 24/24 concurrent instances under the same 8-CPU quota,
+each below one second. The fixed diagnostic includes build-id flags, so the
+contention binaries differ in that respect; the reader regressions are the
+direct RED-to-GREEN evidence. A blocked individual OS read remains
+uninterruptible until it returns.
+
+The real Linux quick run `c58ccee4-4503-42dd-b2f3-5dc420a0a2f4` is running on
+the clean committed candidate. Its final result is pending. A separate shadow
+attestation candidate preserves commands, matrices, triggers and dependencies
+across seven existing PR workflows; it is reviewed but unpushed. An extracted
+read helper removes a new 101-line unwinder complexity offender without an
+exception. No attestation or migration success is claimed before full
+validation. The earlier Hello latency failure also remains part of the pilot
+record; the sampler fix does not prove that performance gate.

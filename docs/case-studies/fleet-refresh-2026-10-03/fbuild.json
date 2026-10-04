@@ -1,0 +1,483 @@
+{
+  "repo": "FastLED/fbuild",
+  "workflow": "ci-minimal.yml",
+  "since": "2026-10-02T00:00:00+00:00",
+  "target": 0.8,
+  "rate": 0.47368421052631576,
+  "merged_total": 19,
+  "scanned": 19,
+  "without_runs": 0,
+  "limit": 0,
+  "first_head": {
+    "summary": {
+      "passed": 11,
+      "failed": 6,
+      "unknown": 2,
+      "known_rate": 0.6470588235294118,
+      "coverage": 0.8947368421052632,
+      "attested_passed": 2,
+      "attested_failed": 0,
+      "attested_unknown": 0
+    },
+    "prs": [
+      {
+        "number": 1605,
+        "title": "fix(esp32): resolve unified toolchain by registry version for pioarduino 53.x/54.x",
+        "evidence": {
+          "head_sha": "0fdcb521caf301e8d620283272c61d2406abe196",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T07:04:11+00:00",
+          "run_ids": [
+            36976642651
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1606,
+        "title": "fix(rp2040): do not infer Bluetooth-only Arduino-Pico libraries when Bluetooth is off",
+        "evidence": {
+          "head_sha": "a792277cdcff060006a5f9990a1b182501878ac7",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T07:35:00+00:00",
+          "run_ids": [
+            36979320579
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1608,
+        "title": "refactor(nrf52): apply the GCC 7 registry toolchain fixup as a pure function",
+        "evidence": {
+          "head_sha": "2feba72e439fec308c4f20ec2aeebad97eeb347a",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T08:43:18+00:00",
+          "run_ids": [
+            36985653153
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1609,
+        "title": "refactor(ch32v): apply board ISA/ABI as a pure config -> config function",
+        "evidence": {
+          "head_sha": "ee8da2c9ea14bf3b96f4f9787cda8f300e034d69",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T08:46:03+00:00",
+          "run_ids": [
+            36985918596
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1610,
+        "title": "refactor(esp8266): apply boards.txt menu props as pure config -> config rules",
+        "evidence": {
+          "head_sha": "ed0478feafba5bd7d486bfc4984df78f92a0c587",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T08:52:36+00:00",
+          "run_ids": [
+            36986539635
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1611,
+        "title": "ci: remove duplicated cache-key-suffix keys from check-ubuntu.yml",
+        "evidence": {
+          "head_sha": "539d1f7f5334f05169f21451202ecd23cc31186b",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T09:05:09+00:00",
+          "run_ids": [
+            36987738266
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1612,
+        "title": "chore(release): bump fbuild to 2.5.30",
+        "evidence": {
+          "head_sha": "ca3e39099d117e316037079f11d1a1e99e2d8897",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T09:28:56+00:00",
+          "run_ids": [
+            36990021033
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1615,
+        "title": "fix(deploy): wait for timed-out native espflash ops to release the port (#1614)",
+        "evidence": {
+          "head_sha": "3f828722fd8650a56b04a4a1545ed33df0f0294a",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T18:31:49+00:00",
+          "run_ids": [
+            37048053694
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1618,
+        "title": "fix(deploy): ESP32 deploy spawns the build-resolved esptool",
+        "evidence": {
+          "head_sha": "df4099d7972292cdfdd8d86573622e4747e4f3aa",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T18:50:25+00:00",
+          "run_ids": [
+            37050143315
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1619,
+        "title": "fix(serial): clear RTS before DTR at open so attach does not reset ESP chips (#1617)",
+        "evidence": {
+          "head_sha": "7864af81ed6282d35803fbc825d0dfc2232c8b5c",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T18:56:37+00:00",
+          "run_ids": [
+            37050825836
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1620,
+        "title": "chore(release): bump fbuild to 2.5.31",
+        "evidence": {
+          "head_sha": "bcc758c6216ad1c48c56a709f342a04595e887cc",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T19:32:23+00:00",
+          "run_ids": [
+            37054768901
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1622,
+        "title": "feat(linux): install udev rules with an explained cross-distro root prompt",
+        "evidence": {
+          "head_sha": "5ff9980c592b94c8624c68feb04a4da9fdddfa2c",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T20:24:37+00:00",
+          "run_ids": [
+            37060390692
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1625,
+        "title": "chore(release): bump fbuild to 2.5.32",
+        "evidence": {
+          "head_sha": "3e9b60cc61c87cb68e297c723530ae5c7451d19b",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T21:49:04+00:00",
+          "run_ids": [
+            37069057721
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1626,
+        "title": "fix(udev): host-independent elevation argv (unblocks 2.5.32 Windows check)",
+        "evidence": {
+          "head_sha": "b3a0bbfb3defc8de46f658fadf6c8ee3614547d0",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T22:18:19+00:00",
+          "run_ids": [
+            37071758247
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1631,
+        "title": "fix(process): fork contained children on a process-lifetime thread (#1628)",
+        "evidence": {
+          "head_sha": "2827de040e170a712d08590fd4aef61f4ef135fb",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T23:55:00+00:00",
+          "run_ids": [
+            37079785949
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1632,
+        "title": "chore(release): bump fbuild to 2.5.33",
+        "evidence": {
+          "head_sha": "a0f4ea924730811c0afda7616b4efe94bd7aaa68",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T00:43:14+00:00",
+          "run_ids": [
+            37083236211
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1634,
+        "title": "Validate setup-soldr exact-main cache policy before v0 promotion",
+        "evidence": {
+          "head_sha": "8b9c31f5a8c0f63f1cbec8f9f09ac353f43cd01d",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T06:00:53+00:00",
+          "run_ids": [
+            37101661379
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1636,
+        "title": "Add source-bound bosn act2 Ubuntu gate in shadow mode",
+        "evidence": {
+          "head_sha": "c14693b5bd06e962415190753bbc3c752fde6540",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T09:21:19+00:00",
+          "run_ids": [
+            37112762596
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1637,
+        "title": "Enforce source-bound Fbuild PR gates",
+        "evidence": {
+          "head_sha": "d962b457cce9ec810cd998de1373e09e8c18c25d",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T10:47:30+00:00",
+          "run_ids": [
+            37117558797
+          ],
+          "cohort_size": 1
+        }
+      }
+    ]
+  },
+  "prs": [
+    {
+      "number": 1605,
+      "title": "fix(esp32): resolve unified toolchain by registry version for pioarduino 53.x/54.x",
+      "head_shas": 4,
+      "failures": 4,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1606,
+      "title": "fix(rp2040): do not infer Bluetooth-only Arduino-Pico libraries when Bluetooth is off",
+      "head_shas": 1,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1608,
+      "title": "refactor(nrf52): apply the GCC 7 registry toolchain fixup as a pure function",
+      "head_shas": 1,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1609,
+      "title": "refactor(ch32v): apply board ISA/ABI as a pure config -> config function",
+      "head_shas": 1,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1610,
+      "title": "refactor(esp8266): apply boards.txt menu props as pure config -> config rules",
+      "head_shas": 2,
+      "failures": 2,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1611,
+      "title": "ci: remove duplicated cache-key-suffix keys from check-ubuntu.yml",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1612,
+      "title": "chore(release): bump fbuild to 2.5.30",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1615,
+      "title": "fix(deploy): wait for timed-out native espflash ops to release the port (#1614)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1618,
+      "title": "fix(deploy): ESP32 deploy spawns the build-resolved esptool",
+      "head_shas": 4,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1619,
+      "title": "fix(serial): clear RTS before DTR at open so attach does not reset ESP chips (#1617)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1620,
+      "title": "chore(release): bump fbuild to 2.5.31",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1622,
+      "title": "feat(linux): install udev rules with an explained cross-distro root prompt",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1625,
+      "title": "chore(release): bump fbuild to 2.5.32",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1626,
+      "title": "fix(udev): host-independent elevation argv (unblocks 2.5.32 Windows check)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1631,
+      "title": "fix(process): fork contained children on a process-lifetime thread (#1628)",
+      "head_shas": 4,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1632,
+      "title": "chore(release): bump fbuild to 2.5.33",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1634,
+      "title": "Validate setup-soldr exact-main cache policy before v0 promotion",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1636,
+      "title": "Add source-bound bosn act2 Ubuntu gate in shadow mode",
+      "head_shas": 3,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": true
+    },
+    {
+      "number": 1637,
+      "title": "Enforce source-bound Fbuild PR gates",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    }
+  ]
+}
