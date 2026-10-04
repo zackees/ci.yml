@@ -51,11 +51,15 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import BinaryIO
 
 from ci_lint.attestations import load_definition as load_attestation_definition
 from ci_lint.attestations import make as make_attestation
 from ci_lint.attestations import strip_trailers as strip_attestation_trailers
 from ci_lint.finding import Finding, Status
+from ci_lint.workflow_replay_config import ReplayConfig, parse_replay
+from ci_lint.workflow_replay_runtime import CheckedCommand, run_checked_command
+from ci_lint.workflow_replay_static import check_replay_static
 from ci_lint.full_run_receipt import FullRunConfig, load_receipt, parse_full_run
 from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
 from ci_lint.gate_trust import TrustConfig, WorkflowFacts, WorkflowJob, check_trust_static, parse_trust
@@ -142,10 +146,25 @@ class GateConfig:
     # GATE-008 (zackees/ci.yml#190): when an attested head may stand in for
     # the remote quick-gate jobs. None: never.
     trust: TrustConfig | None = None
+    replay: ReplayConfig | None = None
 
     @property
     def command(self) -> str:
         return shlex.join(self.run)
+
+
+def _valid_replay_lanes(replay: ReplayConfig | None, lanes: tuple[str, ...],
+                        source: str, findings: list[Finding]) -> bool:
+    if replay is None:
+        return True
+    if all(scope in lanes for job in replay.jobs for scope in job.lanes) and (
+        not lanes or all(job.lanes for job in replay.jobs)
+    ):
+        return True
+    findings.append(Finding(rule="GATE-001", path=source,
+                            message="replay lane mappings must use declared lanes and cover every replay job",
+                            fix="map replay jobs to existing gate lanes"))
+    return False
 
 
 def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findings: list[Finding]) -> GateConfig | None:
@@ -166,13 +185,20 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
     lanes_raw = sub.table_("lanes", required=False)
     full_run_raw = sub.table_("full-run", required=False)
     trust_raw = sub.table_("trust", required=False)
+    replay_raw = sub.table_("replay", required=False)
     sub.finish()
+    replay = (parse_replay(replay_raw, source=source, path=f"{path}.replay", findings=findings)
+              if replay_raw is not None else None)
     trust = (
         parse_trust(trust_raw, path=f"{path}.trust", source=source, findings=findings) if trust_raw is not None else None
     )
     lanes = (
         parse_lanes(lanes_raw, path=f"{path}.lanes", source=source, findings=findings) if lanes_raw is not None else ()
     )
+    if ("replay" in raw and replay is None) or not _valid_replay_lanes(
+        replay, tuple(lane.id for lane in lanes), source, findings
+    ):
+        return None
     full_run = (
         parse_full_run(full_run_raw, path=f"{path}.full-run", source=source, findings=findings)
         if full_run_raw is not None else None
@@ -221,6 +247,7 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
         lanes=lanes,
         full_run=full_run,
         trust=trust,
+        replay=replay,
     )
 
 
@@ -493,16 +520,33 @@ class LaneOutcome:
     log: Path
 
 
-def _run_lane(repo: Path, lane: LaneConfig, key: str, log_dir: Path) -> LaneOutcome:
+def _gate_command(repo: Path, argv: tuple[str, ...], config: GateConfig, head: str, tree: str, *,
+                  lane: str | None = None, env: dict[str, str] | None = None,
+                  stdout: BinaryIO | None = None) -> CheckedCommand:
+    if config.replay is not None and (lane is None or any(lane in job.lanes for job in config.replay.jobs)):
+        return run_checked_command(repo, argv, config.replay, head=head, tree=tree,
+                                   lane=lane, env=env, stdout=stdout)
+    process = subprocess.run(list(argv), cwd=repo, env=env,
+                             stdin=subprocess.DEVNULL if stdout is not None else None,
+                             stdout=stdout, stderr=subprocess.STDOUT if stdout is not None else None, check=False)
+    return CheckedCommand(process.returncode)
+
+
+def _command_error(command: CheckedCommand, output: BinaryIO) -> None:
+    if command.error:
+        output.write((command.error + "\n").encode("utf-8"))
+
+
+def _run_lane(repo: Path, lane: LaneConfig, key: str, log_dir: Path,
+              config: GateConfig, head: str, tree: str) -> LaneOutcome:
     """Run one lane with its output written to a log file, never a pipe
     (PY-003), so concurrent lanes cannot interleave or block on output."""
 
     log = log_dir / f"{lane.id}.log"
     start = time.monotonic()
     with open(log, "wb") as fh:
-        proc = subprocess.run(
-            list(lane.run), cwd=repo, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT, check=False
-        )
+        proc = _gate_command(repo, lane.run, config, head, tree, lane=lane.id, stdout=fh)
+        _command_error(proc, fh)
     return LaneOutcome(lane, key, proc.returncode, int(round(time.monotonic() - start)), log)
 
 
@@ -512,13 +556,14 @@ class _Pending:
     key: str
 
 
-def _heavy_chain(repo: Path, chain: list[_Pending], log_dir: Path) -> list[LaneOutcome]:
+def _heavy_chain(repo: Path, chain: list[_Pending], log_dir: Path,
+                 config: GateConfig, head: str, tree: str) -> list[LaneOutcome]:
     """Heavy lanes one at a time, in declared order; stop at the first failure."""
 
     out: list[LaneOutcome] = []
     for item in chain:
         print(f"local-gate: lane {item.lane.id}: started (heavy)", file=sys.stderr, flush=True)
-        outcome = _run_lane(repo, item.lane, item.key, log_dir)
+        outcome = _run_lane(repo, item.lane, item.key, log_dir, config, head, tree)
         _report(outcome)
         out.append(outcome)
         if outcome.exit_code != 0 and not _not_applicable(outcome):
@@ -570,8 +615,8 @@ def _execute_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, re
     start = time.monotonic()
     try:
         with open(log, "wb") as fh:
-            proc = subprocess.run(list(config.run), cwd=repo, env=env, stdin=subprocess.DEVNULL,
-                                  stdout=fh, stderr=subprocess.STDOUT, check=False)
+            proc = _gate_command(repo, config.run, config, head, tree, env=env, stdout=fh)
+            _command_error(proc, fh)
     except OSError as exc:
         print(f"local-gate: full run could not start: {exc}", file=sys.stderr)
         return LaneRun(2, [], 0)
@@ -646,8 +691,8 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
         futures = []
         for p in light:
             print(f"local-gate: lane {p.lane.id}: started (light)", file=sys.stderr, flush=True)
-            futures.append(pool.submit(_run_lane, repo, p.lane, p.key, log_dir))
-        chain = pool.submit(_heavy_chain, repo, heavy, log_dir) if heavy else None
+            futures.append(pool.submit(_run_lane, repo, p.lane, p.key, log_dir, config, head, tree))
+        chain = pool.submit(_heavy_chain, repo, heavy, log_dir, config, head, tree) if heavy else None
         for future in as_completed(futures):
             outcome = future.result()
             _report(outcome)
@@ -685,6 +730,15 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
     return LaneRun(0, provenance, spent, tuple(passed))
 
 
+def _replay_coverage_problem(config: GateConfig, repo: Path) -> str | None:
+    if config.replay is None:
+        return None
+    findings = check_replay_static(config.replay, repo)
+    if not findings:
+        return None
+    return "local-gate run: replay coverage is unproven:\n  " + "\n  ".join(item.message for item in findings)
+
+
 def run_gate(  # noqa: C901
     repo: Path, config: GateConfig, *, stamp: bool = True, force: bool = False, use_cache: bool = True
 ) -> RunOutcome:
@@ -699,6 +753,9 @@ def run_gate(  # noqa: C901
             "local-gate run: tracked files have uncommitted changes; the gate attests a commit's tree, "
             "so commit (or stash) them first:\n  " + "\n  ".join(dirty[:20]),
         )
+    replay_problem = _replay_coverage_problem(config, repo)
+    if replay_problem:
+        return RunOutcome(1, replay_problem)
     if not force and check_commit(repo, head).state == "attested":
         return RunOutcome(0, f"local-gate run: HEAD {head[:12]} is already attested for its tree", head)
     tree = tree_of(repo, head)
@@ -719,7 +776,9 @@ def run_gate(  # noqa: C901
         )
     print(f"local-gate run: {config.command}", file=sys.stderr, flush=True)
     start = time.monotonic()
-    proc = subprocess.run(list(config.run), cwd=repo, check=False)
+    proc = _gate_command(repo, config.run, config, head, tree)
+    if proc.error:
+        print(proc.error, file=sys.stderr)
     secs = int(round(time.monotonic() - start))
     if proc.returncode != 0:
         return RunOutcome(proc.returncode or 1, f"local-gate run: FAILED after {secs}s (exit {proc.returncode})")
@@ -905,6 +964,8 @@ def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:  # 
     from ci_lint.workflow_scan import jobs_of, steps_of  # noqa: PLC0415
 
     findings: list[Finding] = check_isolation(config.isolation, config.run, repo_root, config.source)
+    if config.replay is not None:
+        findings.extend(check_replay_static(config.replay, repo_root))
     findings.extend(_check_attestation_definition(config, repo_root))
     findings.extend(check_lanes_static(config.lanes, config.run, config.source, repo_root))
     wfs = _load_workflows(repo_root)
