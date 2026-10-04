@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ci_lint.finding import Finding, Status
 from ci_lint.workflow_replay_cache_save import approved_cache_save
+from ci_lint.workflow_replay_minimal_skip import classify_minimal_skip
 from ci_lint.workflow_replay_dependencies import check_selection_dependencies
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig
 from ci_lint.workflow_replay_expansion import expand_selection
@@ -28,9 +29,21 @@ def _informational_names(job: dict[str, YamlValue], workflow_defaults: YamlValue
     return tuple(names)
 
 
-def _check_job(declared: DeclaredReplayJob, job: dict[str, YamlValue],
-               path: str, workflow_defaults: YamlValue = None) -> list[Finding]:
+def _check_minimal_skips(declared: DeclaredReplayJob, job: dict[str, YamlValue],
+                         path: str, mode: str) -> list[Finding]:
     findings: list[Finding] = []
+    for name in declared.proof.minimal_skip_steps:
+        classified = classify_minimal_skip(job, name)
+        if mode != "minimal" or classified is None or classified.producer != declared.proof.minimal_mode_step:
+            findings.append(Finding(rule="GATE-001", path=path,
+                                    message=f"minimal exclusion has no matching source guard and producer: {name}",
+                                    fix="declare every selected check; unknown guards cannot waive proof"))
+    return findings
+
+
+def _check_job(declared: DeclaredReplayJob, job: dict[str, YamlValue],
+               path: str, workflow_defaults: YamlValue = None, mode: str = "minimal") -> list[Finding]:
+    findings = _check_minimal_skips(declared, job, path, mode)
     if "uses" in job or "strategy" in job:
         return [Finding(rule="GATE-001", path=path, status=Status.NEEDS_REVIEW,
                         message=f"replay job {declared.source_job} has reusable or matrix coverage",
@@ -129,5 +142,5 @@ def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
             continue
         if "uses" not in job and "strategy" not in job:
             findings.extend(_check_identity(declared, document, job, path, keys))
-        findings.extend(_check_job(declared, job, path, document.get("defaults")))
+        findings.extend(_check_job(declared, job, path, document.get("defaults"), config.mode))
     return findings
