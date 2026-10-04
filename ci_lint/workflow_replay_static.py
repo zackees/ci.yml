@@ -8,7 +8,8 @@ from ci_lint.workflow_replay_cache_save import approved_cache_save, approved_pr_
 from ci_lint.workflow_replay_minimal_skip import classify_minimal_skip
 from ci_lint.workflow_replay_dependencies import check_selection_dependencies
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig
-from ci_lint.workflow_replay_expansion import expand_selection
+from ci_lint.workflow_replay_expansion import ExpandedJob, expand_selection
+from ci_lint.workflow_replay_input_skips import excluded_input_steps
 from ci_lint.workflow_scan import ParsedYamlFile, as_dict, jobs_of, load_workflows, steps_of
 from ci_lint.yaml_io import YamlValue
 
@@ -108,15 +109,27 @@ def _check_identity(declared: DeclaredReplayJob, document: dict[str, YamlValue],
     return []
 
 
-def _expanded_keys(config: ReplayConfig, declared: DeclaredReplayJob,
-                   files: tuple[ParsedYamlFile, ...]) -> tuple[str, ...]:
-    keys: set[str] = set()
+def _expanded_jobs(config: ReplayConfig, declared: DeclaredReplayJob,
+                   files: tuple[ParsedYamlFile, ...]) -> tuple[ExpandedJob, ...]:
+    jobs: list[ExpandedJob] = []
     for selection in config.selections:
         if selection.lane not in declared.lanes:
             continue
         proof = expand_selection(files, selection.workflow or config.workflow, selection.selected_job)
-        keys.update(job.key for job in proof.jobs if job.source_job == declared.source_job)
-    return tuple(sorted(keys))
+        jobs.extend(job for job in proof.jobs if job.source_job == declared.source_job)
+    return tuple(jobs)
+
+
+def _check_input_skips(declared: DeclaredReplayJob, job: dict[str, YamlValue],
+                       expanded: tuple[ExpandedJob, ...], path: str) -> list[Finding]:
+    if not declared.proof.input_skip_steps:
+        return []
+    wanted = set(declared.proof.input_skip_steps)
+    if not expanded or any(not wanted.issubset(excluded_input_steps(job, item.inputs)) for item in expanded):
+        return [Finding(rule="GATE-001", path=path,
+                        message="input exclusions are not proven by every selected caller binding",
+                        fix="require literal empty inputs and finite source guards; unknown expressions cannot waive proof")]
+    return []
 
 
 def _check_pr_selections(config: ReplayConfig) -> list[Finding]:
@@ -143,7 +156,8 @@ def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
     for declared in config.jobs:
         workflow, job_id = declared.source_job.split(":", 1)
         path = f".github/workflows/{workflow}"
-        keys = _expanded_keys(config, declared, files)
+        expanded = _expanded_jobs(config, declared, files)
+        keys = tuple(sorted({job.key for job in expanded}))
         if path != config.workflow and len(keys) != 1:
             findings.append(Finding(rule="GATE-001", path=path, status=Status.NEEDS_REVIEW,
                                     message="replay job belongs to another workflow; entrypoint reachability is unproven",
@@ -169,4 +183,5 @@ def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
         if "uses" not in job and "strategy" not in job:
             findings.extend(_check_identity(declared, document, job, path, keys))
         findings.extend(_check_job(declared, job, path, document.get("defaults"), config.mode))
+        findings.extend(_check_input_skips(declared, job, expanded, path))
     return findings
