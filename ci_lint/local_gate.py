@@ -192,7 +192,7 @@ def parse_gate_table(raw: dict[str, TomlValue], *, path: str, source: str, findi
     if mode not in MODES:
         bad(f"'mode' is {mode!r}", f"set 'mode' to one of {', '.join(MODES)}")
         mode = "enforce"
-    if full_run is not None and (len(lanes) < 2 or any(lane.optional for lane in lanes)):
+    if full_run is not None and sum(not lane.optional for lane in lanes) < 2:
         bad("full-run receipts require at least two non-optional lanes",
             "declare two or more required lanes, or remove [gate.full-run]")
         full_run = None
@@ -581,7 +581,8 @@ def _execute_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, re
         print(f"local-gate: full run FAILED after {secs}s (exit {proc.returncode}); full log: {log}", file=sys.stderr)
         print("\n".join(lines[-150:]), file=sys.stderr, flush=True)
         return LaneRun(proc.returncode or 1, [], secs)
-    loaded = load_receipt(receipt_path, tree=tree, expected_lanes=tuple(lane.id for lane in config.lanes))
+    loaded = load_receipt(receipt_path, tree=tree, expected_lanes=tuple(lane.id for lane in config.lanes),
+                          optional_lanes=tuple(lane.id for lane in config.lanes if lane.optional))
     if loaded.evidence is None:
         print(f"local-gate: full run has no usable lane proof: {loaded.error}; full log: {log}", file=sys.stderr)
         return LaneRun(1, [], secs)
@@ -592,11 +593,14 @@ def _execute_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, re
     proofs = {item.lane: item for item in loaded.evidence.passes}
     cold = {item.lane.id: item for item in pending}
     for item in pending:
-        record(repo, item.lane, item.key, secs=proofs[item.lane.id].secs, head=head, tree=tree)
+        if item.lane.id in proofs:
+            record(repo, item.lane, item.key, secs=proofs[item.lane.id].secs, head=head, tree=tree)
     provenance: list[str] = []
     passed: list[LanePass] = []
     for lane in config.lanes:
-        if lane.id in reused:
+        if lane.id in loaded.evidence.not_applicable:
+            provenance.append(f"{lane.id}:n/a")
+        elif lane.id in reused:
             provenance.append(f"{lane.id}:reused@{reused[lane.id][:12]}")
             passed.append(LanePass(lane.id, reused[lane.id], "reused", None))
         else:

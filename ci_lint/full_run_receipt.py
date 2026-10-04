@@ -29,6 +29,7 @@ class ReceiptPass:
 @dataclass(frozen=True)
 class FullRunEvidence:
     passes: tuple[ReceiptPass, ...]
+    not_applicable: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -55,7 +56,8 @@ def parse_full_run(raw: dict[str, TomlValue], *, path: str, source: str,
     return FullRunConfig(min_misses=threshold)
 
 
-def load_receipt(path: Path, *, tree: str, expected_lanes: tuple[str, ...]) -> ReceiptLoad:
+def load_receipt(path: Path, *, tree: str, expected_lanes: tuple[str, ...],
+                 optional_lanes: tuple[str, ...] = ()) -> ReceiptLoad:
     try:
         metadata = path.lstat()
         if not stat.S_ISREG(metadata.st_mode):
@@ -78,6 +80,17 @@ def load_receipt(path: Path, *, tree: str, expected_lanes: tuple[str, ...]) -> R
         if not isinstance(lane, str) or not isinstance(secs, int) or isinstance(secs, bool) or secs < 0:
             return ReceiptLoad(None, "receipt pass needs a lane and nonnegative integer secs")
         passes.append(ReceiptPass(lane, secs))
-    if len(passes) != len(expected_lanes) or {p.lane for p in passes} != set(expected_lanes):
-        return ReceiptLoad(None, "receipt must prove each declared lane exactly once")
-    return ReceiptLoad(FullRunEvidence(tuple(passes)), None)
+    return _account_lanes(tuple(passes), raw.get("not-applicable", []), expected_lanes, optional_lanes)
+
+
+def _account_lanes(passes: tuple[ReceiptPass, ...], absent: JsonValue,
+                   expected_lanes: tuple[str, ...], optional_lanes: tuple[str, ...]) -> ReceiptLoad:
+    if not isinstance(absent, list) or any(not isinstance(lane, str) for lane in absent):
+        return ReceiptLoad(None, "receipt not-applicable must be a list of lane names")
+    unavailable = tuple(lane for lane in absent if isinstance(lane, str))
+    if not set(unavailable) <= set(optional_lanes):
+        return ReceiptLoad(None, "only declared optional lanes may be not applicable")
+    accounted = [p.lane for p in passes] + list(unavailable)
+    if len(accounted) != len(expected_lanes) or set(accounted) != set(expected_lanes):
+        return ReceiptLoad(None, "receipt must account for each declared lane exactly once")
+    return ReceiptLoad(FullRunEvidence(passes, unavailable), None)
