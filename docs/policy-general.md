@@ -78,6 +78,39 @@ A repository with no verified-reuse mechanism that skips default-branch jobs, or
 
 **Decision:** cache only reusable cross-run inputs; per-run outputs (nextest archives, wheels, perf results) are artifacts with short retention, never caches. Base layers (the full `registry`/`deps`/`compile`/`sdk`/`dylint`/`uv` families) are written only by the flows a repository declares as writers in `[cache].write-on` -- normally the default branch and nightly -- because a cache entry saved from a PR ref is unreachable by anything except a re-run of that same PR (GitHub's own documented behavior) and only wastes the repository's 10 GB budget. `CACHE-004` proves the declared families' worst-case footprint (steady state, plus one lockfile-change peak where old and new lockfile-keyed entries briefly coexist, plus the PR delta budget) fits under a declared `[cache].budget`, itself capped at GitHub's 10 GB default; a writer flow can drop the lockfile-peak term from that proof only by setting `pre-prune = true` on *every* writer flow. `CACHE-008`'s do-not-save table (issue #6 §6) and the live `CACHE-001/003/005/006/009` audit close the specific failures the fleet has already hit: a poisoned/empty cache entry that silently re-saves itself (clud's 253-byte Dylint entry, restored as "unusable payload" on 4 of 4 sampled `main` pushes), a base layer saved from a PR ref that nothing can ever restore (setup-soldr#527/#528), and a family re-enabled after being retired (zackees/zccache#1760 -- see "Local CI" below). PR-scoped saves are described in issue #6 §6 as a small, one-generation, capped **delta** over the `main` base, trimmed by the next precheck once a PR closes or merges; that delta mechanism's live behavior (whether a second push actually restores the first push's PR-scoped entry) is still an open, round-0-scoped probe as of this writing, so treat "PR deltas keep an agent's iteration loop warm" as the *design*, not yet a measured guarantee. Cache families must never hold linked test binaries, nextest archives, `incremental/`, or a whole `target/` directory (`[cache].never`; zackees/zccache#1525, soldr#2931-#2938) -- `ci.toml` schema 3 accepts this declaration, and `ci_lint` now classifies a payload's actual contents against it (`CACHE-007`; the live audit's family-must-be-declared gate in `cache save-ok` still covers the declaration side only indirectly, since a `never`-listed family is never declared in `[cache.family]` in the first place). Proven in zackees/ci.yml#20 (the cache runtime: `save-ok`, the live family audit, `trim`/`janitor`/`heal`/`preprune`, PR-delta pack/apply) and zackees/ci.yml#22 (per-job permission grants, the sanctioned `actions/cache*` wrapper, plan-driven cache saves).
 
+### Content-aware checkout merging (upcoming policy, CACHE-028)
+
+**Candidate ([issue #281](https://github.com/zackees/ci.yml/issues/281)):**
+when reusing a verified source baseline alongside warm build caches, materialize
+that baseline first and merge an authoritative staged Git checkout by content.
+Leave byte-identical files with unchanged relevant metadata untouched, retaining
+their actual mtimes. Changed contents must be written with fresh mtimes, including
+same-size changes with equal or backdated checkout timestamps. Reordering a
+build-output cache restore alone is insufficient: it supplies no source baseline.
+
+The completed source inventory, file contents, executable bits and symlink
+targets must match the requested Git tree before building or attesting. Reconcile
+tracked deletions and type changes; protect `.git`, build outputs and cache stores.
+A missing or invalid baseline falls back to the ordinary verified checkout.
+Use an owned writable source materialization; this does not waive `GEN-013`'s
+prohibition on copying onto a read-only restored output tree. Source-cache trust,
+writer provenance and budget requirements continue to apply.
+
+A checksum-based merge with timestamp copying disabled is one implementation
+option. A local probe verified `rsync -rlpc --no-times` preserved identical-file
+inodes and nanosecond mtimes and copied same-size/same-mtime changed contents;
+`rsync -ac` instead copied fresh checkout timestamps onto identical files.
+These flags alone do not implement tracked-inventory reconciliation or Git-tree
+verification. Do not substitute size-only comparison, ignoring existing files,
+or fabricated old timestamps for content correctness. See the
+[official rsync semantics](https://download.samba.org/pub/rsync/rsync.1).
+
+Promotion requires adversarial invalidation tests and a measured net improvement
+on the unchanged complete PR workflow, including checkout/checksum overhead and
+all-feature/all-target Dylint coverage. Full release validation remains required;
+attestations never replace release checks. This is an upcoming contract, with no
+checker enforcement or demonstrated end-to-end speedup yet.
+
 ## Secrets and publishing
 
 **Decision:** publishing is OIDC trusted-publishing only; this fleet's `ci.toml`-driven repositories declare no repository or environment secrets (`[allow].secrets` is empty in the canonical example). The one job allowed `id-token: write` is named `publish`, lives directly in `ci.yml` (a reusable/`workflow_call` workflow cannot be the PyPI trusted publisher -- warehouse#11096), and is bound to an `environment` restricted to the default branch. A template or reference repository never actually publishes: its publish step is a **mock** that requests the real OIDC token, decodes and asserts its claims (`repository`, `ref`, `environment`, `event_name`, the full `workflow_ref`) in-process, and stops before any upload -- the raw token, its `jti`, and its signature segment are never printed, logged, or included in any `--json` output, by construction. Proven in zackees/ci.yml#24 (`ci_lint.publish_oidc`'s mock publisher, `ci_lint.settings_audit`'s live `SEC-005`/`006`/`007` secret/environment/permissions audit, and `ci_lint.release`'s staged release-candidate completeness gate, `PKG-006`).
@@ -460,6 +493,7 @@ The **Status** column below reflects what `ci_lint` actually checks today, verif
 | `CACHE-023` | A cache save whose zstd level ignores its tier (#173): a PR-path save above level 3, or a long-lived default-branch family below the measured remote recommendation. | Candidate |
 | `CACHE-026` | A cache guard that fails the run instead of disabling cache writes: a barrier, budget, pre-prune or freshness step (e.g. a wait on an exact-SHA pre-prune, a projected-peak forecast, `main advanced to <sha>`) that exits non-zero in a build/test workflow, so a cache-governance condition turns every workflow on the SHA red without any test failing. The guard must succeed and expose a `cache_writes` output consumed by every save. Evidence: zackees/zccache, 2026-09-25..10-02, ~93 of the last 100 failed `main` push runs failed only in `Cache pre-prune barrier / Wait for exact-SHA cache pre-prune` (push pass rate 53%); zackees/soldr's `Cache Budget` workflow: 53 of its 7-day failures. | Candidate |
 | `CACHE-027` | A cache family that PR runs restore but no `push`/default-branch run ever saves, so every PR starts cold (mimalloc-pprof zccache hit rate 0.0%, run 36809571898; llvm-ld Windows 0/1791 hits, run 36867883784, zackees/llvm-ld#72). Live evidence: the family has no default-branch entry while PR restores keep missing; fix by saving it from a main push (or the PR-scoped `pr-<N>` key, CACHE-013) or dropping the restore. | Candidate |
+| `CACHE-028` | A source-baseline reuse path rewrites byte-identical tracked build inputs or copies fresh checkout timestamps onto them, or preserves old timestamps for changed contents. Merge the authoritative staged checkout by content into an owned writable baseline; verify the resulting Git tree, metadata and tracked inventory, preserve fresh invalidation for changes, and measure full-workflow net benefit before adoption. See [issue #281](https://github.com/zackees/ci.yml/issues/281) and "Content-aware checkout merging" above. | Candidate |
 | `GHAPI-001` | Machine-local CI tooling (a skill, tool, watcher, lander or `ci/` script) re-reads a GitHub collection it already holds without a time or cursor bound, or bypasses the per-machine broker (#224). Incremental re-queries bounded by the cache's high-water mark (`since=`, `created>=`/`updated` filters, stop-at-cached pagination, `If-Modified-Since`/`If-None-Match`) are allowed; unbounded re-fetches, uncached terminal state, and per-process caches that are not shared across the machine are violations. | Enforced by ci-lint (static precheck, `precheck` group 19: unbounded GitHub re-read loops and gh watch loops in `run:`, `ci/` and skill/tool scripts); the broker-bypass and machine-shared-cache clauses are candidate until the broker ships (zackees/clud#1743) |
 
 An exception must name the repository, rule ID, reason, owner, compensating coverage, and review date. The documented Soldr dependency cycle in `zackees/running-process` is an example to evaluate for an exception. Exceptions are reviewed when their date arrives or the dependency changes; they do not erase historical findings. `ci.toml`'s `[[exceptions]]` array implements this mechanically for a `ci_lint`-checked repository (`rule`, `path`, `reason`, `issue`, `expires` -- `CT-005` fails an expired entry).
