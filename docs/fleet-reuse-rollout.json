@@ -468,7 +468,7 @@
     {
       "repo": "zackees/clud",
       "pr": 1799,
-      "state": "open (CI running)",
+      "state": "MERGED (be8276d)",
       "skips": [
         "static-checks",
         "lint-linux-x64",
@@ -478,15 +478,38 @@
         "dylint",
         "build-linux-x64"
       ],
-      "rationale": "strategy (i): skip validation, keep the cache writers. Drives the skip_* outputs CI OK already understands (GATE-008/010), so CI OK needed no change.",
       "max_age_hours": 12,
       "nightly": false,
-      "nightly_omitted_because": "net -10 to -55 runner-min/day at 1.63 pushes/day; drift bounded by --max-age-hours 12 plus live per-run re-verification instead."
+      "measured": "14.9 runner-min per main push, 7.1 (48%) skippable; 42.5-60% reuse rate",
+      "note": "Drove the skip_* outputs CI OK already understood (GATE-008/010), so CI OK needed no change. No nightly: it would cost 3-12x what it saves at 1.63 pushes/day."
+    },
+    {
+      "repo": "zackees/template-python-rust-cmd",
+      "pr": 66,
+      "state": "open (CI running)",
+      "skips": [
+        "fast"
+      ],
+      "keeps_running": [
+        "dylint",
+        "platform-build",
+        "platform-run",
+        "release-*"
+      ],
+      "max_age_hours": 24,
+      "nightly": true,
+      "note": "The fleet reference; also pins ci-lint at a commit carrying the reuse schema, and its own CT-001/CT-004 drift checks caught the stale pin."
     }
   ],
   "tooling_prereqs": {
     "ci.yml#308": "[reuse.default-branch] schema + ci-lint gate --default-branch-reuse (merged)",
     "ci.yml#310": "promotion on the first verified merge; DEFAULT_MIN_RUNS 100 -> 1 (merged)",
     "ci.yml#311": "gate now matches plan-derived matrix lane display names (merged)"
+  },
+  "result": {
+    "adopted_now": 2,
+    "repos_listed": 34,
+    "still_blocked": 32,
+    "blocker": "no CI-OK aggregator, so no consumer; ci-lint gate IS that aggregator"
   }
 }
