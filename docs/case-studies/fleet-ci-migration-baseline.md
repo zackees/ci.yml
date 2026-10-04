@@ -1487,13 +1487,44 @@ Clud is the next migration by measured PR volume and remaining shadow
 proof enforcement. Seven adversarial receipt cases reproduced acceptance
 of an incorrect engine/workspace, old act2, and Boolean schema/exit metadata.
 The fast static workflow established RED (7 failed, 3 passed in 0.37 s);
-a stricter candidate passed all 10 tests. Complete gate validation and
-publication are still pending. The first isolated unit attempt compiled
+a stricter candidate passed all 10 tests. Five further adversarial cases
+then reproduced acceptance of non-`Main` execution sections and a Boolean
+malformed-line count. The repaired static replay passed all 15 tests and
+lint. The first isolated unit attempt compiled
 successfully but failed all three stock artifact downloads before pytest.
 Focused released-act2 reproductions passed plain, reusable, and large
 216 MB uncompressed reusable/composite transfers with three matching
 checksums; the original cause remains unknown. A smaller composite run
 passed transfers but failed Docker cleanup and is not a gate success.
 Clud's initial build restored 637.1 MB yet reported 1 compiler-unit hit /
-450 misses: archive presence is not proof of compile reuse. A successful
-warm comparison is still required; whole-target caching remains disabled.
+450 misses: archive presence is not proof of compile reuse.
+
+[Clud PR #1797](https://github.com/zackees/clud/pull/1797) contains the
+validated proof hardening and isolated uv launchers. Released Bosn 0.1.12 /
+act2.3 executed source `6337c0d338bf4d750ec14aaffae62a55944b38e2` in full run
+`2e07ed6d-f3cc-4df8-b37b-7dc528374462`: all five routine lanes and `CI OK`
+passed, act exited zero, and engine cleanup completed. The gate took
+1,192 s and stamped head `766333bcf83fa82217dfcaf01daea3d335b3b968`; both
+commits have tree `6852d8b753e7011b17692535f790128267853a1b`. All seven
+`Ci-Attestation:` trailers were written and `check-push` passed. The full
+run included workspace, Windows MSVC and Apple arm64 Dylint checks,
+Clippy/doc-tests, wheel/bundle packaging, all three artifact downloads and
+unit shards (4,005 primary Rust passes / nine ignored; 1,686 Python passes /
+209 skips). Cross-target lint is not native-platform test execution.
+
+An earlier full replay lost its Dylint daemon connection before the unit
+lanes ran. A focused Dylint retry passed every target in 714 s, and a
+focused unit retry passed all three downloads and shards in 568 s. The
+reset did not recur in the repaired full replay; its cause remains unknown.
+This establishes successful proof, not a fast local build or a 100% fleet
+pass rate. Clud's gate enforcement remains shadow during this rollout.
+
+Compiler reuse still needs a repair. All 165 distinct missing context keys
+from the failed Dylint replay appeared unchanged as misses in the repaired
+replay. The successful intervening focused run skipped its build-cache save
+on an immutable exact hit. This proves stable repeated local identities for
+that sample, not equivalence with hosted-runner paths. A live cache listing
+held 10.56 GiB with old and current lockfile generations coexisting. A
+separate Clippy writer must fit the budget before replacing its current
+read-only shared build namespace. Whole-target caching remains disabled;
+the successful PR and main runs remain prerequisites for promotion.
