@@ -1333,3 +1333,44 @@ not a local simulation or a trailer-presence count. Full labels, changed
 gate surfaces, untrusted authors, audit samples and non-PR events retain
 the required remote checks. Native/cross-target Dylint findings remain
 open in #1306; the fleet-wide 100% target is not yet achieved.
+
+### Thirty-day rate refresh and next migration (2026-10-03)
+
+A fresh live `local-gate first-pass` inventory covers PRs merged since
+2026-09-03, without a result limit. Fbuild uses `ci-minimal.yml`; the other
+repositories use `ci.yml`. These are historical windows, including work
+before the migrations, not a claim about the current enforced gate alone.
+The requested target remains 100% for new first-head submissions.
+
+| Repository | Strict GATE-004 passes / eligible PRs | Earliest observed head pass/fail/unknown | Trailer-bearing head pass/fail/unknown |
+| --- | --- | --- | --- |
+| FastLED/fbuild | 35/113 (31.0%) | 63/17/55 | 2/0/0 |
+| zackees/bosn | 69/191 (36.1%) | 36/91/71 | 6/0/9 |
+| zackees/clud | 180/402 (44.8%) | 165/68/169 | 4/0/0 |
+| zackees/kernal-api | 87/205 (42.4%) | 82/58/70 | 5/1/2 |
+| zackees/running-process | 36/70 (51.4%) | 25/10/56 | 4/0/0 |
+| zackees/soldr | 126/291 (43.3%) | 125/23/146 | 23/0/3 |
+| zackees/zccache | 118/201 (58.7%) | 150/29/26 | 6/0/0 |
+
+Strict GATE-004 counts exactly one observed head, no failure and no rerun;
+its denominator includes only PRs with a run of the selected workflow.
+Earliest-head evidence also counts missing/incomplete first-head histories
+as unknown, so its denominator differs. A trailer-bearing cohort records
+presence, not validation of the trailer or of executed-source fidelity.
+Unknowns are never folded into passes. The collector's CLI threshold was
+mistakenly supplied as `100` instead of the fractional `1.0`; the table
+uses raw observations and computed rates, not that threshold's verdict.
+
+Bosn is the next source-proof migration: 36 earliest-head passes versus
+91 failures and 71 unknowns. Its current gate and trust policies remain
+shadow, and its stack runner does not prove which checkout ran. A clean
+unchanged Rust workflow replay through published Bosn 0.1.12 / act2.3
+(`ad1cb6b9-da3a-4924-833d-04b489fbaae9`, source `2608692`) succeeded in
+416.836 s with cleanup removed; libtest summaries total 707 passed and
+26 existing ignored cases. Its compiler cache saved 277.5 MB; whole-target
+caching was disabled. The Linux test-tier replay
+`49807abd-1518-4ed7-a1d2-af77ca53c5dc` failed at lint because `cargo fmt`
+was unavailable; Python/Docker tests did not execute. The candidate keeps
+format checks, provisions rustfmt/Clippy and managed compiler-unit reuse,
+and requires exact-source and executed-step receipts. Enforcement is not
+yet promoted: full candidate execution and primary review remain pending.
