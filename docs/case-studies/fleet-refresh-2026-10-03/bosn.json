@@ -1,0 +1,1402 @@
+{
+  "repo": "zackees/bosn",
+  "workflow": "ci.yml",
+  "since": "2026-10-02T00:00:00+00:00",
+  "target": 0.8,
+  "rate": 0.75,
+  "merged_total": 56,
+  "scanned": 56,
+  "without_runs": 0,
+  "limit": 0,
+  "first_head": {
+    "summary": {
+      "passed": 8,
+      "failed": 2,
+      "unknown": 46,
+      "known_rate": 0.8,
+      "coverage": 0.17857142857142858,
+      "attested_passed": 5,
+      "attested_failed": 0,
+      "attested_unknown": 9
+    },
+    "prs": [
+      {
+        "number": 328,
+        "title": "feat(ci): bosn ci runs workflows on a daemon-owned isolated act engine (#323 step 1)",
+        "evidence": {
+          "head_sha": "4c0c255521ed7d32b92edad75485acc1aea09742",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T01:50:54+00:00",
+          "run_ids": [
+            36952870693,
+            36952871451
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 349,
+        "title": "feat: add supervised Act prerequisites and verified container reuse",
+        "evidence": {
+          "head_sha": "020bb43762bd6a45ee7e5fac4083b4ddf5b5f4bf",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T05:56:30+00:00",
+          "run_ids": [
+            36971198767,
+            36971198645
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 360,
+        "title": "fix(setup): a stack that mounts its workspace gets a container per checkout (#359)",
+        "evidence": {
+          "head_sha": "486bb0834cfcb11d65b3ce2a87ff3cb9bb30f045",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T08:06:17+00:00",
+          "run_ids": [
+            36982154027,
+            36982153750
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 363,
+        "title": "fix(run): a dead bosn run client cancels its job; cancel and deadline stop the task in its container (Fixes #357)",
+        "evidence": {
+          "head_sha": "8a166b27b38c9c6a4024598b7cdc03ddb4c5f5c4",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T08:13:55+00:00",
+          "run_ids": [
+            36982871351,
+            36982871395
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 364,
+        "title": "fix(dev-host): hermetic release-guard test, embedded-python rpath, sun_path-safe IPC endpoint",
+        "evidence": {
+          "head_sha": "d44af0b2667039da0e631818b47883276fc3bb83",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T08:41:15+00:00",
+          "run_ids": [
+            36985459109,
+            36985458749
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 366,
+        "title": "fix(setup): sibling checkouts never share or adopt a setup container; show the verified workspace (#314)",
+        "evidence": {
+          "head_sha": "a5821f52ca2a3345e7da16e9169686257b567710",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T08:59:51+00:00",
+          "run_ids": [
+            36987224647
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 367,
+        "title": "ci: local gate first (GATE-001..007) in shadow; isolated test suites; verify supersedes GEN-021 (#361 phase 1)",
+        "evidence": {
+          "head_sha": "47f2d78d007f56696b58230691b7c61781c10c92",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": true,
+          "created_at": "2026-10-02T09:02:15+00:00",
+          "run_ids": [
+            36987460148
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 368,
+        "title": "ci: per-gate attestations, trusted skips in shadow, attestation side entries (#361 phase 2)",
+        "evidence": {
+          "head_sha": "3e5372136bd9da8462f58ac65fd485d42bbf7fd7",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": true,
+          "created_at": "2026-10-02T09:09:17+00:00",
+          "run_ids": [
+            36988140826,
+            36988140887
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 370,
+        "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+        "evidence": {
+          "head_sha": "6839be632f7054c5879ccc3d302b70d4f1f47f82",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T09:15:00+00:00",
+          "run_ids": [
+            36988687389
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 371,
+        "title": "ci: drop the hand-keyed Swatinem rust-workspace-v1 cache (#361 phase 3)",
+        "evidence": {
+          "head_sha": "ea2d249e1b707064cb3cd241ecc8cce96128f30f",
+          "outcome": "unknown",
+          "reason": "rerun-history",
+          "attested": true,
+          "created_at": "2026-10-02T09:19:27+00:00",
+          "run_ids": [
+            36989112852,
+            36989112883
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 374,
+        "title": "ci: a superseded run never leaves FAILURE required checks (!cancelled() instead of always()) (#373)",
+        "evidence": {
+          "head_sha": "355bfa715d0154389f55a0964778057fe82e4381",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": true,
+          "created_at": "2026-10-02T09:40:39+00:00",
+          "run_ids": [
+            36991154513,
+            36991154238
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 376,
+        "title": "feat(daemon): concurrent runner slots, runner accounting, stall teardown, Docker proxy with cache volumes for act jobs (#358, #369)",
+        "evidence": {
+          "head_sha": "d3c441c4727b34dc29deb4f4aae6f835edd52363",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T10:29:36+00:00",
+          "run_ids": [
+            36995762151
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 377,
+        "title": "Integrate bosn ci (#328\u2013#360) onto #349's owned Act engine layer (#362)",
+        "evidence": {
+          "head_sha": "ccebf6cbd94f635001642720609565b2330f97e9",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": true,
+          "created_at": "2026-10-02T10:33:11+00:00",
+          "run_ids": [
+            36996100147
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 381,
+        "title": "fix(ci): size each run's engine from its host, overridable in config.toml (#379)",
+        "evidence": {
+          "head_sha": "e68520823a8b58c0654dbf57c0eb3e6b9055160f",
+          "outcome": "unknown",
+          "reason": "rerun-history",
+          "attested": true,
+          "created_at": "2026-10-02T11:30:58+00:00",
+          "run_ids": [
+            37001428074,
+            37001428421
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 382,
+        "title": "feat(ci): bosn ci plan --adapter; bosn act plan --adapter is its deprecated spelling (#375)",
+        "evidence": {
+          "head_sha": "f97e5ee78da8a35d30b33b086280e10528a5cece",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": true,
+          "created_at": "2026-10-02T11:35:48+00:00",
+          "run_ids": [
+            37001871989,
+            37001872701
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 384,
+        "title": "fix(publish): the amalgamated crate's unit tests compile; synthetic_for_test is a cfg(test) seam too (#380)",
+        "evidence": {
+          "head_sha": "544f804e5e7a723348d30d6ea3945fbed651d696",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": true,
+          "created_at": "2026-10-02T11:45:10+00:00",
+          "run_ids": [
+            37002731826,
+            37002732395
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 385,
+        "title": "ci(lint): list files without git when the checkout is a worktree in the isolated container",
+        "evidence": {
+          "head_sha": "485e71bb8d67be5899e788cc953a57cd339b752e",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T12:12:09+00:00",
+          "run_ids": [
+            37005285706,
+            37005285959
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 386,
+        "title": "fix(ci): one act acquisition path, pinned and verified in ci::pins (#378)",
+        "evidence": {
+          "head_sha": "644fe46bf7e31db56139e5867f27324ad6dc7c1e",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": true,
+          "created_at": "2026-10-02T12:26:46+00:00",
+          "run_ids": [
+            37006718891,
+            37006718055
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 387,
+        "title": "fix(setup): declared tasks start with umask 0022, not docker exec's 0000 (#365)",
+        "evidence": {
+          "head_sha": "80888e2fb9ab61bb0aa6dc7225659d0c2d4b1316",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T13:55:13+00:00",
+          "run_ids": [
+            37016245039
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 388,
+        "title": "fix(ci): a checkout of another repository pinned to a commit needs no token (#335)",
+        "evidence": {
+          "head_sha": "4bed104ec2d0ca4d635d78d8f521aabf032b7e35",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T13:57:46+00:00",
+          "run_ids": [
+            37016538748
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 389,
+        "title": "fix(setup): a retired generation stops before the next one's task runs (#383)",
+        "evidence": {
+          "head_sha": "114340c172152abc5719368c299e7f1d44c6b8a2",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T14:10:06+00:00",
+          "run_ids": [
+            37017968704
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 390,
+        "title": "fix(service): test app-task coalescing while the job is in flight (#299)",
+        "evidence": {
+          "head_sha": "0dd5e5b15a7801a49abc6f8e46058bc9741da65e",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T14:43:43+00:00",
+          "run_ids": [
+            37021890047,
+            37021888006
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 395,
+        "title": "fix(ci): save tool-cache installs stamped with an inner .complete (#391)",
+        "evidence": {
+          "head_sha": "2f87dc9cff17821e1464bfaf6ca290b7ed33bfa0",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T15:06:45+00:00",
+          "run_ids": [
+            37024647672,
+            37024647931
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 396,
+        "title": "fix(ci): size engine storage for builds; a run on nearly full storage says so (#392)",
+        "evidence": {
+          "head_sha": "73745b7512ca176877eeda08b05da80a1ae4a2ef",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T15:43:40+00:00",
+          "run_ids": [
+            37029000384,
+            37029000854
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 397,
+        "title": "fix(ci): a detached HEAD is a real repository; dirty work is a synthetic commit (#393, #394)",
+        "evidence": {
+          "head_sha": "ff7057ce37f77991dcb1835c7404815acb267703",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T15:51:14+00:00",
+          "run_ids": [
+            37029879614
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 399,
+        "title": "fix(ci): a step's last line without a trailing newline reaches the log (#398)",
+        "evidence": {
+          "head_sha": "6c1d61c3272232faf4e07102f6f81d0abe5b938a",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T16:29:42+00:00",
+          "run_ids": [
+            37034309492,
+            37034308936
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 401,
+        "title": "fix(ci): jobs only GitHub can run are reported remote_only, never a local failure (#400)",
+        "evidence": {
+          "head_sha": "7162056f9505d7d998a467b87fb434a9068fa852",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T17:07:50+00:00",
+          "run_ids": [
+            37038616366
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 407,
+        "title": "fix(ci): a pr run's snapshot carries origin/<base> and history to the merge base (#403)",
+        "evidence": {
+          "head_sha": "aef4855a63b0512aec932dd12da26e1167fd97fa",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T17:55:28+00:00",
+          "run_ids": [
+            37043985367,
+            37043986014
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 408,
+        "title": "release 0.1.7 (#314 fix via #366)",
+        "evidence": {
+          "head_sha": "d54d001eb0993e8c587923704f8c06f6e6c5b045",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T17:57:23+00:00",
+          "run_ids": [
+            37044197084
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 411,
+        "title": "perf(ci): the isolated engine uses the overlayfs snapshotter, not native (#323)",
+        "evidence": {
+          "head_sha": "ac00613bc4140edd9cfba9b2aa3ef738cb71d27f",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T18:43:14+00:00",
+          "run_ids": [
+            37049334338
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 413,
+        "title": "ci: pin ci-lint to zackees/ci.yml@acde655 (CACHE-025 has no exceptions)",
+        "evidence": {
+          "head_sha": "c9eba1d1b66f3c487e8c5ff2f7b15e1c24bfe4fe",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T18:52:14+00:00",
+          "run_ids": [
+            37050344988,
+            37050343394
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 414,
+        "title": "fix(ci): matrix legs are keyed by their matrix values, placed in their job's stage, and unsupported by their own runner (#404)",
+        "evidence": {
+          "head_sha": "54376f59c3a125c96942e7cc61c7d7ce79127851",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T19:01:37+00:00",
+          "run_ids": [
+            37051379563,
+            37051379905
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 415,
+        "title": "feat(widget): adopt kernal-api 0.1.24 window controls; fix the vanishing bubble (#402)",
+        "evidence": {
+          "head_sha": "89ab32ce12a4ca576fa842ad7cd2a99f89609dae",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T19:35:31+00:00",
+          "run_ids": [
+            37055115523
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 416,
+        "title": "feat(widget): a Quit control in the panel, through the daemon (#409)",
+        "evidence": {
+          "head_sha": "fc5f28536d18ae146437dc27bf21b8748211e9f8",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T20:12:38+00:00",
+          "run_ids": [
+            37059098007,
+            37059097813,
+            37059097944,
+            37059097919
+          ],
+          "cohort_size": 4
+        }
+      },
+      {
+        "number": 419,
+        "title": "fix(ci): unnamed run: steps are named as written, without bosn's end-of-output trap (#405)",
+        "evidence": {
+          "head_sha": "c295b5eb56edb9be6e1896587bd90325a69a2dc0",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T20:25:23+00:00",
+          "run_ids": [
+            37060474954
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 420,
+        "title": "fix(runners): finish releases a cache lease's lock even while a forked child holds its fd (#406)",
+        "evidence": {
+          "head_sha": "9add0e637f6d3b27b438be22a5310cb422ee4ba7",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T20:25:44+00:00",
+          "run_ids": [
+            37060512664
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 421,
+        "title": "test(ci): ci::ui backpressure tests prove delivery by ordering, not wall-clock latency (#412, #417)",
+        "evidence": {
+          "head_sha": "cd0d59483e82b0fc66ea9df9f9caf4bc2ba03507",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T20:25:48+00:00",
+          "run_ids": [
+            37060519224,
+            37060519309
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 422,
+        "title": "lint: rustfmt-check the widget crate and guard every Cargo manifest (#418)",
+        "evidence": {
+          "head_sha": "580e66facc59c7157814dd8adb85d0f6fb780fbe",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T20:37:43+00:00",
+          "run_ids": [
+            37061801366,
+            37061801937,
+            37061802240,
+            37061801418
+          ],
+          "cohort_size": 4
+        }
+      },
+      {
+        "number": 423,
+        "title": "perf(ci): keep one prepared spare engine so a run skips engine create and prepare (#410)",
+        "evidence": {
+          "head_sha": "264fc4cad12913aa1eb73e7e59e6b37f8ebe647e",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T20:51:29+00:00",
+          "run_ids": [
+            37063243971,
+            37063244558
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 426,
+        "title": "fix(ci): write workflow rewrites to an overlay, never into the snapshot (#424)",
+        "evidence": {
+          "head_sha": "58837906ef54b630b3fc43ab4ef6be93b2de84b2",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T21:25:03+00:00",
+          "run_ids": [
+            37066704447
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 428,
+        "title": "fix(manifest): a Docker build context keeps each file's execute bit",
+        "evidence": {
+          "head_sha": "4e698e7bd39097c5e9516ce87abef5ce175a872b",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T22:51:51+00:00",
+          "run_ids": [
+            37074724540
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 429,
+        "title": "release 0.1.8 (act2 pin, workflow overlay #424)",
+        "evidence": {
+          "head_sha": "af8cca636f07923b5c784a6b8c8fa941501a910b",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-02T23:09:54+00:00",
+          "run_ids": [
+            37076236056,
+            37076236492
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 431,
+        "title": "fix(ci): back engine storage with a disk volume sized from free disk (#425)",
+        "evidence": {
+          "head_sha": "3797a8f19bef7020873f04015b8f9ed7eb5f8391",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T01:31:20+00:00",
+          "run_ids": [
+            37086412209
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 432,
+        "title": "fix(ci): pass --use-new-action-cache to act unconditionally (ci.yml#213)",
+        "evidence": {
+          "head_sha": "430c2cdb1089df8232480f8a5db48dcbbf258adf",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T01:56:58+00:00",
+          "run_ids": [
+            37088021419
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 433,
+        "title": "ci(release): pretag release gate -- release only an exact main SHA whose full CI is green",
+        "evidence": {
+          "head_sha": "747cf2c9012bb616da06de0b06638006ea81db4b",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T02:01:03+00:00",
+          "run_ids": [
+            37088281996
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 434,
+        "title": "feat(ci): bosn ci run takes --event, --input, --matrix and --env (#430)",
+        "evidence": {
+          "head_sha": "29133fb2107301b0e05f5c272e38f49c93eeb38d",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T02:04:14+00:00",
+          "run_ids": [
+            37088482574
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 435,
+        "title": "release 0.1.9 (act --use-new-action-cache, first pretag-gate release)",
+        "evidence": {
+          "head_sha": "e9b2cf221fd491264d6a4b5f745e4ae694b05c56",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T02:10:34+00:00",
+          "run_ids": [
+            37088865092
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 437,
+        "title": "fix(lint): bring ci/engine.rs back under 1,000 lines",
+        "evidence": {
+          "head_sha": "0d82497b1807bbc37abfd67891a958030650a1ec",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T02:41:09+00:00",
+          "run_ids": [
+            37090653590
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 438,
+        "title": "feat(ci): Pages build jobs run locally; configure-pages becomes a local stub (GATE-012)",
+        "evidence": {
+          "head_sha": "2239775a053b5b9418377ef71f7b4884b48ffa44",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T02:44:27+00:00",
+          "run_ids": [
+            37090844536,
+            37090844830
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 439,
+        "title": "feat(ci): pin act2 v0.2.89-act2.2 (accepts concurrency.queue)",
+        "evidence": {
+          "head_sha": "f09b691863faa2e9a93142dbf8c5cb4d25fd337a",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T03:41:35+00:00",
+          "run_ids": [
+            37094053932,
+            37094053986
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 440,
+        "title": "release 0.1.10",
+        "evidence": {
+          "head_sha": "6131bfa2f8c8e48f412ca7f9e137ea0365569ffa",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T03:52:42+00:00",
+          "run_ids": [
+            37094647260
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 441,
+        "title": "Provide verified PowerShell and gh in the reusable act runner tool cache",
+        "evidence": {
+          "head_sha": "466b1b8d875c0f9859ab85b40bc4643238d130d7",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T04:31:13+00:00",
+          "run_ids": [
+            37096813519
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 442,
+        "title": "release 0.1.11 with stock act runner tools",
+        "evidence": {
+          "head_sha": "d60bafee0f2ca82210d174fbe47ee9926d13d552",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T09:39:50+00:00",
+          "run_ids": [
+            37113804891
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 443,
+        "title": "fix(ci): pin ordinary hosted act2 runner in bosn 0.1.12",
+        "evidence": {
+          "head_sha": "f7babaf47a8af81b67350ce84dfa6443fec137c6",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T15:09:55+00:00",
+          "run_ids": [
+            37132268017
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 446,
+        "title": "fix(widget): lower-right dock-aware widget placement",
+        "evidence": {
+          "head_sha": "5ceadea9cc9ab4b755fc1d45d9c01a611a03e291",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T20:25:01+00:00",
+          "run_ids": [
+            37151454764
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 451,
+        "title": "Enforce complexity ratchets and repair read-only managed builds",
+        "evidence": {
+          "head_sha": "68bfa4f7314cc425b3301dd9f4cc2c5cbc5528ff",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T22:33:52+00:00",
+          "run_ids": [
+            37158874719
+          ],
+          "cohort_size": 1
+        }
+      }
+    ]
+  },
+  "prs": [
+    {
+      "number": 328,
+      "title": "feat(ci): bosn ci runs workflows on a daemon-owned isolated act engine (#323 step 1)",
+      "head_shas": 3,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 349,
+      "title": "feat: add supervised Act prerequisites and verified container reuse",
+      "head_shas": 5,
+      "failures": 4,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 360,
+      "title": "fix(setup): a stack that mounts its workspace gets a container per checkout (#359)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 363,
+      "title": "fix(run): a dead bosn run client cancels its job; cancel and deadline stop the task in its container (Fixes #357)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 364,
+      "title": "fix(dev-host): hermetic release-guard test, embedded-python rpath, sun_path-safe IPC endpoint",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 366,
+      "title": "fix(setup): sibling checkouts never share or adopt a setup container; show the verified workspace (#314)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 367,
+      "title": "ci: local gate first (GATE-001..007) in shadow; isolated test suites; verify supersedes GEN-021 (#361 phase 1)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 368,
+      "title": "ci: per-gate attestations, trusted skips in shadow, attestation side entries (#361 phase 2)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 370,
+      "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 371,
+      "title": "ci: drop the hand-keyed Swatinem rust-workspace-v1 cache (#361 phase 3)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 1,
+      "first_pass": false,
+      "attested": true
+    },
+    {
+      "number": 374,
+      "title": "ci: a superseded run never leaves FAILURE required checks (!cancelled() instead of always()) (#373)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 376,
+      "title": "feat(daemon): concurrent runner slots, runner accounting, stall teardown, Docker proxy with cache volumes for act jobs (#358, #369)",
+      "head_shas": 4,
+      "failures": 2,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": true
+    },
+    {
+      "number": 377,
+      "title": "Integrate bosn ci (#328\u2013#360) onto #349's owned Act engine layer (#362)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": true
+    },
+    {
+      "number": 381,
+      "title": "fix(ci): size each run's engine from its host, overridable in config.toml (#379)",
+      "head_shas": 2,
+      "failures": 1,
+      "reruns": 1,
+      "first_pass": false,
+      "attested": true
+    },
+    {
+      "number": 382,
+      "title": "feat(ci): bosn ci plan --adapter; bosn act plan --adapter is its deprecated spelling (#375)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 384,
+      "title": "fix(publish): the amalgamated crate's unit tests compile; synthetic_for_test is a cfg(test) seam too (#380)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 385,
+      "title": "ci(lint): list files without git when the checkout is a worktree in the isolated container",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 386,
+      "title": "fix(ci): one act acquisition path, pinned and verified in ci::pins (#378)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 387,
+      "title": "fix(setup): declared tasks start with umask 0022, not docker exec's 0000 (#365)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 388,
+      "title": "fix(ci): a checkout of another repository pinned to a commit needs no token (#335)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 389,
+      "title": "fix(setup): a retired generation stops before the next one's task runs (#383)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 390,
+      "title": "fix(service): test app-task coalescing while the job is in flight (#299)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 395,
+      "title": "fix(ci): save tool-cache installs stamped with an inner .complete (#391)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 396,
+      "title": "fix(ci): size engine storage for builds; a run on nearly full storage says so (#392)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 397,
+      "title": "fix(ci): a detached HEAD is a real repository; dirty work is a synthetic commit (#393, #394)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 399,
+      "title": "fix(ci): a step's last line without a trailing newline reaches the log (#398)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 401,
+      "title": "fix(ci): jobs only GitHub can run are reported remote_only, never a local failure (#400)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 407,
+      "title": "fix(ci): a pr run's snapshot carries origin/<base> and history to the merge base (#403)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 408,
+      "title": "release 0.1.7 (#314 fix via #366)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 411,
+      "title": "perf(ci): the isolated engine uses the overlayfs snapshotter, not native (#323)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 413,
+      "title": "ci: pin ci-lint to zackees/ci.yml@acde655 (CACHE-025 has no exceptions)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 414,
+      "title": "fix(ci): matrix legs are keyed by their matrix values, placed in their job's stage, and unsupported by their own runner (#404)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 415,
+      "title": "feat(widget): adopt kernal-api 0.1.24 window controls; fix the vanishing bubble (#402)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 416,
+      "title": "feat(widget): a Quit control in the panel, through the daemon (#409)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 419,
+      "title": "fix(ci): unnamed run: steps are named as written, without bosn's end-of-output trap (#405)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 420,
+      "title": "fix(runners): finish releases a cache lease's lock even while a forked child holds its fd (#406)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 421,
+      "title": "test(ci): ci::ui backpressure tests prove delivery by ordering, not wall-clock latency (#412, #417)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 422,
+      "title": "lint: rustfmt-check the widget crate and guard every Cargo manifest (#418)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 423,
+      "title": "perf(ci): keep one prepared spare engine so a run skips engine create and prepare (#410)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 426,
+      "title": "fix(ci): write workflow rewrites to an overlay, never into the snapshot (#424)",
+      "head_shas": 3,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 428,
+      "title": "fix(manifest): a Docker build context keeps each file's execute bit",
+      "head_shas": 3,
+      "failures": 2,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 429,
+      "title": "release 0.1.8 (act2 pin, workflow overlay #424)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 431,
+      "title": "fix(ci): back engine storage with a disk volume sized from free disk (#425)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 432,
+      "title": "fix(ci): pass --use-new-action-cache to act unconditionally (ci.yml#213)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 433,
+      "title": "ci(release): pretag release gate -- release only an exact main SHA whose full CI is green",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 434,
+      "title": "feat(ci): bosn ci run takes --event, --input, --matrix and --env (#430)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 435,
+      "title": "release 0.1.9 (act --use-new-action-cache, first pretag-gate release)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 437,
+      "title": "fix(lint): bring ci/engine.rs back under 1,000 lines",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 438,
+      "title": "feat(ci): Pages build jobs run locally; configure-pages becomes a local stub (GATE-012)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 439,
+      "title": "feat(ci): pin act2 v0.2.89-act2.2 (accepts concurrency.queue)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 440,
+      "title": "release 0.1.10",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 441,
+      "title": "Provide verified PowerShell and gh in the reusable act runner tool cache",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 442,
+      "title": "release 0.1.11 with stock act runner tools",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 443,
+      "title": "fix(ci): pin ordinary hosted act2 runner in bosn 0.1.12",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 446,
+      "title": "fix(widget): lower-right dock-aware widget placement",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 451,
+      "title": "Enforce complexity ratchets and repair read-only managed builds",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": true
+    }
+  ]
+}

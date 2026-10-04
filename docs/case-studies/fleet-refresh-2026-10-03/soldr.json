@@ -1,0 +1,533 @@
+{
+  "repo": "zackees/soldr",
+  "workflow": "ci.yml",
+  "since": "2026-10-02T00:00:00+00:00",
+  "target": 0.8,
+  "rate": 0.9523809523809523,
+  "merged_total": 21,
+  "scanned": 21,
+  "without_runs": 0,
+  "limit": 0,
+  "first_head": {
+    "summary": {
+      "passed": 19,
+      "failed": 0,
+      "unknown": 2,
+      "known_rate": 1.0,
+      "coverage": 0.9047619047619048,
+      "attested_passed": 19,
+      "attested_failed": 0,
+      "attested_unknown": 2
+    },
+    "prs": [
+      {
+        "number": 3529,
+        "title": "ci(local-gate): GATE-007 lane cache -- skip unchanged lanes locally; PY-002/PY-003 ratchets (zackees/ci.yml#177)",
+        "evidence": {
+          "head_sha": "9ed7e3be20728f2f0f81fa01ef1ee49d3dafcfe9",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T02:09:04+00:00",
+          "run_ids": [
+            36954283026
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3531,
+        "title": "ci: GATE-008 pilot -- attested PRs skip the remote Lint and Linux x64 jobs (zackees/ci.yml#190)",
+        "evidence": {
+          "head_sha": "b44cde97b2c0710aafb6cb0997dd6c4133d147d4",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T04:56:19+00:00",
+          "run_ids": [
+            36966724664
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3532,
+        "title": "perf(tests): fixtures skip the toolchain-catalogue fetch -- 5.2 s -> 0.17 s per cargo_front_door test on CI (#3530)",
+        "evidence": {
+          "head_sha": "18204251ce91e0f7848e4bd1a206d545f4d23a9d",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T05:26:55+00:00",
+          "run_ids": [
+            36968971508
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3536,
+        "title": "ci: bump ci_lint to efbd8b1 -- PY-002 covers parameters/variables of complex types",
+        "evidence": {
+          "head_sha": "6a3dfe3f549343ff5d787c8a18b96e2c70640163",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T06:24:40+00:00",
+          "run_ids": [
+            36973411654
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3537,
+        "title": "ci: ci-attestations phase 1 -- per-job skips from per-gate commit attestations; lineage-keyed side entries (zackees/ci.yml#198)",
+        "evidence": {
+          "head_sha": "b5d260ebb6fdf24711804ffceaab1518df22e8f1",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T07:48:09+00:00",
+          "run_ids": [
+            36980492325
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3541,
+        "title": "fix(platform): Windows clippy -D warnings -- test-only items are cfg(test), drop an unused import",
+        "evidence": {
+          "head_sha": "59fd7786bc033fab4842911f3a9fe108c74649da",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T08:12:29+00:00",
+          "run_ids": [
+            36982737043
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3542,
+        "title": "fix: NixOS gcc-only hosts link through the host cc; a project's .cargo config dir is never CARGO_HOME",
+        "evidence": {
+          "head_sha": "351d79a355f6826ecbbd7e711d34b4838096be4f",
+          "outcome": "unknown",
+          "reason": "unresolved-conclusion",
+          "attested": true,
+          "created_at": "2026-10-02T09:47:16+00:00",
+          "run_ids": [
+            36991789287,
+            36991789704
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 3543,
+        "title": "ci: comply with the Swatinem/rust-cache ban (CACHE-025, zackees/ci.yml#209)",
+        "evidence": {
+          "head_sha": "39bde8ec267bcd4230fb105fd5c1cc0f731d7619",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T09:50:01+00:00",
+          "run_ids": [
+            36992046043
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3544,
+        "title": "release: soldr 0.9.28",
+        "evidence": {
+          "head_sha": "47d7a9890b92997978a39083e6b6aef005af060e",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T10:40:45+00:00",
+          "run_ids": [
+            36996793101
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3546,
+        "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+        "evidence": {
+          "head_sha": "fe1ba341c54cc9b33be52906a6fe5a30fe70a61b",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T13:10:51+00:00",
+          "run_ids": [
+            37011286266
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3547,
+        "title": "ci: drop the last Swatinem/rust-cache steps -- CACHE-025 has no exceptions",
+        "evidence": {
+          "head_sha": "f9aa8ef58dcd18d2083e205a1847433bde5692ad",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T18:27:01+00:00",
+          "run_ids": [
+            37047503201
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3548,
+        "title": "ci: ci-attestations phases 2-3 -- cross-target lint, Wine and Windows-VM test lanes, proven isolation (zackees/ci.yml#198, #202, #196)",
+        "evidence": {
+          "head_sha": "2fb2e95acaf564e8c9bf1a6d6f3ae0c07e5f33af",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T20:12:21+00:00",
+          "run_ids": [
+            37059064586
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3549,
+        "title": "ci: hydrate the Tier-2 zccache store from the nearest attested ancestor; lineage-keyed saves (zackees/ci.yml#198 phase 4)",
+        "evidence": {
+          "head_sha": "dd9f5a68258c38ad0e4ab3cb63e658237b18ec05",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T20:28:23+00:00",
+          "run_ids": [
+            37060796297
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3550,
+        "title": "ci: 16 attestation side-entry slots; ci_lint db7ec84 (job-mapped gates first) (zackees/ci.yml#198)",
+        "evidence": {
+          "head_sha": "ce52828df0b2162a82947498553c237853a31110",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-02T21:34:41+00:00",
+          "run_ids": [
+            37067659066
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3551,
+        "title": "release: soldr 0.9.29 (zccache =1.15.1)",
+        "evidence": {
+          "head_sha": "496756448c48d858d08595b6c27f0520760d1714",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T00:38:34+00:00",
+          "run_ids": [
+            37082912925
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3552,
+        "title": "lint: adopt the function-complexity ratchet (RUST-018, PY-004; zackees/ci.yml#229)",
+        "evidence": {
+          "head_sha": "03cbffed49f8c1049ef58b76b70bc48268a64d21",
+          "outcome": "unknown",
+          "reason": "rerun-history",
+          "attested": true,
+          "created_at": "2026-10-03T04:06:59+00:00",
+          "run_ids": [
+            37095460945,
+            37095460729
+          ],
+          "cohort_size": 2
+        }
+      },
+      {
+        "number": 3553,
+        "title": "refactor(cli): split run_cli into per-family dispatchers and per-subcommand handlers (zackees/ci.yml#229)",
+        "evidence": {
+          "head_sha": "bb0a1c5ae8b1738a1bc593b87d4fc15fc06eba64",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T04:45:38+00:00",
+          "run_ids": [
+            37097607541
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3554,
+        "title": "refactor(cargo front door): split run_cargo_front_door into phases (zackees/ci.yml#229)",
+        "evidence": {
+          "head_sha": "ab04fb6064ec21f54bf91916607837669a90b327",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T05:33:16+00:00",
+          "run_ids": [
+            37100192395
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3555,
+        "title": "ci: declare GATE-011 fidelity for wine/winvm gates; bump ci_lint to 95b23ea",
+        "evidence": {
+          "head_sha": "32337453c1fe575bea6e3c03e703abf50754ef64",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T07:05:16+00:00",
+          "run_ids": [
+            37105178350
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3559,
+        "title": "Publish trusted merged PR attestation evidence on main",
+        "evidence": {
+          "head_sha": "e6e019d8b047f90a803c161259b6738d93539422",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T20:55:18+00:00",
+          "run_ids": [
+            37153261616
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 3560,
+        "title": "Guard attestation cache slot payload and lineage key alignment",
+        "evidence": {
+          "head_sha": "d96ea2a410376c207fb74db64804143d4bbf7cad",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T21:17:12+00:00",
+          "run_ids": [
+            37154566451
+          ],
+          "cohort_size": 1
+        }
+      }
+    ]
+  },
+  "prs": [
+    {
+      "number": 3529,
+      "title": "ci(local-gate): GATE-007 lane cache -- skip unchanged lanes locally; PY-002/PY-003 ratchets (zackees/ci.yml#177)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3531,
+      "title": "ci: GATE-008 pilot -- attested PRs skip the remote Lint and Linux x64 jobs (zackees/ci.yml#190)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3532,
+      "title": "perf(tests): fixtures skip the toolchain-catalogue fetch -- 5.2 s -> 0.17 s per cargo_front_door test on CI (#3530)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3536,
+      "title": "ci: bump ci_lint to efbd8b1 -- PY-002 covers parameters/variables of complex types",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3537,
+      "title": "ci: ci-attestations phase 1 -- per-job skips from per-gate commit attestations; lineage-keyed side entries (zackees/ci.yml#198)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3541,
+      "title": "fix(platform): Windows clippy -D warnings -- test-only items are cfg(test), drop an unused import",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3542,
+      "title": "fix: NixOS gcc-only hosts link through the host cc; a project's .cargo config dir is never CARGO_HOME",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3543,
+      "title": "ci: comply with the Swatinem/rust-cache ban (CACHE-025, zackees/ci.yml#209)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3544,
+      "title": "release: soldr 0.9.28",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3546,
+      "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3547,
+      "title": "ci: drop the last Swatinem/rust-cache steps -- CACHE-025 has no exceptions",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3548,
+      "title": "ci: ci-attestations phases 2-3 -- cross-target lint, Wine and Windows-VM test lanes, proven isolation (zackees/ci.yml#198, #202, #196)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3549,
+      "title": "ci: hydrate the Tier-2 zccache store from the nearest attested ancestor; lineage-keyed saves (zackees/ci.yml#198 phase 4)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3550,
+      "title": "ci: 16 attestation side-entry slots; ci_lint db7ec84 (job-mapped gates first) (zackees/ci.yml#198)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3551,
+      "title": "release: soldr 0.9.29 (zccache =1.15.1)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3552,
+      "title": "lint: adopt the function-complexity ratchet (RUST-018, PY-004; zackees/ci.yml#229)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 1,
+      "first_pass": false,
+      "attested": true
+    },
+    {
+      "number": 3553,
+      "title": "refactor(cli): split run_cli into per-family dispatchers and per-subcommand handlers (zackees/ci.yml#229)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3554,
+      "title": "refactor(cargo front door): split run_cargo_front_door into phases (zackees/ci.yml#229)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3555,
+      "title": "ci: declare GATE-011 fidelity for wine/winvm gates; bump ci_lint to 95b23ea",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3559,
+      "title": "Publish trusted merged PR attestation evidence on main",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 3560,
+      "title": "Guard attestation cache slot payload and lineage key alignment",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    }
+  ]
+}

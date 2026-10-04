@@ -1,0 +1,435 @@
+{
+  "repo": "zackees/zccache",
+  "workflow": "ci.yml",
+  "since": "2026-10-02T00:00:00+00:00",
+  "target": 0.8,
+  "rate": 0.7058823529411765,
+  "merged_total": 17,
+  "scanned": 17,
+  "without_runs": 0,
+  "limit": 0,
+  "first_head": {
+    "summary": {
+      "passed": 16,
+      "failed": 1,
+      "unknown": 0,
+      "known_rate": 0.9411764705882353,
+      "coverage": 1.0,
+      "attested_passed": 6,
+      "attested_failed": 0,
+      "attested_unknown": 0
+    },
+    "prs": [
+      {
+        "number": 1866,
+        "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+        "evidence": {
+          "head_sha": "95531ecfd59c8c546fc139e32e452a45b32ef97d",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T09:15:09+00:00",
+          "run_ids": [
+            36988703317
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1868,
+        "title": "fix(ci): x86 Test keeps its own warm test-profile store (#1867)",
+        "evidence": {
+          "head_sha": "fc3b571013d7b4a68cb4fc0700f2620007c90cf1",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T15:59:26+00:00",
+          "run_ids": [
+            37030824615
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1871,
+        "title": "ci: pass job.status to every setup-soldr step (setup-soldr#559)",
+        "evidence": {
+          "head_sha": "833b3887b7c85e27eda6648f2a12aaf90884880e",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T18:38:08+00:00",
+          "run_ids": [
+            37048761976
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1872,
+        "title": "feat(embedded): request-scoped --test harness admission, observable (#1550)",
+        "evidence": {
+          "head_sha": "af22491afd7b5f7633d850d10079e8c4fc119c6a",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T20:26:05+00:00",
+          "run_ids": [
+            37060548306
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1873,
+        "title": "ci: admit --test harness links in Linux x64 Build test binaries (#1550)",
+        "evidence": {
+          "head_sha": "4c271bbb94238a5e6094b829481a2e5e70e979a1",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T20:55:30+00:00",
+          "run_ids": [
+            37063666109
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1874,
+        "title": "chore(release): bump 1.15.0 -> 1.15.1",
+        "evidence": {
+          "head_sha": "ec150184842b19a800713499b27ce0822bc81d4e",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T21:14:04+00:00",
+          "run_ids": [
+            37065595829
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1876,
+        "title": "fix(ci): retire same-lock soldr generations; a failed pre-prune no longer blocks cleanup (#1875)",
+        "evidence": {
+          "head_sha": "a67f9a0e6cc17a1efa6c090c0f0dea6c8e089425",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T21:35:56+00:00",
+          "run_ids": [
+            37067785972
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1877,
+        "title": "ci(cache): per-family one-generation budgets in the cache-budget check (#1875)",
+        "evidence": {
+          "head_sha": "917b768ce5937f53d4e3ac80ddac3ec992af3314",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-02T21:54:22+00:00",
+          "run_ids": [
+            37069551455
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1880,
+        "title": "ci(cache): release builds save no Actions cache; retire the 1.15.1 release entries",
+        "evidence": {
+          "head_sha": "b43ebc7e98c9f96d8ff4e6b0b62b3ae2ab5194f0",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T00:12:10+00:00",
+          "run_ids": [
+            37081048161
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1881,
+        "title": "ci: local gate + per-gate attestations (GATE-001..010)",
+        "evidence": {
+          "head_sha": "46e77f0d1514b1ef87eef5bd2519420f9ef1fa75",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": false,
+          "created_at": "2026-10-03T03:42:40+00:00",
+          "run_ids": [
+            37094114849
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1882,
+        "title": "test(release): detect-bump stubs win over a BASH_ENV PATH shim",
+        "evidence": {
+          "head_sha": "8cbc13b268f10e5fe202960647ad9f28fada622f",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T04:08:32+00:00",
+          "run_ids": [
+            37095547184
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1883,
+        "title": "ci(local-gate): per-worktree soldr home in the gate container",
+        "evidence": {
+          "head_sha": "cdc3d85fd2bbe88c2bc250f565d72f0254aa50dc",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T04:38:38+00:00",
+          "run_ids": [
+            37097218724
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1884,
+        "title": "ci(cache): the pre-prune barrier never fails a job; it gates cache writes",
+        "evidence": {
+          "head_sha": "9d80d96a5fb8a28f6f71b38de28169f7122ad6b5",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T05:06:07+00:00",
+          "run_ids": [
+            37098726819
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1886,
+        "title": "ci: prove isolated MSRV and Integration through Bosn Actions",
+        "evidence": {
+          "head_sha": "36f64f3a16ea36d16083c2fdcb503f449d539c22",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T17:24:32+00:00",
+          "run_ids": [
+            37140388351
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1887,
+        "title": "fix(ape): load Cosmopolitan compilers through kernal-api 0.1.26",
+        "evidence": {
+          "head_sha": "545804a362cddfbd6e45288940e6da386df90971",
+          "outcome": "fail",
+          "reason": "failed-conclusion",
+          "attested": false,
+          "created_at": "2026-10-03T18:24:48+00:00",
+          "run_ids": [
+            37144092351
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1888,
+        "title": "ci(cache): preserve local automatic saves and guard remote writes",
+        "evidence": {
+          "head_sha": "10fb3bb1d4c988e9bbb04bc77e66e6ccb89319ec",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T18:58:29+00:00",
+          "run_ids": [
+            37146203716
+          ],
+          "cohort_size": 1
+        }
+      },
+      {
+        "number": 1889,
+        "title": "ci: keep Integration's isolated compile store warm",
+        "evidence": {
+          "head_sha": "6f2cc5ace3de962746becdb0396d60dc74b00a36",
+          "outcome": "pass",
+          "reason": "completed-first-attempt",
+          "attested": true,
+          "created_at": "2026-10-03T21:19:28+00:00",
+          "run_ids": [
+            37154697739
+          ],
+          "cohort_size": 1
+        }
+      }
+    ]
+  },
+  "prs": [
+    {
+      "number": 1866,
+      "title": "chore: suppress CodeRabbit per fleet policy GATE-012",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1868,
+      "title": "fix(ci): x86 Test keeps its own warm test-profile store (#1867)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1871,
+      "title": "ci: pass job.status to every setup-soldr step (setup-soldr#559)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1872,
+      "title": "feat(embedded): request-scoped --test harness admission, observable (#1550)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1873,
+      "title": "ci: admit --test harness links in Linux x64 Build test binaries (#1550)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1874,
+      "title": "chore(release): bump 1.15.0 -> 1.15.1",
+      "head_shas": 3,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1876,
+      "title": "fix(ci): retire same-lock soldr generations; a failed pre-prune no longer blocks cleanup (#1875)",
+      "head_shas": 2,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": false
+    },
+    {
+      "number": 1877,
+      "title": "ci(cache): per-family one-generation budgets in the cache-budget check (#1875)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1880,
+      "title": "ci(cache): release builds save no Actions cache; retire the 1.15.1 release entries",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1881,
+      "title": "ci: local gate + per-gate attestations (GATE-001..010)",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": false
+    },
+    {
+      "number": 1882,
+      "title": "test(release): detect-bump stubs win over a BASH_ENV PATH shim",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1883,
+      "title": "ci(local-gate): per-worktree soldr home in the gate container",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1884,
+      "title": "ci(cache): the pre-prune barrier never fails a job; it gates cache writes",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1886,
+      "title": "ci: prove isolated MSRV and Integration through Bosn Actions",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1887,
+      "title": "fix(ape): load Cosmopolitan compilers through kernal-api 0.1.26",
+      "head_shas": 2,
+      "failures": 1,
+      "reruns": 0,
+      "first_pass": false,
+      "attested": true
+    },
+    {
+      "number": 1888,
+      "title": "ci(cache): preserve local automatic saves and guard remote writes",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    },
+    {
+      "number": 1889,
+      "title": "ci: keep Integration's isolated compile store warm",
+      "head_shas": 1,
+      "failures": 0,
+      "reruns": 0,
+      "first_pass": true,
+      "attested": true
+    }
+  ]
+}
