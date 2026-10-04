@@ -1421,3 +1421,42 @@ no command-style mirrors are declared. These lanes replay the existing
 remote commands with executed-step validation; declaring those same jobs
 as command-style mirrors would recurse through Bosn. This finding is
 explicit and unwaived. The first-head 100% fleet target remains open.
+
+
+### Bosn enforcement and warm compiler reuse (2026-10-04)
+
+[Bosn PR #464](https://github.com/zackees/bosn/pull/464) merged at
+`d17877e535b20d52a91fa7f833d2af28fb43ce09`; its first-head CI
+37182063047 passed on attempt 1 and main CI 37182316799 passed.
+[PR #466](https://github.com/zackees/bosn/pull/466) then promoted both gate
+and trust to enforce, merging at `101f0e4c8f4c26223193105f7d91e78e3629a2f6`.
+Its first-head CI 37183096599 passed on attempt 1 and main CI 37183287597
+passed. The promotion PR itself used the base's shadow policy; a later PR
+is still required to prove an actual trusted remote skip.
+
+The promotion's full local gate passed in 571 s on source `6171f60`,
+stamping `fe985c952f0a7a40626569601dd5dd7a4c7248bd` for the same Git tree
+`ceef66aade61a9ae6df35661ddb57eac16d73ce0`. Rust run
+`86436d25-8c8c-47b3-91b7-fd6ee6743f71` passed in 261 s: 709 cases and
+26 existing ignored cases, including the concurrent runner-classification
+fix's tests. Linux run `92d68a5e-7f6f-4230-a9ab-853b0cf5efd7` passed in
+310 s: 257 Python cases with 10 skips in 62.21 s, including Docker and
+clean-wheel tests. Both engines were removed. Linux restored the saved
+695 MB compiler archive, expanding 7,490 files to 2.13 GB in 11.2 s.
+The prior cold Linux run took 536 s and its Python suite 172.66 s; these
+are different source trees, so the comparison is repeat-run evidence,
+not a controlled identical-tree benchmark. Whole-target caches stay off.
+
+Mechanical verifier checks confirmed missing-proof PR refusal, dispatch
+acceptance, trusted mapped skips for an attested in-policy head, and forced
+remote checks for ci-full and push. The default audit sample is retained;
+Linux remains outside the skip mapping. GATE-001's workflow-replay gap is
+tracked, unwaived, in [issue #289](https://github.com/zackees/ci.yml/issues/289).
+
+A README follow-up exposed a local tooling race: nested
+`uv run --no-project --python 3.13` found an ancestor `~/.venv`, selecting
+Bosn 0.1.10 despite the intended 0.1.12 executable on the outer PATH.
+The version guard refused before engine submission. An isolated Python
+run retained the intended 0.1.12 executable; the candidate now adds
+`--isolated` consistently to the gate and all lane commands. Its full
+committed-source validation and publication remain pending.
