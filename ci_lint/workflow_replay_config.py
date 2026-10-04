@@ -23,9 +23,10 @@ class DeclaredReplayJob:
 @dataclass(frozen=True)
 class ReplaySelection:
     lane: str
-    selected_job: str
+    selected_job: str | None
     event: str
     inputs: tuple[ReplayInput, ...]
+    workflow: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,24 +63,40 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     return DeclaredReplayJob(ref, ReplayJob(key, tuple(steps)), tuple(lanes))
 
 
+def _selected_job(cursor: Cursor, source: str, path: str,
+                  findings: list[Finding]) -> str | None:
+    selected = cursor.str_("job", required=False)
+    all_jobs = cursor.bool_("all-jobs", required=False, default=False)
+    if all_jobs:
+        if selected is not None:
+            _bad(findings, source, path, "all-jobs and job are mutually exclusive")
+    elif selected is None or re.fullmatch(r"[A-Za-z0-9_-]+", selected) is None:
+        _bad(findings, source, path, "selection requires a literal job or all-jobs = true")
+    return selected
+
+
 def _selection(raw: dict[str, TomlValue], *, source: str, path: str,
                findings: list[Finding]) -> ReplaySelection | None:
     start = len(findings)
     cursor = Cursor(raw, path, findings, source)
     lane = cursor.str_("lane")
-    selected = cursor.str_("job")
+    selected = _selected_job(cursor, source, path, findings)
+    workflow = cursor.str_("workflow", required=False)
     event = cursor.str_("event")
     inputs = cursor.dict_str_str("inputs", required=False)
     cursor.finish()
-    if not lane or not lane.strip() or not selected or re.fullmatch(r"[A-Za-z0-9_-]+", selected) is None:
-        _bad(findings, source, path, "selection requires a lane and literal job id")
+    if not lane or not lane.strip():
+        _bad(findings, source, path, "selection requires a lane")
+    if workflow is not None and re.fullmatch(WORKFLOW, workflow) is None:
+        _bad(findings, source, path, "selection workflow must be a workflow basename")
     if event not in ("pull_request", "workflow_dispatch"):
         _bad(findings, source, path, "selection event must be pull_request or workflow_dispatch")
     if any(not key.strip() for key in inputs):
         _bad(findings, source, path, "input names must be nonempty")
-    if len(findings) != start or lane is None or selected is None or event is None:
+    if len(findings) != start or lane is None or event is None:
         return None
-    return ReplaySelection(lane, selected, event, tuple(ReplayInput(key, value) for key, value in inputs.items()))
+    return ReplaySelection(lane, selected, event, tuple(ReplayInput(key, value) for key, value in inputs.items()),
+                           f".github/workflows/{workflow}" if workflow is not None else None)
 
 
 def _selections(cursor: Cursor, source: str, path: str,

@@ -60,3 +60,22 @@ class ReplayDeclarationTest(unittest.TestCase):
             with self.subTest(document=invalid):
                 rejected: list[Finding] = []
                 self.assertIsNone(parse_replay(tomllib.loads(invalid), source="local-gate.toml", path="gate.replay", findings=rejected))
+
+
+class MultiWorkflowSelectionTest(unittest.TestCase):
+    def test_explicit_whole_workflow_lane_retains_its_entrypoint(self) -> None:
+        document = DECLARATION + '\n[[selections]]\nlane="tests"\nworkflow="dylint.yml"\nall-jobs=true\nevent="pull_request"\n'
+        findings: list[Finding] = []
+        config = parse_replay(tomllib.loads(document), source="local-gate.toml",
+                              path="gate.replay", findings=findings)
+        self.assertEqual(findings, [])
+        assert config is not None
+        self.assertIsNone(config.selections[0].selected_job)
+        self.assertEqual(config.selections[0].workflow, ".github/workflows/dylint.yml")
+
+    def test_whole_workflow_and_job_selector_are_mutually_exclusive(self) -> None:
+        document = DECLARATION + '\n[[selections]]\nlane="tests"\njob="tests"\nall-jobs=true\nevent="pull_request"\n'
+        findings: list[Finding] = []
+        self.assertIsNone(parse_replay(tomllib.loads(document), source="local-gate.toml",
+                                      path="gate.replay", findings=findings))
+        self.assertTrue(findings)

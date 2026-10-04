@@ -55,7 +55,8 @@ def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig,
     if lane is None and config.selections:
         return CheckedCommand(1, "multi-selection replay requires separate lane commands and reports")
     event = selection.event if selection is not None else "pull_request"
-    expectation = ReplayExpectation(config.repository, repo, head, tree, config.workflow,
+    workflow = selection.workflow if selection is not None and selection.workflow is not None else config.workflow
+    expectation = ReplayExpectation(config.repository, repo, head, tree, workflow,
                                     selection.selected_job if selection is not None else selected,
                                     config.mode, tuple(job.proof for job in jobs),
                                     "pr" if event == "pull_request" else event, event,

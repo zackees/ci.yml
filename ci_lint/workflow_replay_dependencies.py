@@ -22,7 +22,7 @@ def _needs(job: dict[str, YamlValue]) -> tuple[str, ...]:
     return tuple(item for item in values if isinstance(item, str))
 
 
-def dependency_closure(document: dict[str, YamlValue], selected: str) -> DependencyProof:
+def dependency_closure(document: dict[str, YamlValue], selected: str | None) -> DependencyProof:
     jobs = jobs_of(document)
     seen: set[str] = set()
     active: set[str] = set()
@@ -41,7 +41,11 @@ def dependency_closure(document: dict[str, YamlValue], selected: str) -> Depende
         seen.add(job_id)
 
     try:
-        visit(selected)
+        roots = (selected,) if selected is not None else tuple(jobs)
+        if not roots:
+            raise ValueError("workflow has no executable jobs")
+        for root in roots:
+            visit(root)
     except ValueError as exc:
         return DependencyProof((), str(exc))
     return DependencyProof(tuple(sorted(seen)))
@@ -50,11 +54,14 @@ def dependency_closure(document: dict[str, YamlValue], selected: str) -> Depende
 def check_selection_dependencies(config: ReplayConfig, document: dict[str, YamlValue],
                                  files: tuple[ParsedYamlFile, ...] | None = None) -> list[Finding]:
     findings: list[Finding] = []
-    workflow = config.workflow.rsplit("/", 1)[-1]
     for selection in config.selections:
-        proof = _selection_closure(config, document, selection.selected_job, files)
+        path = selection.workflow or config.workflow
+        workflow = path.rsplit("/", 1)[-1]
+        proof = (DependencyProof((), "alternate workflow requires parsed workflow evidence")
+                 if files is None and path != config.workflow
+                 else _selection_closure(path, document, selection.selected_job, files))
         if proof.problem:
-            findings.append(Finding(rule="GATE-001", path=config.workflow, status=Status.NEEDS_REVIEW,
+            findings.append(Finding(rule="GATE-001", path=path, status=Status.NEEDS_REVIEW,
                                     message=f"replay selection {selection.lane}: {proof.problem}",
                                     fix="resolve the selected job's complete dependency graph"))
             continue
@@ -64,18 +71,18 @@ def check_selection_dependencies(config: ReplayConfig, document: dict[str, YamlV
         missing = set(proof.jobs) - declared
         extra = declared - set(proof.jobs)
         if missing or extra:
-            findings.append(Finding(rule="GATE-001", path=config.workflow,
+            findings.append(Finding(rule="GATE-001", path=path,
                                     message=f"replay dependency coverage differs for {selection.lane}: omitted={sorted(missing)}, unreachable={sorted(extra)}",
                                     fix="declare the selected job and every dependency for that lane"))
     return findings
 
 
-def _selection_closure(config: ReplayConfig, document: dict[str, YamlValue], selected: str,
+def _selection_closure(path: str, document: dict[str, YamlValue], selected: str | None,
                        files: tuple[ParsedYamlFile, ...] | None) -> DependencyProof:
     if files is None:
         return dependency_closure(document, selected)
     # Lazy import keeps the literal-needs parser shared with the resolver.
     from ci_lint.workflow_replay_expansion import expand_selection
 
-    proof = expand_selection(files, config.workflow, selected)
+    proof = expand_selection(files, path, selected)
     return DependencyProof(tuple(job.source_job for job in proof.jobs), proof.problem)

@@ -114,7 +114,7 @@ def _called(state: _ExpansionState, current: str, job: dict[str, YamlValue],
         _visit(state, callee, child, prefix + job_id + "/", ancestry + (current,))
 
 
-def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str) -> ReplayExpansion:
+def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str | None) -> ReplayExpansion:
     """Exclude virtual callers; require all their concrete jobs and prerequisites.
 
     A source-job declaration cannot disambiguate two invocations of the same
@@ -122,7 +122,11 @@ def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str
     """
     state = _ExpansionState(files, [], set(), set())
     try:
-        _visit(state, path, selected, "", ())
+        roots = (selected,) if selected is not None else tuple(jobs_of(_document(files, path)))
+        if not roots:
+            raise ValueError("workflow has no executable jobs")
+        for root in roots:
+            _visit(state, path, root, "", ())
     except ValueError as exc:
         return ReplayExpansion((), str(exc))
     return ReplayExpansion(tuple(sorted(state.jobs, key=lambda job: job.source_job)))
