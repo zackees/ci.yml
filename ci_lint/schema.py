@@ -231,6 +231,38 @@ class FleetConfig:
     sync_issues: bool = False
 
 
+# ── Reuse (GEN-021 default-branch reuse, phase 2) ────────────────────────
+
+_REUSE_MODES: tuple[str, ...] = ("off", "shadow", "enforce")
+_MAX_AGE_HOURS_MAX = 168.0
+
+
+@dataclass(frozen=True)
+class ReuseConfig:
+    """`[reuse.default-branch]` (zackees/ci.yml#158, design
+    `docs/designs/default-branch-verified-reuse.md` section 7): how a
+    default-branch push may reuse the proof a pull_request run already
+    gave for a tree-identical tree.
+
+    An absent table -- or an absent `default-branch` sub-table -- is
+    `mode = "off"`: nothing is skipped, which is exactly the pre-#158
+    behavior, so every ci.toml that predates this table loads unchanged.
+
+    `required_jobs is None` is the table's `required-jobs = "plan"`: the
+    proving job list comes from the planner's main-flow lane digests
+    rather than a hand-maintained array. The two are deliberately
+    different types so `mode = "shadow"` on a hand-written list cannot be
+    silently reinterpreted as the plan-derived one.
+    """
+
+    mode: str = "off"
+    workflows: tuple[str, ...] = ("ci.yml",)
+    required_jobs: tuple[str, ...] | None = None
+    exempt_jobs: tuple[str, ...] = ()
+    max_age_hours: float = 24.0
+    nightly: bool = True
+
+
 # ── Allowlists ────────────────────────────────────────────────────────────
 
 
@@ -327,6 +359,7 @@ class CiToml:
     publish: PublishConfig
     exceptions: tuple[ExceptionEntry, ...]
     fleet: FleetConfig
+    reuse: ReuseConfig
     source_path: str
 
 
@@ -700,6 +733,107 @@ def _parse_fleet(root: Cursor) -> FleetConfig:
     return FleetConfig(sync_issues=bool(sync_issues))
 
 
+def _reuse_finding(root: Cursor, sub: "Cursor", key: str, message: str, fix: str) -> None:
+    root.findings.append(
+        Finding(
+            rule="CT-002",
+            path=root.source,
+            message=f"'{sub.key_path(key)}': {message}",
+            fix=fix,
+        )
+    )
+
+
+def _parse_reuse_required_jobs(root: Cursor, sub: Cursor) -> tuple[str, ...] | None:
+    """`required-jobs`: "plan" (None) or an array of exact display names."""
+
+    raw = sub.str_or_list("required-jobs", required=False, default="plan")
+    if raw is None or raw == "plan":
+        return None
+    if isinstance(raw, str):
+        _reuse_finding(
+            root, sub, "required-jobs",
+            f"the only accepted string is \"plan\", got {raw!r}",
+            "set 'reuse.default-branch.required-jobs' to \"plan\" or to an array of exact "
+            "job display names",
+        )
+        return None
+    if not raw or any(not j.strip() for j in raw):
+        _reuse_finding(
+            root, sub, "required-jobs",
+            f"must be \"plan\" or a non-empty array of unique non-empty job display names, "
+            f"got {list(raw)!r}",
+            "set 'reuse.default-branch.required-jobs' to \"plan\" or to an array of exact "
+            "job display names",
+        )
+        return None
+    if len(set(raw)) != len(raw):
+        _reuse_finding(
+            root, sub, "required-jobs",
+            f"has duplicate entries: {list(raw)!r}",
+            "list each proving job display name exactly once",
+        )
+    return tuple(raw)
+
+
+def _parse_reuse(root: Cursor) -> ReuseConfig:
+    raw = root.table_("reuse", required=False)
+    if raw is None:
+        return ReuseConfig()
+    reuse = Cursor(raw, "reuse", root.findings, root.source)
+    default_branch = reuse.table_("default-branch", required=False)
+    if default_branch is None:
+        # A bare `[reuse]` with no sub-table is an explicit opt-out, not an
+        # error: it keeps the table around to host `default-branch` later.
+        reuse.finish()
+        return ReuseConfig()
+    reuse.finish()
+    sub = Cursor(default_branch, "reuse.default-branch", root.findings, root.source)
+
+    mode = sub.str_("mode", required=False, default="off") or "off"
+    if mode not in _REUSE_MODES:
+        _reuse_finding(
+            root, sub, "mode",
+            f"must be one of {', '.join(repr(m) for m in _REUSE_MODES)}, got {mode!r}",
+            f"set 'reuse.default-branch.mode' to one of {', '.join(repr(m) for m in _REUSE_MODES)}",
+        )
+        mode = "off"
+
+    workflows = sub.list_str("workflows", required=False, default=("ci.yml",))
+    if not workflows or any(not w.strip() for w in workflows):
+        _reuse_finding(
+            root, sub, "workflows",
+            f"must be a non-empty array of non-empty workflow file names, got {list(workflows)!r}",
+            "set 'reuse.default-branch.workflows' to a non-empty array such as [\"ci.yml\"]",
+        )
+        workflows = ("ci.yml",)
+
+    required_jobs = _parse_reuse_required_jobs(root, sub)
+
+    exempt_jobs = sub.list_str("exempt-jobs", required=False, default=())
+
+    max_age = sub.number_("max-age-hours", required=False, default=24.0)
+    max_age_hours = 24.0 if max_age is None else max_age
+    if not 0 < max_age_hours <= _MAX_AGE_HOURS_MAX:
+        _reuse_finding(
+            root, sub, "max-age-hours",
+            f"must satisfy 0 < x <= {_MAX_AGE_HOURS_MAX:g}, got {max_age_hours!r}",
+            f"set 'reuse.default-branch.max-age-hours' to a number in (0, {_MAX_AGE_HOURS_MAX:g}]",
+        )
+        max_age_hours = 24.0
+
+    nightly = sub.bool_("nightly", required=False, default=True)
+    sub.finish()
+    return ReuseConfig(
+        mode=mode,
+        workflows=workflows,
+        required_jobs=required_jobs,
+        exempt_jobs=exempt_jobs,
+        max_age_hours=max_age_hours,
+        nightly=True if nightly is None else bool(nightly),
+    )
+
+
 def _parse_publish(root: Cursor) -> PublishConfig:
     raw = root.table_("publish", required=True)
     if raw is None:
@@ -823,6 +957,7 @@ def load_ci_toml(repo_root: Path) -> tuple[CiToml | None, list[Finding]]:
     publish = _parse_publish(root)
     exceptions = _parse_exceptions(root)
     fleet = _parse_fleet(root)
+    reuse = _parse_reuse(root)
 
     root.finish()
 
@@ -844,6 +979,7 @@ def load_ci_toml(repo_root: Path) -> tuple[CiToml | None, list[Finding]]:
         publish=publish,
         exceptions=exceptions,
         fleet=fleet,
+        reuse=reuse,
         source_path=source,
     )
 
@@ -947,5 +1083,20 @@ def _validate_cross_refs(ci: CiToml) -> list[Finding]:  # noqa: C901
                 "profile 'rust-pypi-app' requires [publish.pypi].auth = \"oidc\"",
                 "set '[publish.pypi] auth = \"oidc\"' in ci.toml",
             )
+
+    # `[reuse.default-branch]` (GEN-021 phase 2, zackees/ci.yml#158). Every
+    # workflow the decision reads must be one the repository actually ships
+    # (`[allow].workflows`); a typo there would make the decision read a
+    # workflow that does not exist and silently never prove anything.
+    reuse = ci.reuse
+    if reuse.mode != "off":
+        for wf in reuse.workflows:
+            if wf not in ci.allow.workflows:
+                bad(
+                    f"'reuse.default-branch.workflows' names {wf!r}, which is not declared in "
+                    f"'[allow].workflows' ({', '.join(sorted(ci.allow.workflows)) or 'none'})",
+                    f"add '{wf}' to '[allow.workflows]' in {source}, or drop it from "
+                    "'reuse.default-branch.workflows'",
+                )
 
     return out

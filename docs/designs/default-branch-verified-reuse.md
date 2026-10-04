@@ -443,7 +443,7 @@ Every reason `reuse-check` can report. All except `verified` mean `reuse=false`,
 
 ## 7. Configuration design (`[reuse.default-branch]`, Phase 2)
 
-Phase 0 ships the command with CLI flags only. The schema-3 table below is specified exactly for Phase 2 (#158); it is not implemented in this PR because the static cross-checks and the planner's `"plan"` derivation must land with it to be useful.
+Phase 0 ships the command with CLI flags only. The schema-3 table below was specified exactly for Phase 2 (#158) and **is implemented** (`ci_lint.schema.ReuseConfig`/`_parse_reuse`, consumed by `ci-lint gate --default-branch-reuse`) -- see docs/ci-toml.md's `[reuse.default-branch]` section for the shipped field semantics. The planner's `"plan"` derivation of `required_jobs` and the static cross-checks listed at the end of this section remain candidates.
 
 ```toml
 [reuse.default-branch]
