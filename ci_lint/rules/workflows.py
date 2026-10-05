@@ -692,6 +692,101 @@ def check_group2(ci: CiToml, repo_root: Path) -> list[Finding]:
     findings.extend(check_wf_001(workflows))
     findings.extend(check_wf_002(workflows))
     findings.extend(check_wf_003(workflows, actions))
+    findings.extend(check_wf_004(workflows))
     findings.extend(check_gen_002(workflows))
     findings.extend(check_ct_004(ci, workflows))
+    return findings
+
+
+# WF-004: a job that `needs:` a conditionally-skipped job needs `always()`.
+#
+# GitHub Actions: when job B declares `needs: [A]` and A is SKIPPED, B is
+# SKIPPED too -- regardless of B's own `if:`. A bare
+# `if: !cancelled() && !failure() && ...` does NOT override that; only
+# `always()` does. So putting an event-restricted job in another job's `needs:`
+# silently disables the dependent on every other event.
+#
+# Measured 2026-10-05 across the fleet:
+#   zackees/clud#1805     `cache-maint` (push-to-main only) in the `needs:` of
+#                         `dylint` and `build-linux-x64` -> both skipped on
+#                         every PR, so `CI OK` reported "a minimal lane did not
+#                         run to success" across a 20-job replay.
+#   template-python-rust-cmd#67  `reuse-decision` + `cache-maint` in the
+#                         `needs:` of `fast` -- the PR QUICK GATE, skipped on
+#                         every pull_request, in the canonical template other
+#                         repositories copy.
+#   zackees/mimalloc-pprof  `memory-gate-decide` (PR-only) -> `memory-gate`,
+#                         which therefore dies on every push to main instead.
+#
+# The failure is silent: a skipped required check reads as green-adjacent to
+# anything that inspects only conclusions.
+#
+# This is `needs_review` rather than a violation because the restricting
+# condition may be one that never evaluates false in practice (a `needs:` whose
+# target is itself always-run), and the judgement of "does this dependent
+# actually need to run when its dependency skips" belongs to the repository.
+_EVENT_RESTRICTED = re.compile(
+    r"github\.event_name|github\.ref\b|github\.event\.action|github\.head_ref"
+)
+
+
+def _needs_of(job: dict[str, YamlValue]) -> tuple[str, ...]:
+    raw = job.get("needs")
+    if isinstance(raw, str):
+        return (raw,)
+    if isinstance(raw, list):
+        return tuple(str(x) for x in raw if isinstance(x, str))
+    return ()
+
+
+def _is_conditionally_skipped(job: dict[str, YamlValue]) -> bool:
+    """True when this job can be SKIPPED by its own `if:`.
+
+    Only an event-restricted condition is treated as such. A mode/output gate
+    (`needs.x.outputs.mode == 'full'`) is also a skip, but those are the
+    repository's own selection logic and are far too common to flag here --
+    flagging them would bury the event-restricted case, which is the one that
+    silently kills a PR gate.
+    """
+
+    condition = job.get("if")
+    return isinstance(condition, str) and _EVENT_RESTRICTED.search(condition) is not None
+
+
+def check_wf_004(workflows: list[ParsedYamlFile]) -> list[Finding]:
+    findings: list[Finding] = []
+    for wf in workflows:
+        if wf.status != LoadStatus.OK:
+            continue
+        jobs = jobs_of(as_dict(wf.document))
+        restricted = {jid for jid, job in jobs.items() if _is_conditionally_skipped(job)}
+        if not restricted:
+            continue
+        for jid, job in jobs.items():
+            blocking = [n for n in _needs_of(job) if n in restricted]
+            if not blocking:
+                continue
+            condition = job.get("if")
+            has_always = isinstance(condition, str) and "always()" in condition
+            if has_always:
+                continue
+            findings.append(
+                Finding(
+                    rule="WF-004",
+                    status=Status.NEEDS_REVIEW,
+                    path=wf.path,
+                    message=(
+                        f"job '{jid}' needs {', '.join(repr(b) for b in blocking)}, which "
+                        "is gated on the event, so it is SKIPPED on other events -- and a "
+                        "skipped `needs:` skips this job too, whatever this job's own `if:` "
+                        "says. Only `always()` overrides that cascade."
+                    ),
+                    fix=(
+                        "if this job must still run when the dependency is skipped, use "
+                        "`if: always() && !cancelled() && <existing condition>`. If skipping "
+                        "is intended, say so in a comment -- a skipped required check reads "
+                        "as green-adjacent to anything that inspects only conclusions"
+                    ),
+                )
+            )
     return findings
