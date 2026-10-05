@@ -12,8 +12,8 @@
   },
   "summary": {
     "total_repos_with_main_push_ci": 34,
-    "adopt_now": 2,
-    "needs_aggregator": 32
+    "adopt_now": 4,
+    "needs_aggregator": 30
   },
   "repos": [
     {
@@ -462,7 +462,8 @@
   "blocking_facts": {
     "no_gate_no_consumer": "ci-lint gate IS the CI-OK aggregator. A repo without one has nowhere to consume a reuse decision; only 2 of 34 have it.",
     "economics_flip": "Measured on clud: a main-push run is 14.9 runner-min, 7.1 (48%) skippable. At 1.63 pushes/day reuse saves ~5 runner-min/day, while a nightly minimal-tier run costs 14.9/day and a full-tier one ~60/day. The design's drift backstop costs 3-12x what it protects at clud's real push rate (the design assumed ~30 pushes/day). Prefer --max-age-hours over a nightly until a repo's push rate justifies one.",
-    "low_traffic_repos": "reld (1) and llvm-ld (2) decisive runs since wiring -- the old 100-run bar made promotion impossible for them; removed in ci.yml#310."
+    "low_traffic_repos": "reld (1) and llvm-ld (2) decisive runs since wiring -- the old 100-run bar made promotion impossible for them; removed in ci.yml#310.",
+    "required_job_name_is_load_bearing": "A reuse-report whose --required-job does not exactly match a job display name reports 0% reuse and a 'no-op' verdict. This already produced one wrong fleet conclusion (soldr). Treat a 0% reading as a probe bug until the job name has been checked against `gh run view <id> --json jobs` on a run that did succeed."
   },
   "adopted": [
     {
@@ -509,8 +510,9 @@
   "result": {
     "adopted_now": 2,
     "repos_listed": 34,
-    "still_blocked": 32,
-    "blocker": "no CI-OK aggregator, so no consumer; ci-lint gate IS that aggregator"
+    "still_blocked": 29,
+    "blocker": "no CI-OK aggregator, so no consumer; ci-lint gate IS that aggregator",
+    "promotable_awaiting_aggregator": 5
   },
   "measured_eligibility": {
     "method": "ci-lint reuse-report --limit 10..20 --since 2026-09-20, required-job = the dominant main-push job; costs are mean runner-minutes per successful main push over 5-12 runs.",
@@ -539,14 +541,25 @@
         "dominant": "preflight 13.4, dylint 2.1",
         "saves_per_day": 10.4,
         "state": "PR open"
+      },
+      "zackees/soldr": {
+        "reuse_rate": 0.65,
+        "runner_min_per_push": 12.7,
+        "dominant": "Linux x64 / x86_64-unknown-linux-gnu 10.1 (79%)",
+        "saves_per_day": 5.1,
+        "pushes_per_day": 7.7,
+        "state": "NOT YET ADOPTED -- needs the CI-OK aggregator"
+      },
+      "zackees/zccache": {
+        "reuse_rate": 0.9,
+        "runner_min_per_push": 21.0,
+        "dominant": "Dylint 6.0 (29%)",
+        "saves_per_day": 5.5,
+        "pushes_per_day": 10.4,
+        "state": "NOT YET ADOPTED -- needs the CI-OK aggregator"
       }
     },
     "skip_do_not_adopt": {
-      "zackees/soldr": {
-        "reuse_rate": 0.0,
-        "runner_min_per_push": 12.9,
-        "reason": "verdict no-op: reuse never fires (merge shape defeats tree identity). 15 decisive runs, 0 reusable."
-      },
       "zackees/bosn": {
         "reuse_rate": 0.1,
         "runner_min_per_push": 4.7,
@@ -566,6 +579,18 @@
       }
     },
     "finding": "The ROI is concentrated. Four repositories carry essentially all of the measurable saving; the long tail of 30 is each worth well under a runner-minute a day or has no eligible merges at all. Adopting the tail would add review surface and skip-guarding risk for noise. Prioritise the four, and re-measure rather than adopt blindly.",
-    "note_on_cache": "Per owner directive 2026-10-04: a daily catch-all run is fine for cache revalidation but is superseded by cache promotion (setup-soldr `auto`, nearest-ancestor restore, CACHE-024). Where a repository already has a scheduled full matrix (running-process, template-python-rust-cmd) or enough naturally-must-run pushes to refresh on their own (kernal-api, ~1 full run per 6 days at 89.5% reuse), no nightly is added. setup-soldr's `auto` key covers the build-cache family today; it does not yet cover `dylint`."
+    "note_on_cache": "Per owner directive 2026-10-04: a daily catch-all run is fine for cache revalidation but is superseded by cache promotion (setup-soldr `auto`, nearest-ancestor restore, CACHE-024). Where a repository already has a scheduled full matrix (running-process, template-python-rust-cmd) or enough naturally-must-run pushes to refresh on their own (kernal-api, ~1 full run per 6 days at 89.5% reuse), no nightly is added. setup-soldr's `auto` key covers the build-cache family today; it does not yet cover `dylint`.",
+    "corrections_2026_10_04": {
+      "soldr": "The earlier 0.0%/no-op reading was a measurement artifact, not a merge-shape limit. Re-measured with the exact plan-derived display name 'Linux x64 / x86_64-unknown-linux-gnu': 13/20 decisive runs would reuse, 12 safe skips, 0 false-reuse candidates, verdict promotable. The earlier probe used a job name that never matched, so every run read as required-job-missing. Tree identity holds: PRs #3559/#3560/#3562/#3568 all merge to a tree identical to the PR head (3 squash, 1 merge commit).",
+      "soldr_remaining_misses": "7/20 must-run are legitimate: soldr's PR CI is path-selected, so a Python-only PR never runs the Linux x64 lane and no proving run exists. These must-run correctly -- the push run does execute that lane, so reusing would drop coverage.",
+      "zccache": "Absent from the earlier measurement entirely. Measured on its dominant main-push job 'Dylint': 18/20 decisive runs would reuse (0.90), 17 safe skips, 0 false-reuse candidates, verdict promotable. Highest reuse rate and highest push rate (10.4/day) in the fleet.",
+      "reproduce": "GH_TOKEN=<token> python3 -m ci_lint reuse-report --repo <owner/name> --workflow ci.yml --required-job '<exact plan-derived job display name>' --since 2026-09-20 --limit 20",
+      "method_note": "The required-job argument must be the exact job display name from the push run's own job list (gh run view <id> --json jobs). A name that does not match exactly silently yields 0% reuse and reads as a verdict about the repository when it is actually a verdict about the probe. Prefer 'plan' derivation where available."
+    }
+  },
+  "cache_promotion_gap": {
+    "setup-soldr-auto-is-build-cache-only": "Per setup-soldr's own README, the `key: auto` nearest-ancestor pilot is a 'Build-cache override only' -- 'Other families keep their identity keys.' So dylint-output-cache (and every other family) gets no ancestor promotion.",
+    "why_it_matters": "zccache's dominant main-push job is Dylint (~6.0 runner-min, 29% of a 21.0 min push). Its dylint-output-cache is saved on success but only ever restored under its own identity key, so the nearest-ancestor win that makes the build cache cheap is unavailable to the job that costs the most.",
+    "candidate": "Extend `auto` from build-cache-only to the whole family, or at minimum to dylint-output-cache. Owner directive 2026-10-04: 'caches from the family should be promoted when possible.'"
   }
 }
