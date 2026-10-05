@@ -570,15 +570,20 @@ def check_cache_030(ci: CiToml) -> list[Finding]:
     """`[cache.promote] mode = "ancestor"` declares that a default-branch
     push inherits the cache a pull request proved, instead of rewriting it.
 
-    It is a POLICY statement today, not a mechanism. zackees/setup-soldr
-    declares an `auto-key` input in its `action.yml` -- "treat an omitted
-    key as 'auto' for the source-dependent build-cache pilot" -- but that
-    input appears nowhere in setup-soldr's source or in its built bundle
-    (`dist/main.js`, `dist/post.js`), and zackees/setup-soldr#552 is still
-    open. Declaring `ancestor` today would be a promise nothing keeps, so
-    it is reported as needs_review pointing at the implementation, rather
-    than accepted silently or refused outright: a repository is allowed to
-    record the policy it intends to adopt."""
+    The MECHANISM now exists -- this rule's premise was wrong when it was
+    written. zackees/setup-soldr shipped `src/lib/ancestor-cache.ts` in #566,
+    with `autoKeyEnabled` gating it in `src/main.ts` and present in both built
+    bundles. It is still an opt-in PILOT that no fleet repository has adopted:
+    `auto-key` defaults to "false", `auto-key-trusted-writers` must name
+    reviewed immutable writer jobs, and as of 2026-10-05 no repository has a
+    single live `setup-soldr-ancestor-build-v1-*` entry. Issue #552 tracks the
+    fleet-wide rollout, not the implementation.
+
+    So this stays `needs_review`, but for a sharper reason than "nothing
+    implements it": the mechanism is available and OFF, so the declaration is a
+    standing invitation to opt in -- and the drift backstop must outlive the
+    declaration until promotion is actually observed working on that
+    repository."""
 
     if ci.cache.promote.mode != "ancestor":
         return []
@@ -588,12 +593,14 @@ def check_cache_030(ci: CiToml) -> list[Finding]:
             status=Status.NEEDS_REVIEW,
             path="ci.toml",
             message='\'cache.promote.mode = "ancestor"\' declares nearest-ancestor cache promotion, '
-            "but setup-soldr does not implement it yet (the `auto-key` input is declared in its "
-            "action.yml and absent from its source and bundle; zackees/setup-soldr#552 is open)",
-            fix="record the intent now and revisit once zackees/setup-soldr#552 lands; until then "
-            "promotion does not happen, so keep the declared drift backstop (a scheduled full "
-            "default-branch run, or enough naturally-must-run pushes) and do not remove it on the "
-            "strength of this declaration",
+            "but setup-soldr's ancestor mechanism is an opt-in pilot that is off: `auto-key` defaults "
+            'to "false" and `auto-key-trusted-writers` must name reviewed immutable writer jobs '
+            "(no fleet repository has a live `setup-soldr-ancestor-build-v1-*` entry as of 2026-10-05)",
+            fix="opt in at the workflow: pass `cache-key: auto` (or `auto-key: \"true\"`) plus an "
+            "explicit auto-key-trusted-writers list, per zackees/setup-soldr#552. Until a live "
+            "setup-soldr-ancestor-build-v1-* entry is observed on this repository, promotion does "
+            "not happen -- keep the drift backstop (a scheduled full default-branch run, or enough "
+            "naturally-must-run pushes) and do not remove it on the strength of this declaration",
         )
     ]
 
@@ -633,14 +640,24 @@ def check_cache_031(ci: CiToml) -> list[Finding]:
     against 5.97 GiB of bare-hash build caches; bosn 85 / 0.00 GiB against
     4.41 GiB; zccache, clud and kernal-api have none at all.
 
-    This is `needs_review`, never a hard failure, for two reasons. setup-soldr
-    does not implement the promotion mechanism yet (its `auto-key` input is
-    declared in `action.yml` and absent from its source and bundle;
-    zackees/setup-soldr#552 is open), so a violation here may be a repository
-    that cannot fix it today rather than one that got it wrong. And a family
-    only becomes promotable when its keys change shape -- an instantaneous
-    fix would invalidate every warm entry at once, which on repositories
-    already at the 10GB cap is a real cost, not a free correction."""
+    This is `needs_review`, never a hard failure, for two reasons. The
+    opt-in exists but is OFF (`auto-key` defaults to "false";
+    auto-key-trusted-writers must name reviewed immutable writer jobs), so a
+    finding may be a repository that has not opted in rather than one that got
+    it wrong -- and CACHE-030 already asks the same question of the
+    declaration. And a family only becomes promotable when its keys change
+    shape -- an instantaneous fix would invalidate every warm entry at once,
+    which on repositories already at the 10GB cap is a real cost, not a free
+    correction.
+
+    Note the shipped mechanism uses a DIFFERENT label than this module's.
+    setup-soldr's ancestor keys are
+    `setup-soldr-ancestor-build-v1-<identity>-source-<sha>-run-<n>-attempt-<n>[-pr-<n>]`
+    and select by shortest parent-edge distance from a live `git` DAG walk
+    (`dagDistances`), not by the `m<n>` first-parent ordinal, so
+    `ci_lint.cache_lineage.parse_key` returns None for them. Both record
+    ancestry and both survive a merge; they are two encodings, not two
+    truths. Reconciling them is zackees/ci.yml#185's open question."""
 
     if ci.cache.promote.mode != "ancestor":
         return []

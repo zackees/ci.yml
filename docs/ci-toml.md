@@ -219,43 +219,56 @@ family that does not exist describes nothing, and is `CT-002`. `scope = "repo"`
 is only coherent for a family whose key is `lockfile = true`, since that is what
 makes every branch's entry interchangeable.
 
-**Promotion is a policy statement today, not a mechanism.** `zackees/setup-soldr`
-declares an `auto-key` input in its `action.yml` -- *"treat an omitted key as
-`auto` for the source-dependent build-cache pilot"* -- but that input appears
-nowhere in its source or in its built bundle (`dist/main.js`, `dist/post.js`), and
-[setup-soldr#552](https://github.com/zackees/setup-soldr/issues/552) is open.
-`CACHE-030` therefore reports `mode = "ancestor"` as **`needs_review`** pointing at
-the implementation, rather than accepting it silently or refusing it: a repository
-may record the policy it intends to adopt, but must not drop its drift backstop on
-the strength of the declaration.
+**Promotion's mechanism exists; the fleet has not opted in.** `zackees/setup-soldr`
+shipped `src/lib/ancestor-cache.ts` in [#566](https://github.com/zackees/setup-soldr/pull/566),
+gated by `autoKeyEnabled` in `src/main.ts` and present in both built bundles. But it is an
+opt-in pilot: `auto-key` defaults to `"false"`, and `auto-key-trusted-writers` must name
+reviewed immutable writer jobs
+(`owner/repo/.github/workflows/file.yml@FULL_SOURCE_SHA:RUN_ID:ATTEMPT:JOB_ID`). As of
+2026-10-05 **no fleet repository has a single live `setup-soldr-ancestor-build-v1-*`
+entry**, so promotion is available everywhere and enabled nowhere.
+[setup-soldr#552](https://github.com/zackees/setup-soldr/issues/552) tracks the rollout.
+
+`CACHE-030` therefore reports `mode = "ancestor"` as **`needs_review`** — not because
+nothing implements it, but because a declaration with the mechanism sitting off beside it
+is a standing invitation to opt in, and the drift backstop must outlive the declaration
+until promotion is observed actually working on that repository.
 
 **A promotion claim is a claim about key *shapes*, not just intent.**
-`CACHE-031` therefore also checks that the families can honor it. Promotion means:
-given commit `M`, find the nearest ancestor's cache entry. That search is decidable
-from the keys alone only when a key carries the lineage label
-`m<n>[-c<k>]-<sha10>[-pr-<N>]`, where `m<n>` is the first-parent ordinal -- so
+`CACHE-031` therefore also checks that the families can honor it. Promotion means: given
+commit `M`, find the nearest ancestor's cache entry. That search is decidable from the
+keys alone only when a key carries the lineage label
+`m<n>[-c<k>]-<sha10>[-pr-<N>]`, where `m<n>` is the first-parent ordinal — so
 `m<i>` precedes `m<j>` iff `i < j`. A key ending in a bare content hash
-(setup-soldr's `...-<16 hex>`) cannot answer the question at all: a content hash is
-a function of the input tree, so nothing in it records ancestry. That is not a gap a
-janitor can bridge -- the evidence is destroyed at save time.
+(setup-soldr's `...-<16 hex>`) cannot answer the question at all: a content hash is a
+function of the input tree, so nothing in it records ancestry. That is not a gap a
+janitor can bridge — the evidence is destroyed at save time.
 
-Measured 2026-10-04 across the fleet's live cache listings, the label is adopted
-exactly where it carries no bytes:
+Measured 2026-10-04 across the fleet's live cache listings, the label is adopted exactly
+where it carries no bytes:
 
 | repository | lineage-labeled entries | their size | bare-hash build caches |
 | --- | --- | --- | --- |
 | soldr | 70 | **0.00 GiB** (all `att1-*` attestation side-entries) | 5.97 GiB |
 | bosn | 85 | **0.00 GiB** (same) | 4.41 GiB |
-| zccache | 0 | -- | 7.57 GiB |
-| clud | 0 | -- | 22 of 24 entries |
-| kernal-api | 0 | -- | 9 |
+| zccache | 0 | — | 7.57 GiB |
+| clud | 0 | — | 22 of 24 entries |
+| kernal-api | 0 | — | 9 |
 
-So a family opts in with `promote = "ancestor"` on `[cache.family.<id>]`, and its
-workflow suffixes the key with the label from `ci-lint attest lineage` -- the PR part
-already being `${{ env.PR_CACHE_TAG }}` per `CACHE-013`. `CACHE-031` is
-**`needs_review`, never a hard failure**: setup-soldr does not implement the
-mechanism yet (#552), and changing a live key shape invalidates that family's warm
-entries at once, which on a repository already at the 10 GB cap is a real cost.
+So a family opts in with `promote = "ancestor"` on `[cache.family.<id>]`, and its workflow
+suffixes the key with the label from `ci-lint attest lineage` — the PR part already being
+`${{ env.PR_CACHE_TAG }}` per `CACHE-013`. `CACHE-031` is **`needs_review`, never a hard
+failure**: the opt-in is available but off, and changing a live key shape invalidates that
+family's warm entries at once, which on a repository already at the 10 GB cap is a real
+cost.
+
+**Two encodings of ancestry, not two truths.** setup-soldr's shipped ancestor keys are
+`setup-soldr-ancestor-build-v1-<identity>-source-<sha>-run-<n>-attempt-<n>[-pr-<n>]` and
+select by **shortest parent-edge distance** from a live `git` DAG walk (`dagDistances`),
+not by the `m<n>` first-parent ordinal — so `ci-lint.cache_lineage.parse_key` returns
+`None` for them. Both record ancestry and both survive a merge; they differ in how
+selection is decided. Reconciling the two is [#185](https://github.com/zackees/ci.yml/issues/185)'s
+open question, and any normalization has to pick one rather than assume they already agree.
 
 ## `[cache]`
 
