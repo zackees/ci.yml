@@ -795,10 +795,25 @@ def check_cache_032(ci: CiToml) -> list[Finding]:
 # push a repository toward a budget it can actually meet.
 _PREPRUNE_CALL = re.compile(r"cache\s+preprune")
 _PREPRUNE_SURFACES = ("ci",)
+# #352's teaching, not a loosened pattern: a WORKFLOW may also honour the
+# waiver by its own identity -- `name: Cache Pre-prune` (zccache's spelling)
+# or a file stem of `cache-pre-prune.yml` -- because zccache implements the
+# prune by hand (`planLockTransitionPrePrune`, guarded deletes) instead of
+# the ci-lint command, and a literal-only scan reads it as unhonoured. Only
+# this canonical spelling counts; every other surface still has to show the
+# literal invocation. An idle workflow wearing the name is a claim of the
+# same order as `pre-prune = true` itself -- the live audit (CACHE-006/
+# 008/009 and the budget verdict) is what catches a named workflow that
+# never deletes anything.
+_PREPRUNE_WORKFLOW_IDENTITY = re.compile(r"^cache[\s_-]*pre[\s_-]*prune$", re.IGNORECASE)
 
 
 def _preprune_call_exists(repo_root: Path) -> bool | None:
-    """Whether any scanned surface invokes `ci-lint cache preprune`.
+    """Whether any scanned surface honours the pre-prune waiver.
+
+    Honoured means the literal `ci-lint cache preprune` invocation on any
+    scanned surface, or -- workflows only -- the canonical pre-prune
+    workflow identity (`_PREPRUNE_WORKFLOW_IDENTITY`).
 
     Returns None when the answer is UNKNOWN: a workflow that exists but could
     not be parsed (no PyYAML and no `yq`) must not be read as "no call exists",
@@ -811,7 +826,7 @@ def _preprune_call_exists(repo_root: Path) -> bool | None:
         return _PREPRUNE_CALL.search(text) is not None
 
     unparsed = False
-    workflows = _documents_contain(load_workflows(repo_root))
+    workflows = _documents_contain(load_workflows(repo_root), recognise_identity=True)
     if workflows.matched:
         return True
     composites = _documents_contain(load_composite_actions(repo_root))
@@ -835,7 +850,7 @@ class _ScanOutcome:
     unparsed: bool
 
 
-def _documents_contain(loaded: list[object]) -> _ScanOutcome:
+def _documents_contain(loaded: list[object], *, recognise_identity: bool = False) -> _ScanOutcome:
     matched = False
     unparsed = False
     for item in loaded:
@@ -845,7 +860,26 @@ def _documents_contain(loaded: list[object]) -> _ScanOutcome:
             continue
         if _PREPRUNE_CALL.search(_document_text(getattr(item, "document", None))):
             matched = True
+            continue
+        if recognise_identity and _workflow_identity_honours(item):
+            matched = True
     return _ScanOutcome(matched=matched, unparsed=unparsed)
+
+
+def _workflow_identity_honours(item: object) -> bool:
+    """A workflow claiming the role by canonical name or file stem (#352).
+
+    Both spellings are accepted because zccache uses both: the file is
+    `.github/workflows/cache-pre-prune.yml` and the document says
+    `name: Cache Pre-prune`. The pattern is anchored, so a lookalike such
+    as `Cache Pre-prune deployer` is NOT a match.
+    """
+
+    stem = Path(str(getattr(item, "path", ""))).stem
+    if _PREPRUNE_WORKFLOW_IDENTITY.search(stem):
+        return True
+    name = as_dict(getattr(item, "document", None)).get("name")
+    return isinstance(name, str) and _PREPRUNE_WORKFLOW_IDENTITY.search(name) is not None
 
 
 def _iter_ci_scripts(repo_root: Path) -> list[str]:
