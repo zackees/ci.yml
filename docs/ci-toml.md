@@ -176,7 +176,7 @@ One entry per flow id (`pr`, `main`, `release`, `nightly`, ...).
 | `wheels` | string (optional) | e.g. `"all"`. Informational in round 1A. |
 | `publish` | string (optional) | `"pypi"` (the real release path -- mapped through `[publish.pypi].mode`), `"rehearsal"`, or `"none"`. |
 | `janitor` | bool (default `false`) | Marks a flow that runs the cache janitor. Informational in round 1A (no runtime implementation yet). |
-| `pre-prune` | bool (default `false`) | A writer flow that prunes stale cache entries before writing. When **every** writer flow (`cache = "write"`) sets `pre-prune = true`, `CACHE-004`'s worst-case sum drops the lockfile-change-peak term (`worst = steady + [cache.pr].budget`); the budget-exceeded violation still fires if that smaller sum still exceeds `[cache].budget`. |
+| `pre-prune` | bool (default `false`) | A writer flow that prunes stale cache entries before writing. When **every** writer flow (`cache = "write"`) sets `pre-prune = true`, `CACHE-004`'s worst-case sum drops the lockfile-change-peak term (`worst = steady + [cache.pr].budget`); the budget-exceeded violation still fires if that smaller sum still exceeds `[cache].budget`. The waiver must be honoured by a real `ci-lint cache preprune` call (CACHE-034), and honouring it has structural preconditions -- a job holding `actions: write` plus ordering ahead of the saves within the same run; where neither can be had, removing the declaration is the only honest fix and the peak term comes back (see the CACHE-034 row in policy-general.md, #354). |
 
 ## `[tags.<id>]`
 

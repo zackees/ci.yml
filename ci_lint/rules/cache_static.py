@@ -911,9 +911,15 @@ def check_cache_034(ci: CiToml, repo_root: Path) -> list[Finding]:
                 "modelled footprint is understated by the whole peak term"
             ),
             fix=(
-                "either add the pre-prune step to the writer flow (a `ci-lint cache preprune "
-                "--lockfile-changed` step with `actions: write`, before the cache saves), or "
-                "remove `pre-prune = true` so CACHE-004 counts the peak"
+                "either add the pre-prune step to the writer flow -- `ci-lint cache preprune "
+                "--lockfile-changed` on a job holding `actions: write`, ordered ahead of the "
+                "cache saves WITHIN THE SAME RUN (same job, or an earlier `needs:` link; "
+                "GitHub Actions has no cross-workflow barrier, so a prune in a workflow the "
+                "writers do not `needs:` orders nothing) -- or, where neither that permission "
+                "nor that ordering can be had, remove `pre-prune = true` so CACHE-004 counts "
+                "the peak. Removal is the honest fix but not a free one: the waived "
+                "lockfile-change peak returns and the modelled footprint grows by it "
+                "(zackees/ci.yml#354)"
             ),
         )
     ]
