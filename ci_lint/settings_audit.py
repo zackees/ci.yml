@@ -42,6 +42,7 @@ from ci_lint.remote_only import check_required_checks as check_gate_012_required
 from ci_lint.rules.doc_claims import DocClaim, scan_repo_docs
 from ci_lint.rules.setup_soldr_freshness import check_rust_014
 from ci_lint.schema import CiToml
+from ci_lint.rules.linter_pin import check_ct_007
 
 API_ROOT = "https://api.github.com"
 DEFAULT_GATE_CHECK_NAME = "CI OK"
@@ -582,6 +583,11 @@ def run_audit(
     findings.extend(check_sec_005(fetch_status, token, repo, ci))
     findings.extend(check_sec_006(fetch_status, token, repo, ci, default_branch))
     findings.extend(check_sec_007(fetch_status, token, repo))
+    # CT-007: one extra GET, only when a pin is declared. A pin naming a
+    # commit that does not exist makes `local-gate run` unrunnable, so this
+    # costs a call to catch a defect that silently disables a repository's
+    # whole local verification.
+    findings.extend(check_ct_007(ci, fetch_status=fetch_status, token=token, repo=repo))
 
     branch_protection = _fetch_branch_protection(fetch_status, token, repo, default_branch)
     rulesets = _fetch_rulesets(fetch_status, token, repo)
