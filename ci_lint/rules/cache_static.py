@@ -30,6 +30,7 @@ truncates that PR's saved cache every time).
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
@@ -644,6 +645,7 @@ def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     findings.extend(check_cache_030(ci))
     findings.extend(check_cache_031(ci))
     findings.extend(check_cache_032(ci))
+    findings.extend(check_cache_034(ci, repo_root))
     return findings, arithmetic
 
 
@@ -772,3 +774,146 @@ def check_cache_032(ci: CiToml) -> list[Finding]:
         )
     ]
 
+
+
+# CACHE-034: `pre-prune = true` is a CLAIM about what the workflow does, and
+# CACHE-004's worst-case arithmetic trusts it -- `all_pre_pruned` waives the
+# lockfile-change peak outright. Nothing checked that any workflow actually
+# performs the pre-prune, so the waiver can be had for free.
+#
+# Found in FastLED/fbuild#1652 (2026-10-05): `[flow.main] pre-prune = true`
+# with `ci-lint cache preprune` appearing in ZERO workflow files. Removing the
+# declaration moved the modelled worst case from 7.92 GB to 15.84 GB against a
+# 10.20 GB budget -- the declaration had been suppressing 7.92 GB of modelled
+# footprint that nothing was reclaiming.
+#
+# The check is deliberately text-level: a pre-prune reached through a
+# composite action or a delegated `ci/*.py` script is still honoured, so the
+# scan covers workflows, composite actions, and `ci/` scripts one level deep.
+# It is `needs_review` rather than a violation because the call may legitimately
+# live in a script this scan cannot resolve, and a false accusation here would
+# push a repository toward a budget it can actually meet.
+_PREPRUNE_CALL = re.compile(r"cache\s+preprune")
+_PREPRUNE_SURFACES = ("ci",)
+
+
+def _preprune_call_exists(repo_root: Path) -> bool | None:
+    """Whether any scanned surface invokes `ci-lint cache preprune`.
+
+    Returns None when the answer is UNKNOWN: a workflow that exists but could
+    not be parsed (no PyYAML and no `yq`) must not be read as "no call exists",
+    or a missing parser would manufacture a finding. The caller reports
+    nothing in that case -- an unreadable tree is not evidence of a
+    contradiction.
+    """
+
+    def _has(text: str) -> bool:
+        return _PREPRUNE_CALL.search(text) is not None
+
+    unparsed = False
+    workflows = _documents_contain(load_workflows(repo_root))
+    if workflows.matched:
+        return True
+    composites = _documents_contain(load_composite_actions(repo_root))
+    if composites.matched:
+        return True
+    unparsed = workflows.unparsed or composites.unparsed
+    for rel in _iter_ci_scripts(repo_root):
+        try:
+            if _has((repo_root / rel).read_text(encoding="utf-8", errors="replace")):
+                return True
+        except OSError:
+            continue
+    return None if unparsed else False
+
+
+@dataclass(frozen=True)
+class _ScanOutcome:
+    """Result of scanning one workflow-like surface for a pre-prune call."""
+
+    matched: bool
+    unparsed: bool
+
+
+def _documents_contain(loaded: list[object]) -> _ScanOutcome:
+    matched = False
+    unparsed = False
+    for item in loaded:
+        status = getattr(item, "status", None)
+        if status != LoadStatus.OK:
+            unparsed = True
+            continue
+        if _PREPRUNE_CALL.search(_document_text(getattr(item, "document", None))):
+            matched = True
+    return _ScanOutcome(matched=matched, unparsed=unparsed)
+
+
+def _iter_ci_scripts(repo_root: Path) -> list[str]:
+    """`ci/` scripts one level deep, the same surface GHAPI-001 scans."""
+
+    ci_dir = repo_root / "ci"
+    if not ci_dir.is_dir():
+        return []
+    return sorted(str(p.relative_to(repo_root)) for p in ci_dir.glob("*.py"))
+
+
+def _document_text(document: object) -> str:
+    """Flatten a workflow/composite document to text for the call scan.
+
+    `_document_text` is deliberately crude: it only has to find a command
+    string, and a false negative here would wrongly clear a real finding, so
+    it errs toward including everything rather than parsing precisely.
+    """
+
+    return "\n".join(_walk_strings(document))
+
+
+def _walk_strings(node: object) -> list[str]:
+    if isinstance(node, str):
+        return [node]
+    if isinstance(node, dict):
+        out: list[str] = []
+        for value in node.values():
+            out.extend(_walk_strings(value))
+        return out
+    if isinstance(node, list):
+        out = []
+        for item in node:
+            out.extend(_walk_strings(item))
+        return out
+    return []
+
+
+def check_cache_034(ci: CiToml, repo_root: Path) -> list[Finding]:
+    """`pre-prune = true` on a writer flow with no pre-prune call anywhere."""
+
+    declaring: list[str] = []
+    for fid, flow in ci.flows.items():
+        if resolve_flow(ci, fid).pre_prune:
+            declaring.append(fid)
+    if not declaring:
+        return []
+    exists = _preprune_call_exists(repo_root)
+    if exists is not False:
+        # True (a call exists), or None (the tree could not be read). Neither
+        # is evidence of an unhonoured declaration.
+        return []
+    flows = ", ".join(f"'{f}'" for f in sorted(declaring))
+    return [
+        Finding(
+            rule="CACHE-034",
+            status=Status.NEEDS_REVIEW,
+            path="ci.toml",
+            message=(
+                f"flow(s) {flows} declare `pre-prune = true`, which waives the lockfile-change "
+                "peak from CACHE-004's worst case, but no workflow, composite action, or ci/ "
+                "script invokes `ci-lint cache preprune` -- the waiver is unhonoured, so the "
+                "modelled footprint is understated by the whole peak term"
+            ),
+            fix=(
+                "either add the pre-prune step to the writer flow (a `ci-lint cache preprune "
+                "--lockfile-changed` step with `actions: write`, before the cache saves), or "
+                "remove `pre-prune = true` so CACHE-004 counts the peak"
+            ),
+        )
+    ]
