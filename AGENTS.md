@@ -19,7 +19,7 @@ Every prefix `ci_lint` implements or reserves, and the next free number in each 
 
 | Family | Reserved | Next free | Implemented |
 | --- | --- | --- | --- |
-| `CT` | 001–006 | `CT-007` | all |
+| `CT` | 001–007 | `CT-008` | 001-006 static; 007 implemented but LIVE-only (`ci_lint.rules.linter_pin.check_ct_007`, wired into `ci-lint audit`: the declared `linter` SHA must name a real commit in zackees/ci.yml. Measured 2026-10-05: bosn `fe965fc7` and soldr `a07bab94` were 422 -- pins that had never existed, left by the cache-policy workstream, which made `local-gate run` unrunnable and GATE-003 fail on every PR. CT-002 cannot catch it: a well-formed SHA naming a nonexistent commit passes the shape check. Silent without a fetch, and a 401/403 is UNKNOWN rather than dead) |
 | `TAG` | 001–003 | `TAG-004` | all |
 | `WF` | 001–003 | `WF-004` | all |
 | `GEN` | 001–021 | `GEN-022` | 001, 002, 003 (partial -- see policy-general.md), 004, 005, 006, 007, 008, 009, 010, 011, 012, 013, 014–018, 021 (partial -- static blanket-skip precheck + `ci-lint reuse-check`/`reuse-report` runtime + Phase 2's `[reuse.default-branch]` schema and `ci-lint gate --default-branch-reuse` consumer, #158; its aggregator-provenance, cache-writer and doc-claim clauses are candidate, #159). 019 and 020 are candidates claimed by open issues #111/#112 (see #154) |
