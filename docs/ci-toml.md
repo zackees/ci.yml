@@ -405,6 +405,7 @@ not a `[cache.family].via` value at all.
 | `setup-soldr:cross-targets` | `setup-soldr-prepare-v3-` | `blessed-cross-prepare.ts:89` |
 | `setup-soldr:dylint` | `setup-soldr-dylint-v2-` | `resolve-setup.ts:1185-1186` (one entry covers the dylint tool/driver/foundation together; v1 when `dylintModeEnabled` is false) |
 | `setup-soldr:dylint-output` | `setup-soldr-dylint-output-v2-` | `resolve-setup.ts:1258` (v2 since setup-soldr v0.9.82; list the literal `setup-soldr-dylint-output-v1` in `[cache].retired` to delete the old generation) |
+| `setup-soldr:target-cache` | `setup-soldr-targetcache-` | `resolve-setup.ts:965,974` -- `setup-soldr-targetcache-${buildCacheMode}-v2-...`; :957 is the `-off-v1` variant. The prefix is a template, and classification matches by `startswith`, so one entry covers every mode. |
 | `setup-soldr:soldr-mini` | `soldr-mini-v2-` | `soldr-mini-cache.ts:85` |
 | `setup-soldr:solo-toolchain` | `solo-toolchain-v3-` | `solo-toolchain-cache.ts:276,280` (retired in the template, issue #6 D14; declared only so a `[cache].retired` entry resolves to a real prefix) |
 | `setup-uv` | `setup-uv-2-` | astral-sh/setup-uv `src/cache/restore-cache.ts:12,105` -- `CACHE_VERSION = "2"`, `` `setup-uv-${CACHE_VERSION}-${getArch()}-${platform}-${osNameVersion}-${version}${pruned}${python}${cacheDependencyPathHash}${suffix}` ``. Also accepts the legacy `setup-uv-1-` generation that setup-uv v6 (e.g. `d0d8abe`, `CACHE_VERSION = "1"`) still writes -- classification only; ci.yml#87. See "astral-sh/setup-uv's own cache" below. |
