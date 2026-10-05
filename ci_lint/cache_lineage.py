@@ -177,3 +177,70 @@ def resolve(repo: Path, head: Lineage, keys: list[str], *, family: str,
         if run_captured(["git", "-C", str(repo), "merge-base", "--is-ancestor", full, head.sha]).ok:
             return Resolution(entry.key, len(entries), f"nearest ancestor {entry.lineage.label()}")
     return Resolution(None, len(entries), f"no ancestor entry among {len(entries)} '{family}' key(s)")
+
+
+# ── setup-soldr's ancestor encoding (zackees/ci.yml#335) ─────────────────────
+#
+# setup-soldr's ancestor pilot (#566) records the SAME ancestry under a
+# different key, and selects by shortest parent-edge distance from a live git
+# DAG walk rather than by a first-parent ordinal:
+#
+#   setup-soldr-ancestor-build-v1-<identity>-source-<sha>-run-<n>-attempt-<n>[-pr-<N>]
+#
+# #335 standardizes promotion on this encoding and keeps `m<n>` for offline
+# audit, so tooling must be able to SEE both. This module stays the `m<n>`
+# side; the ancestor side is parsed here so `cache.audit` can group entries and
+# so `parse_key`'s deliberate refusal has a named counterpart rather than a
+# silent None.
+#
+# Bounds mirror src/lib/ancestor-cache.ts exactly, so a key this accepts is a
+# key setup-soldr would have written.
+
+_ANCESTOR_RE = re.compile(
+    r"^setup-soldr-ancestor-build-v1-(?P<identity>[0-9a-f]{16,64})"
+    r"-source-(?P<sha>[0-9a-f]{40}|[0-9a-f]{64})"
+    r"-run-(?P<run>[1-9][0-9]*)"
+    r"-attempt-(?P<attempt>[1-9][0-9]*)"
+    r"(?P<pr>-pr-(?P<pr_number>[1-9][0-9]*))?$"
+)
+
+
+@dataclass(frozen=True)
+class AncestorKey:
+    """One setup-soldr ancestor key, split into what identifies the CACHE
+    IDENTITY (the build configuration) and what is per-save PROVENANCE.
+
+    `identity` and `pr` decide whether two entries belong to the same
+    lineage and can supersede each other. `sha`, `run` and `attempt` are
+    per-save and must NOT split a group: two saves of the same identity for
+    the same PR are exactly the pair CACHE-006 needs to see.
+    """
+
+    identity: str
+    sha: str
+    run: int
+    attempt: int
+    pr: int | None = None
+
+    @property
+    def family(self) -> str:
+        """The shape key: identity plus PR scope, with per-save provenance
+        collapsed so same-lineage entries group for supersession."""
+
+        tag = f"-pr-{self.pr}" if self.pr is not None else ""
+        return f"setup-soldr-ancestor-build-v1-{self.identity}-source-<sha>-run-<run>-attempt-<att>{tag}"
+
+
+def parse_ancestor_key(key: str) -> AncestorKey | None:
+    """Parse setup-soldr's ancestor key. Returns None for anything else --
+    including this module's own `m<n>` labels, which `parse_key` owns."""
+    m = _ANCESTOR_RE.match(key)
+    if m is None:
+        return None
+    return AncestorKey(
+        identity=m.group("identity"),
+        sha=m.group("sha"),
+        run=int(m.group("run")),
+        attempt=int(m.group("attempt")),
+        pr=int(m.group("pr_number")) if m.group("pr_number") else None,
+    )
