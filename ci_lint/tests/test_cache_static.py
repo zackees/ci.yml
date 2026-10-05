@@ -14,6 +14,7 @@ from ci_lint.rules.cache_static import (
     check_cache_014,
     check_cache_029,
     check_cache_030,
+    check_cache_031,
     parse_size,
 )
 from ci_lint.schema import CachePromote, load_ci_toml
@@ -215,6 +216,48 @@ class CacheStaticFixtureTest(unittest.TestCase):
         self.assertEqual([f.rule for f in findings], ["CACHE-030"])
         self.assertEqual(findings[0].status.value, "needs_review")
         self.assertIn("#552", findings[0].fix)
+
+    @requires_yaml_tooling
+    def test_cache_031_unpromotable_family_under_a_promotion_claim(self) -> None:
+        """Promotion is a promise about a KEY SHAPE. A family that does not
+        carry the lineage label cannot honor it -- a content hash discards
+        the ancestry the nearest-ancestor search needs (fleet measurement
+        2026-10-04: soldr 70 labeled entries = 0.00 GiB against 5.97 GiB of
+        bare-hash build caches; bosn 85 / 0.00 against 4.41)."""
+
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        # Without a promotion claim there is nothing to be inconsistent with.
+        self.assertEqual(check_cache_031(ci), [])
+
+        promoted = replace(ci, cache=replace(ci.cache, promote=CachePromote(mode="ancestor")))
+        self.assertEqual(check_cache_031(promoted), [])  # fixture families are 10MB, under the floor
+
+        # A small family is noise; only one big enough to threaten the budget
+        # can make a promotion claim that its keys cannot keep.
+        big = replace(
+            promoted,
+            cache=replace(
+                promoted.cache,
+                family={**promoted.cache.family, "compile": replace(promoted.cache.family["compile"], max="500MB")},
+            ),
+        )
+        findings = check_cache_031(big)
+        self.assertEqual([f.rule for f in findings], ["CACHE-031"])
+        self.assertIn("compile", findings[0].message)
+        for f in findings:
+            self.assertEqual(f.status.value, "needs_review")
+            self.assertIn("#552", f.fix)
+
+    @requires_yaml_tooling
+    def test_cache_031_a_family_that_declares_the_label_is_quiet(self) -> None:
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        promoted = replace(ci, cache=replace(ci.cache, promote=CachePromote(mode="ancestor")))
+        fams = {
+            fid: replace(fam, promote="ancestor") if parse_size(fam.max) and parse_size(fam.max) >= 256 * 1024**2 else fam
+            for fid, fam in promoted.cache.family.items()
+        }
+        quiet = replace(promoted, cache=replace(promoted.cache, family=fams))
+        self.assertEqual(check_cache_031(quiet), [])
 
     @requires_yaml_tooling
     def test_cache_014_no_optional_inputs_is_silent(self) -> None:

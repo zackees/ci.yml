@@ -609,4 +609,67 @@ def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     findings.extend(check_cache_014(ci))
     findings.extend(check_cache_029(ci))
     findings.extend(check_cache_030(ci))
+    findings.extend(check_cache_031(ci))
     return findings, arithmetic
+
+
+def check_cache_031(ci: CiToml) -> list[Finding]:
+    """A repository that declares ancestor promotion, but whose families
+    cannot support it, is promising something its keys cannot deliver.
+
+    Promotion means: given commit M, find the nearest ancestor's cache entry.
+    That search is decidable from the keys alone only when a key carries the
+    lineage label (`m<n>[-c<k>]-<sha10>[-pr-<N>]`,
+    ci_lint.cache_lineage) -- `m<n>` is the first-parent ordinal, so
+    `m<i>` precedes `m<j>` iff i < j. A key that ends in a bare content hash
+    (setup-soldr's `...-<16 hex>`) cannot answer the question at all: a
+    content hash is a function of the input tree, so nothing in it records
+    ancestry. That is not a gap a janitor can bridge -- the evidence is gone
+    at save time.
+
+    Measured 2026-10-04 across the fleet's live cache listings: the label is
+    adopted exactly where it carries no bytes. soldr has 70 lineage-labeled
+    entries totalling 0.00 GiB (all `att1-*` attestation side-entries)
+    against 5.97 GiB of bare-hash build caches; bosn 85 / 0.00 GiB against
+    4.41 GiB; zccache, clud and kernal-api have none at all.
+
+    This is `needs_review`, never a hard failure, for two reasons. setup-soldr
+    does not implement the promotion mechanism yet (its `auto-key` input is
+    declared in `action.yml` and absent from its source and bundle;
+    zackees/setup-soldr#552 is open), so a violation here may be a repository
+    that cannot fix it today rather than one that got it wrong. And a family
+    only becomes promotable when its keys change shape -- an instantaneous
+    fix would invalidate every warm entry at once, which on repositories
+    already at the 10GB cap is a real cost, not a free correction."""
+
+    if ci.cache.promote.mode != "ancestor":
+        return []
+    findings: list[Finding] = []
+    for fid, family in sorted(ci.cache.family.items()):
+        if family.promote == "ancestor":
+            continue
+        declared = parse_size(family.max)
+        if declared is None or declared < UNBOUNDED_FAMILY_BYTES:
+            continue
+        findings.append(
+            Finding(
+                rule="CACHE-031",
+                status=Status.NEEDS_REVIEW,
+                path="ci.toml",
+                message=(
+                    f"'cache.promote.mode = \"ancestor\"' is declared, but cache family '{fid}' "
+                    f"(max = {family.max}) does not declare promote = \"ancestor\" on its own keys, "
+                    "so its entries carry a content hash rather than a lineage label and no "
+                    "nearest-ancestor promotion search can select one"
+                ),
+                fix=(
+                    f"add promote = \"ancestor\" to '[cache.family.{fid}]' and have the workflow "
+                    "suffix the key with the label from 'ci-lint attest lineage' "
+                    "(m<n>-<sha10> on main, m<b>-c<k>-<sha10>-pr-<N> on a PR, the PR part already "
+                    f"being ${{{{ env.PR_CACHE_TAG }}}} per CACHE-013). Blocked on "
+                    "zackees/setup-soldr#552 for setup-soldr-owned families; changing a live key "
+                    "shape also invalidates that family's warm entries, so schedule it"
+                ),
+            )
+        )
+    return findings

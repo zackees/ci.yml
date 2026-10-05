@@ -188,8 +188,15 @@ class CacheFamily:
     # (max x cardinality). None (the default) keeps the newest entry per key
     # prefix instead (CACHE-006 superseded-entry cleanup).
     evict: str | None = None
+    # CACHE-031: this family's saved keys carry the ancestor-defining lineage
+    # label (ci_lint.cache_lineage: `m<n>[-c<k>]-<sha10>[-pr-<N>]`), which is
+    # what makes a nearest-ancestor promotion search decidable from the keys
+    # alone. `None` (the default) means the family keys on content alone --
+    # a content hash, which discards the git-DAG ancestry a promotion needs.
+    promote: str | None = None
 
 
+CACHE_FAMILY_PROMOTE_VALUES: frozenset[str] = frozenset({"ancestor"})
 CACHE_FAMILY_EVICT_VALUES: frozenset[str] = frozenset({"lru"})
 
 
@@ -640,6 +647,18 @@ def _parse_cache(root: Cursor) -> CacheConfig:
             )
         min_ = fsub.str_("min", required=False)
         key = fsub.list_str("key", required=False)
+        promote = fsub.str_("promote", required=False)
+        if promote is not None and promote not in CACHE_FAMILY_PROMOTE_VALUES:
+            root.findings.append(
+                Finding(
+                    rule="CT-002",
+                    path=root.source,
+                    message=f"'cache.family.{fam_id}.promote' = {promote!r} is not one of "
+                    f"{sorted(CACHE_FAMILY_PROMOTE_VALUES)}",
+                    fix=f"set 'cache.family.{fam_id}.promote' to \"ancestor\" (this family's keys "
+                    "carry the lineage label), or omit it to declare that they key on content alone",
+                )
+            )
         evict = fsub.str_("evict", required=False)
         if evict is not None and evict not in CACHE_FAMILY_EVICT_VALUES:
             root.findings.append(
@@ -655,7 +674,7 @@ def _parse_cache(root: Cursor) -> CacheConfig:
         fsub.finish()
         family[fam_id] = CacheFamily(
             id=fam_id, via=via, max=max_, lockfile=bool(lockfile), per=per, min=min_, key=key or None,
-            evict=evict,
+            evict=evict, promote=promote,
         )
     promote = _parse_cache_promote(root, sub)
     share = _parse_cache_share(root, sub, family)
