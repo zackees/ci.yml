@@ -52,7 +52,7 @@ from ci_lint.cache.github_cache import (
 )
 from ci_lint.finding import Finding, Status
 from ci_lint.github_api import FetchFn, GitHubApiError, GraphQLFn
-from ci_lint.rules.cache_static import cardinality, parse_size
+from ci_lint.rules.cache_static import cardinality, family_footprint, parse_size
 from ci_lint.schema import CiToml
 
 # RUST-004: the two `via` values whose live entries this correlates against
@@ -639,9 +639,26 @@ def _check_family_live_excess(
         ]
         if not live:
             continue
-        declared_count = cardinality(ci, fam.per) * (2 if fam.lockfile else 1)
+        # A family that declares `shapes` (ci.yml#334) budgets the SUM of
+        # the shape ceilings, and CACHE-004's static proof uses that same
+        # number. Reading `per`/`max` here instead made the live audit
+        # disagree with the static proof in BOTH directions: a shapes family
+        # was charged `max x cardinality(per)` entries it never declared
+        # (zackees/wild's `cook`: 3 live entries against a modelled 2, a
+        # spurious violation), and the "declared worst case" in the message
+        # was the wrong number. Same class as the janitor gap fixed in
+        # #343: one footprint, one implementation.
+        declared_count = cardinality(ci, fam.per, len(fam.shapes)) * (2 if fam.lockfile else 1)
         max_bytes = parse_size(fam.max) if fam.max else None
-        oversized = [c for c in live if max_bytes is not None and c.entry.size_in_bytes > max_bytes]
+        # Per-entry ceiling: with `shapes`, the binding number is the largest
+        # shape ceiling, not the family's single `max` -- `max` is only the
+        # fallback when a family is uniformly sized.
+        entry_ceiling = max(
+            (parse_size(sh.max) or 0 for sh in fam.shapes), default=max_bytes
+        )
+        oversized = [
+            c for c in live if entry_ceiling is not None and c.entry.size_in_bytes > entry_ceiling
+        ]
         if len(live) <= declared_count and not oversized:
             continue
         live_bytes = sum(c.entry.size_in_bytes for c in live)
@@ -655,7 +672,11 @@ def _check_family_live_excess(
         if oversized:
             ids = ", ".join(f"id={c.entry.id} {c.entry.size_in_bytes}B" for c in oversized)
             problems.append(f"{len(oversized)} entrie(s) exceed max = {fam.max!r} ({ids})")
-        declared_bytes = declared_count * max_bytes if max_bytes is not None else None
+        declared_bytes = (
+            family_footprint(ci, fam) * (2 if fam.lockfile else 1)
+            if fam.shapes
+            else (declared_count * max_bytes if max_bytes is not None else None)
+        )
         bound = f" vs a declared worst case of {declared_bytes}B" if declared_bytes is not None else ""
         # The static proof is actually broken only when the family's live
         # bytes exceed what it budgets; a shape mismatch that still fits

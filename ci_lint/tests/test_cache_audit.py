@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from dataclasses import replace
 
 from ci_lint.cache.audit import (
     _TRAILING_HASH_RE,
@@ -750,3 +751,48 @@ max-age-hours = 168
         self.assertIsNone(parse_ancestor_key(self._key("a" * 40, 1, identity="abcd")))
         # run/attempt must be positive integers.
         self.assertIsNone(parse_ancestor_key(f"setup-soldr-ancestor-build-v1-{self.IDENTITY}-source-{'a' * 40}-run-0-attempt-1"))
+
+class LiveExcessShapesTest(unittest.TestCase):
+    """`ci-lint cache audit`'s live-excess check must read the SAME number
+    CACHE-004's static proof reads.
+
+    Third consumer found to disagree after the janitor fix (#343):
+    `_check_family_live_excess` computed `cardinality(per) * max` while a
+    `shapes` family's static budget is the SUM of its shape ceilings. On
+    zackees/wild that charged `cook` a modelled 2 entries against 3 live
+    ones and raised a spurious violation for a family whose declaration was
+    correct -- and it also printed the wrong "declared worst case" in the
+    message. A family that is over its real budget should be the only
+    thing this check reports.
+    """
+
+    def test_a_shapes_family_is_not_charged_max_times_cardinality(self) -> None:
+        from dataclasses import replace as _replace
+
+        from ci_lint.cache.audit import _check_family_live_excess
+        from ci_lint.schema import CacheShape
+
+        ci, _ = load_ci_toml(REPO)
+        fam = replace(
+            ci.cache.family["deps"],
+            max="10MB",
+            per=None,
+            evict="lru",
+            shapes=(CacheShape("a", "700MB"), CacheShape("b", "660MB"), CacheShape("c", "420MB")),
+        )
+        shaped = replace(ci, cache=replace(ci.cache, family={**ci.cache.family, "deps": fam}))
+        def big(i: int, mb: int) -> ClassifiedEntry:
+            base = _classified_entry(i, "deps", "refs/heads/main", "2026-10-01T00:00:00Z")
+            return replace(
+                base,
+                entry=replace(base.entry, size_in_bytes=mb * 1024**2),
+            )
+
+        entries = tuple(big(i, mb) for i, mb in ((1, 666), (2, 640), (3, 410)))
+        # 3 live entries against 3 declared shapes: no finding.
+        self.assertEqual(_check_family_live_excess(shaped, entries, "main"), [])
+        # The same 3 entries under `per = None` (cardinality 1) IS a real
+        # excess, so the check still bites when the model really is too small.
+        plain = replace(shaped, cache=replace(shaped.cache, family={**shaped.cache.family,
+                     "deps": replace(fam, shapes=())}))
+        self.assertTrue(_check_family_live_excess(plain, entries, "main"))
