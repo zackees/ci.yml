@@ -208,6 +208,8 @@ Two tables describing how a cache entry moves **between** branches. Both are dec
 | `mode` | `"off"` \| `"ancestor"` | `"off"` | `ancestor`: a default-branch push inherits the entry a pull request proved, through the git DAG, instead of rewriting it on every push. `off` (today's behavior) rewrites. |
 | `max-age-hours` | number | `168` | how old a promotable entry may be. |
 
+| `[cache.family.<id>].promote` | `"ancestor"` or absent | absent | Declares that this family's saved keys carry the **lineage label** (`ci_lint.cache_lineage`), which is what makes a nearest-ancestor promotion search decidable from the keys alone. `CACHE-031`. |
+
 | `[cache.share.<family-id>]` | type | default | meaning |
 | --- | --- | --- | --- |
 | `scope` | `"branch"` \| `"repo"` | `"branch"` | `branch`: the family is restored within this repository by any branch that proves the same lockfile/shape. `repo`: every branch reads and writes one shared entry. |
@@ -226,6 +228,34 @@ nowhere in its source or in its built bundle (`dist/main.js`, `dist/post.js`), a
 the implementation, rather than accepting it silently or refusing it: a repository
 may record the policy it intends to adopt, but must not drop its drift backstop on
 the strength of the declaration.
+
+**A promotion claim is a claim about key *shapes*, not just intent.**
+`CACHE-031` therefore also checks that the families can honor it. Promotion means:
+given commit `M`, find the nearest ancestor's cache entry. That search is decidable
+from the keys alone only when a key carries the lineage label
+`m<n>[-c<k>]-<sha10>[-pr-<N>]`, where `m<n>` is the first-parent ordinal -- so
+`m<i>` precedes `m<j>` iff `i < j`. A key ending in a bare content hash
+(setup-soldr's `...-<16 hex>`) cannot answer the question at all: a content hash is
+a function of the input tree, so nothing in it records ancestry. That is not a gap a
+janitor can bridge -- the evidence is destroyed at save time.
+
+Measured 2026-10-04 across the fleet's live cache listings, the label is adopted
+exactly where it carries no bytes:
+
+| repository | lineage-labeled entries | their size | bare-hash build caches |
+| --- | --- | --- | --- |
+| soldr | 70 | **0.00 GiB** (all `att1-*` attestation side-entries) | 5.97 GiB |
+| bosn | 85 | **0.00 GiB** (same) | 4.41 GiB |
+| zccache | 0 | -- | 7.57 GiB |
+| clud | 0 | -- | 22 of 24 entries |
+| kernal-api | 0 | -- | 9 |
+
+So a family opts in with `promote = "ancestor"` on `[cache.family.<id>]`, and its
+workflow suffixes the key with the label from `ci-lint attest lineage` -- the PR part
+already being `${{ env.PR_CACHE_TAG }}` per `CACHE-013`. `CACHE-031` is
+**`needs_review`, never a hard failure**: setup-soldr does not implement the
+mechanism yet (#552), and changing a live key shape invalidates that family's warm
+entries at once, which on a repository already at the 10 GB cap is a real cost.
 
 ## `[cache]`
 
@@ -843,6 +873,7 @@ when neither PyYAML nor `yq` is available).
 | `CACHE-008` | (round-4A, live; widened by #23 §4.1) Any entry of a closed/merged PR -- key with a delimited `pr-<N>` component, a legacy `delta-v1-pr<N>-...` key, or ref `refs/pull/<N>/merge` -- or a PR delta whose base hash matches none of that family's live base entries. A `pr-<N>`-keyed entry is PR-scoped, never a `CACHE-003` base layer. | Delete it (`ci-lint cache janitor` deletes closed-PR entries on every push sweep; `ci-lint cache trim` also covers stale-base deltas). |
 | `CACHE-013` | (#23 §5, static) A cache save reachable from a PR (a workflow with `pull_request`/`workflow_call`, or a composite action) whose key input lacks a delimited `pr-<N>` component: `zackees/setup-soldr` `cache-key-suffix` (unless `save-cache: "false"`), `astral-sh/setup-uv` `cache-suffix` (unless `enable-cache: false` or `save-cache: false`), `actions/cache`/`actions/cache/save` `key`. Accepted: an expression containing `github.event.pull_request.number`, or the plan output `cache_key_pr` (`pr-<N>` on `pull_request`, empty elsewhere, from `ci-lint plan/precheck --github-output`); inside a composite action, an `inputs.*` passthrough. | Set the key input to `${{ needs.precheck.outputs.cache_key_pr }}` (or a `format('pr-{0}', github.event.pull_request.number)` expression). |
 | `CACHE-029` | (static) A `[cache.family.<id>]` declaring `max` >= 256 MB with no `evict = "lru"` -- nothing bounds how many entries the family may hold at once. `max` sizes ONE entry, not the family's footprint, so it cannot catch this. `per` is **not** accepted as an exemption: it declares the writer shape, not the entry count. | Add `evict = "lru"` to the family so `ci-lint cache janitor` keeps it at `max x cardinality`. Measure first with `ci-lint cache audit --repo .` -- CACHE-006 names the superseded entries eating the budget. Declaring `[cache.family]` is also what makes the boundary machine-checkable: kernal-api reclaimed 6.5 GiB with the janitor, while clud and running-process, which declare none, can only be inferred from the key shape. |
+| `CACHE-031` | (static, `needs_review`) `[cache.promote] mode = "ancestor"` declared while a `[cache.family.<id>]` of `max` >= 256 MB does not itself declare `promote = "ancestor"` -- its keys carry a content hash, which discards the git-DAG ancestry a nearest-ancestor search needs, so no promotion can select one. Blocked on setup-soldr#552 for setup-soldr-owned families. | Add `promote = "ancestor"` to the family and suffix its key with `ci-lint attest lineage`'s label. Sequence it: a live key-shape change invalidates that family's warm entries. |
 | `CACHE-014` | (M2-17, ci.yml#42, static; only fires when the corresponding optional input is set) `[cache.pr].max-per-pr x expected-open-prs > [cache.pr].budget`, and/or `[cache.pr].max-per-pr < [cache.pr].measured-largest-delta`. | Lower `max-per-pr` or `expected-open-prs`, or raise `[cache.pr].budget`; and/or raise `max-per-pr` to at least the measured largest delta -- see "Sizing `[cache.pr]` for repository scale" above. |
 | `CACHE-025` | (#209, static; also `ci-lint local-gate lint` and `ci-lint fleet scan`) A workflow or composite-action step `uses: Swatinem/rust-cache@<ref>`. | Delete it. Rust build caching goes through `zackees/setup-soldr@v0` (cache on) or `soldr cargo`/`soldr cook`. There are no exceptions (maintainer decision 2026-10-02): no same-line allow comment, no `[[exceptions]]` entry, not for a soldr bootstrap job or a benchmark baseline (docs/policy-rust.md). |
 | `SEC-005` | (round-5, live, `ci-lint audit`) Any repository or `[publish].pypi.environment` environment Actions secret exists; a 403 (needs an admin token) is `needs_review`, never a pass. | This profile is OIDC-only (issue #6 §7): delete the stored secret(s). |
