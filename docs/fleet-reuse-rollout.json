@@ -540,11 +540,10 @@
     "ci.yml#311": "gate now matches plan-derived matrix lane display names (merged)"
   },
   "result": {
-    "adopted_reuse": 3,
-    "reuse_draft": 1,
-    "cache_policy_declared": 3,
-    "cache_space_reclaimed": "~9.4 GiB",
-    "fleet_repos_at_or_near_cap": 9
+    "cache_policy_merged": 6,
+    "open_awaiting_stamp": 3,
+    "open_structural": 1,
+    "cache_reclaimed_fleet": "~180 GiB"
   },
   "measured_eligibility": {
     "method": "ci-lint reuse-report --limit 10..20 --since 2026-09-20, required-job = the dominant main-push job; costs are mean runner-minutes per successful main push over 5-12 runs.",
@@ -1028,6 +1027,77 @@
         "tracked_at": "#322",
         "unblocks": "one serial `local-gate run` per repository with no other bosn activity, or per-run state directories so concurrent sessions cannot share a daemon"
       }
-    }
+    },
+    "merged_declarations": [
+      {
+        "repo": "zackees/clud",
+        "pr": 1801,
+        "commit": "7f40d80d",
+        "before": "10.56 GiB (OVER the 10GB cap)",
+        "after": "8.69 GiB"
+      },
+      {
+        "repo": "zackees/reld",
+        "pr": 218,
+        "commit": "ac71f0b",
+        "worst": "5.92 GiB vs 9.5 GB budget"
+      },
+      {
+        "repo": "zackees/bosn",
+        "pr": 512,
+        "note": "merged by another session"
+      },
+      {
+        "repo": "zackees/zccache",
+        "pr": 1910,
+        "commit": "be15264c",
+        "worst": "8.27 GB vs 9.5 GB",
+        "janitor": "0 LRU truncations"
+      },
+      {
+        "repo": "zackees/wild",
+        "pr": 52,
+        "commit": "e2e75df6",
+        "worst": "5.34 GiB vs 9.5 GB",
+        "janitor": "0 deletions from all 4 declared families",
+        "undeclareable": "v0-rust-* (14 entries, 2122 MB, 45%) -- Swatinem/rust-cache's default, which CACHE-025 bans outright; no via invented"
+      },
+      {
+        "repo": "zackees/soldr",
+        "note": "declared but DEFECTIVE -- see zackees/soldr#3580: compile overstates 4.7x (2600MB x 6 vs 1 entry of 558MB) and omits the largest real family (zccache-unit-v1, 2.49 GB)"
+      }
+    ],
+    "open_declarations": [
+      {
+        "repo": "zackees/running-process",
+        "pr": 1323,
+        "blocked": "GATE-003 Local-Gate trailer",
+        "janitor": "4 benign LRU deletions of older-soldr-version toolchain entries -- re-download, not rebuild. Tracked as zackees/running-process#1325."
+      },
+      {
+        "repo": "zackees/mimalloc-pprof",
+        "pr": 603,
+        "blocked": "GATE-003 trailer",
+        "janitor": "0 LRU truncations"
+      },
+      {
+        "repo": "FastLED/fbuild",
+        "pr": 1652,
+        "blocked": "GATE-003 trailer",
+        "janitor": "0 LRU truncations"
+      },
+      {
+        "repo": "FastLED/FastLED",
+        "pr": 4703,
+        "blocked": "not a gate -- a real defect. cache-mode:'split' is AVAILABLE (on fbuild main, which FastLED pins via a floating @main) but broken: setup runs before the compile step synthesises platformio.ini, and fbuild install hard-fails on apollo3_red, clone, kitchensink. Would turn the board matrix red."
+      }
+    ],
+    "schema_changes_made_because_a_repo_would_not_declare": [
+      "#334 [cache.family].shapes -- a family whose entries differ in size (running-process compile: two 1.25GiB shapes, eight <=529MB)",
+      "#343 _lru_evictions now uses family_footprint -- it used max x cardinality while CACHE-004 used the shapes sum, so the janitor was STRICTER and deleted live caches precheck approved. Found independently by 3 agents.",
+      "#345 setup-soldr:target-cache via -- 33 entries across 3 repos were permanently undeclareable",
+      "#348 _check_family_live_excess now uses family_footprint -- it charged wild's cook cardinality(None)x2=2 against 3 live entries, a spurious violation; and compared each entry against fam.max instead of the largest shape ceiling, so a shapes family could never pass."
+    ],
+    "open_schema_gap": "#347 -- via maps one value to ONE literal prefix, so neither a PATH-shaped cache (sccache/<a>/<b>/<c>/<hash>, 203 live on zccache) nor a repository-owned prefix can be declared. Adding them to [cache].retired would convert CACHE-001 into CACHE-009 and DELETE read caches -- both agents that hit this declined to do it."
   }
 }
