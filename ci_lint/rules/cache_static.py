@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ci_lint.finding import Finding
+from ci_lint.finding import Finding, Status
 from ci_lint.resolve import resolve_flow
 from ci_lint.schema import CiToml
 from ci_lint.workflow_scan import as_dict, load_composite_actions, load_workflows
@@ -566,6 +566,38 @@ def check_cache_029(ci: CiToml) -> list[Finding]:
     return findings
 
 
+def check_cache_030(ci: CiToml) -> list[Finding]:
+    """`[cache.promote] mode = "ancestor"` declares that a default-branch
+    push inherits the cache a pull request proved, instead of rewriting it.
+
+    It is a POLICY statement today, not a mechanism. zackees/setup-soldr
+    declares an `auto-key` input in its `action.yml` -- "treat an omitted
+    key as 'auto' for the source-dependent build-cache pilot" -- but that
+    input appears nowhere in setup-soldr's source or in its built bundle
+    (`dist/main.js`, `dist/post.js`), and zackees/setup-soldr#552 is still
+    open. Declaring `ancestor` today would be a promise nothing keeps, so
+    it is reported as needs_review pointing at the implementation, rather
+    than accepted silently or refused outright: a repository is allowed to
+    record the policy it intends to adopt."""
+
+    if ci.cache.promote.mode != "ancestor":
+        return []
+    return [
+        Finding(
+            rule="CACHE-030",
+            status=Status.NEEDS_REVIEW,
+            path="ci.toml",
+            message='\'cache.promote.mode = "ancestor"\' declares nearest-ancestor cache promotion, '
+            "but setup-soldr does not implement it yet (the `auto-key` input is declared in its "
+            "action.yml and absent from its source and bundle; zackees/setup-soldr#552 is open)",
+            fix="record the intent now and revisit once zackees/setup-soldr#552 lands; until then "
+            "promotion does not happen, so keep the declared drift backstop (a scheduled full "
+            "default-branch run, or enough naturally-must-run pushes) and do not remove it on the "
+            "strength of this declaration",
+        )
+    ]
+
+
 def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     findings: list[Finding] = []
     findings.extend(check_cache_001(ci, repo_root))
@@ -576,4 +608,5 @@ def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     findings.extend(cache_004_findings)
     findings.extend(check_cache_014(ci))
     findings.extend(check_cache_029(ci))
+    findings.extend(check_cache_030(ci))
     return findings, arithmetic

@@ -13,9 +13,10 @@ from ci_lint.rules.cache_static import (
     check_cache_010,
     check_cache_014,
     check_cache_029,
+    check_cache_030,
     parse_size,
 )
-from ci_lint.schema import load_ci_toml
+from ci_lint.schema import CachePromote, load_ci_toml
 from ci_lint.tests.helpers import fixture, requires_yaml_tooling
 
 
@@ -199,6 +200,21 @@ class CacheStaticFixtureTest(unittest.TestCase):
         fam["small"] = replace(fam["uv"], max="5MB", evict=None, per=None)
         findings = check_cache_029(replace(ci, cache=replace(ci.cache, family=fam)))
         self.assertFalse(any("'small'" in f.message for f in findings), [f.message for f in findings])
+
+    def test_cache_030_promotion_is_needs_review_until_it_is_implemented(self) -> None:
+        """`[cache.promote] mode = "ancestor"` is a policy statement today.
+        setup-soldr declares an `auto-key` input in its action.yml, but the
+        input appears nowhere in its source or its built bundle, and
+        zackees/setup-soldr#552 is open. Recording the intent must be
+        allowed; believing it happened must not."""
+
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        self.assertEqual(check_cache_030(ci), [])
+        promoted = replace(ci, cache=replace(ci.cache, promote=CachePromote(mode="ancestor")))
+        findings = check_cache_030(promoted)
+        self.assertEqual([f.rule for f in findings], ["CACHE-030"])
+        self.assertEqual(findings[0].status.value, "needs_review")
+        self.assertIn("#552", findings[0].fix)
 
     @requires_yaml_tooling
     def test_cache_014_no_optional_inputs_is_silent(self) -> None:
