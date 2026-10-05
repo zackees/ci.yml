@@ -52,6 +52,24 @@ class ExampleDriftTest(unittest.TestCase):
         # one entry rooted at "exceptions".
         self.assertIn("exceptions", paths)
 
+    def test_workflow_graph_is_repo_specific(self) -> None:
+        """A repository's workflow files are its own. The example is ONE
+        repository (template-python-rust-cmd, 2 workflows); soldr ships 29 and
+        running-process 22. Reporting a workflow-set difference as policy drift
+        says "you should have the template's workflows", which is meaningless --
+        and it blocks exactly the repositories that most need to adopt the
+        profile.
+        """
+
+        from ci_lint.example_drift import _is_repo_specific
+
+        for name in ("ci.yml", "_build.yml", "auto-release.yml", "cache-budget.yml"):
+            self.assertTrue(_is_repo_specific(("allow", "workflows", name)), name)
+        # But the EVENT vocabulary is not exempt: this is about file sets.
+        self.assertFalse(_is_repo_specific(("allow", "workflows")))
+        self.assertFalse(_is_repo_specific(("allow", "permissions")))
+        self.assertFalse(_is_repo_specific(("lint",)))
+
     # -- RED: everything the green fixture has, plus three non-exempt ----
 
     def test_red_repo_flags_dylint_shape_as_policy_drift(self) -> None:

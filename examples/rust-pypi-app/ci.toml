@@ -101,13 +101,36 @@ pr       = { mode = "delta", families = ["compile"], max-per-pr = "128MB", budge
 
 [cache.family]
 registry   = { via = "setup-soldr:cargo-registry",  max = "100MB", lockfile = true, per = "none" }
-deps       = { via = "setup-soldr:cook",            max = "150MB", lockfile = true, per = "none" }
-compile    = { via = "setup-soldr:build-cache",     max = "150MB", lockfile = true, per = "platform", min = "1MB" }
-sdk        = { via = "setup-soldr:cross-targets",   max = "500MB", per = "cross-platform" }
-dylint     = { via = "setup-soldr:dylint",          max = "750MB", per = "none", min = "1MB" }               # tool/driver/foundation, one host (round-4A: the live template saves this today, undeclared)
-dylint-out = { via = "setup-soldr:dylint-output",   max = "150MB", lockfile = true, per = "none", min = "1MB" }  # one generation per lockfile, not per target (round-4B measured)
+deps       = { via = "setup-soldr:cook",            max = "150MB", lockfile = true, per = "none", evict = "lru", promote = "ancestor" }
+compile    = { via = "setup-soldr:build-cache",     max = "150MB", lockfile = true, per = "platform", min = "1MB", evict = "lru", promote = "ancestor" }
+sdk        = { via = "setup-soldr:cross-targets",   max = "500MB", per = "cross-platform", evict = "lru", promote = "ancestor" }
+dylint     = { via = "setup-soldr:dylint",          max = "750MB", per = "none", min = "1MB", evict = "lru", promote = "ancestor" }               # tool/driver/foundation, one host (round-4A: the live template saves this today, undeclared)
+dylint-out = { via = "setup-soldr:dylint-output",   max = "150MB", lockfile = true, per = "none", min = "1MB", evict = "lru", promote = "ancestor" }  # one generation per lockfile, not per target (round-4B measured)
 soldr-mini = { via = "setup-soldr:soldr-mini",      max = "30MB",  per = "none", min = "1MB" }  # round-4A: ditto
 uv         = { via = "setup-uv", max = "100MB", per = "platform" }   # round-4A amendment: astral-sh/setup-uv's own built-in cache; the template's setup-uv step must set its own save-cache input so it saves ONLY on writer flows (CACHE-003 applies to it on a PR ref exactly like a base layer)
+
+# Ancestor promotion (CACHE-024, zackees/ci.yml#335). Promotion standardizes on
+# setup-soldr's ancestor encoding -- shortest parent-edge distance from a live
+# git DAG walk -- rather than a first-parent ordinal, which INVERTS on wide
+# merges: a 50-commit branch tip reports ordinal 53 while the merge commit
+# containing it reports 4, so a cache saved at the merge looks older than one
+# saved 50 commits before it. #335 keeps the `m<n>` label for offline audit only.
+#
+# `promote = "ancestor"` on a family declares its keys carry the LINEAGE LABEL
+# that makes a nearest-ancestor search decidable. A key ending in a bare content
+# hash destroys the ancestry at save time -- not unindexed, unrecoverable by a
+# janitor (CACHE-031). Families at or above CACHE-031's 256MB floor opt in;
+# `registry` (100MB), `soldr-mini` (30MB) and `uv` (100MB) stay below it, where
+# unbounded entry count is noise rather than a budget threat.
+#
+# `evict = "lru"` is CACHE-029: nothing else bounds how many entries a family
+# may hold at once.
+#
+# DECLARATION ONLY: setup-soldr#566 is merged but unreleased, so CACHE-030 and
+# CACHE-032 report `needs_review` and the opt-in is inert until a tag lands.
+[cache.promote]
+mode          = "ancestor"
+max-age-hours = 168
 
 # ── Local runs: bosn → act (§11) ─────────────────────────────────────────────
 [local]
