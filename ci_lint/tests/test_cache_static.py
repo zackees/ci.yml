@@ -412,7 +412,14 @@ class Cache034PrepruneTest(unittest.TestCase):
     against a 10.20 GB budget.
     """
 
-    def _repo_with(self, *, declared: bool, call: str | None) -> pathlib.Path:
+    def _repo_with(
+        self,
+        *,
+        declared: bool,
+        call: str | None,
+        wf_name: str = "ci",
+        wf_file: str = "ci.yml",
+    ) -> pathlib.Path:
         import tempfile
 
         root = pathlib.Path(tempfile.mkdtemp(prefix="cache034-"))
@@ -433,8 +440,8 @@ class Cache034PrepruneTest(unittest.TestCase):
         )
         wf = root / ".github" / "workflows"
         wf.mkdir(parents=True)
-        (wf / "ci.yml").write_text(
-            "name: ci\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-24.04\n    steps:\n"
+        (wf / wf_file).write_text(
+            f"name: {wf_name}\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-24.04\n    steps:\n"
             + (f"      - run: {call}\n" if call else "      - run: echo hi\n"),
             encoding="utf-8",
         )
@@ -468,6 +475,39 @@ class Cache034PrepruneTest(unittest.TestCase):
         self.assertIn("remove `pre-prune = true`", fix)
         self.assertIn("footprint grows", fix)
         self.assertIn("zackees/ci.yml#354", fix)
+
+    @requires_yaml_tooling
+    def test_zccache_shaped_named_workflow_is_clean(self) -> None:
+        """A workflow honouring the role by NAME is honoured (#352, #360).
+
+        zccache implements the prune by hand in a workflow named
+        `Cache Pre-prune` instead of invoking the ci-lint command; a
+        literal-only scan reads that as unhonoured. The name (anchored
+        canonical spelling) counts, so the finding does not fire.
+        """
+
+        repo = self._repo_with(declared=True, call=None, wf_name="Cache Pre-prune")
+        ci, _ = load_ci_toml(repo)
+        self.assertEqual(check_cache_034(ci, repo), [])
+
+    @requires_yaml_tooling
+    def test_canonical_pre_prune_workflow_file_is_clean(self) -> None:
+        """The canonical file stem counts too -- zccache's file is
+        `.github/workflows/cache-pre-prune.yml`."""
+
+        repo = self._repo_with(declared=True, call=None, wf_file="cache-pre-prune.yml")
+        ci, _ = load_ci_toml(repo)
+        self.assertEqual(check_cache_034(ci, repo), [])
+
+    @requires_yaml_tooling
+    def test_lookalike_workflow_name_is_still_flagged(self) -> None:
+        """The identity pattern is anchored: teaching the scan the name
+        must not become a prefix match any workflow can ride in on."""
+
+        repo = self._repo_with(declared=True, call=None, wf_name="Cache Pre-prune deployer")
+        ci, _ = load_ci_toml(repo)
+        findings = check_cache_034(ci, repo)
+        self.assertEqual([f.rule for f in findings], ["CACHE-034"])
 
     def test_unreadable_workflows_do_not_manufacture_a_finding(self) -> None:
         """A tree ci_lint cannot parse is not evidence of a contradiction.
