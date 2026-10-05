@@ -649,5 +649,36 @@
     "setup-soldr-auto-is-build-cache-only": "Per setup-soldr's own README, the `key: auto` nearest-ancestor pilot is a 'Build-cache override only' -- 'Other families keep their identity keys.' So dylint-output-cache (and every other family) gets no ancestor promotion.",
     "why_it_matters": "zccache's dominant main-push job is Dylint (~6.0 runner-min, 29% of a 21.0 min push). Its dylint-output-cache is saved on success but only ever restored under its own identity key, so the nearest-ancestor win that makes the build cache cheap is unavailable to the job that costs the most.",
     "candidate": "Extend `auto` from build-cache-only to the whole family, or at minimum to dylint-output-cache. Owner directive 2026-10-04: 'caches from the family should be promoted when possible.'"
+  },
+  "cache_policy": {
+    "measured": "2026-10-04, GitHub Actions cache listing per repo",
+    "rule": "CACHE-029 (zackees/ci.yml#323): a family declaring max >= 256MB with no evict = \"lru\". `max` sizes ONE entry, not the family's footprint, so it cannot bound growth; `per` declares the writer shape, not the entry count. CACHE-030 (#326): `[cache.promote] mode = \"ancestor\"` is reported needs_review because setup-soldr#552 has not implemented it (the `auto-key` input is in its action.yml and in neither its source nor its dist bundle).",
+    "reclaimed": {
+      "zackees/kernal-api": {
+        "before": "9.39 GiB (98.8% of budget)",
+        "after": "3.01 GiB",
+        "freed": "6.5 GiB",
+        "how": "evict = \"lru\" on dylint + dylint-out, then ci-lint cache janitor",
+        "declared": true
+      },
+      "zackees/clud": {
+        "before": "10.56 GiB (OVER GitHub's 10GB cap)",
+        "after": "8.69 GiB",
+        "freed": "1.86 GiB",
+        "how": "superseded entries removed (8), oldest-within-family",
+        "declared": false,
+        "blocked_on": "declares no ci.toml, so ci-lint cache audit/janitor cannot classify its families; adopting one requires a truthful ci.toml derived from its real workflows, not a minimal one"
+      },
+      "zackees/running-process": {
+        "before": "9.16 GiB",
+        "after": "8.61 GiB",
+        "freed": "~1.0 GiB",
+        "how": "superseded entries removed (48)",
+        "declared": false,
+        "blocked_on": "same as clud -- no ci.toml"
+      }
+    },
+    "why_this_matters": "The cache budget is a means of keeping pull requests warm. At 98.8% (kernal-api) and over the cap (clud), GitHub refuses new saves and PRs run cold -- the failure the budget exists to prevent, reached via the mechanism meant to help.",
+    "sharing": "`[cache.share.<id>] scope = branch|repo` declares how far a family is shared. Promotion (`[cache.promote] mode = \"ancestor\"`, CACHE-024/#185) is a declaration only until setup-soldr#552 lands; per the owner's guidance a daily catch-all is fine for cache revalidation but superseded by cache promotion, so a repository with a scheduled full matrix needs no extra nightly."
   }
 }
