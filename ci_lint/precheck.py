@@ -43,6 +43,7 @@ from ci_lint.rules.rust_nocapture import check_rust_017
 from ci_lint.rules.rust_test_selectors import check_rust_015
 from ci_lint.rules.rust_units import check_group7
 from ci_lint.rules.secrets_rules import check_group5
+from ci_lint.rules.cache_paging import check_cache_033
 from ci_lint.rules.swatinem_ban import check_cache_025
 from ci_lint.rules.shell import check_group3
 from ci_lint.rules.tools import check_group4
@@ -163,6 +164,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(findings9)
         all_findings.extend(check_cache_007_static(ci, repo_root))
         all_findings.extend(check_cache_025(repo_root))
+        all_findings.extend(check_cache_033(repo_root))
         all_findings.extend(check_group_bin(ci, repo_root))
         all_findings.extend(check_group11(ci, repo_root))
         all_findings.extend(check_group12(ci, repo_root))

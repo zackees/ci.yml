@@ -280,6 +280,12 @@ not by the `m<n>` first-parent ordinal — so `ci-lint.cache_lineage.parse_key` 
 selection is decided. Reconciling the two is [#185](https://github.com/zackees/ci.yml/issues/185)'s
 open question, and any normalization has to pick one rather than assume they already agree.
 
+### Reading the cache must paginate (CACHE-033)
+
+`GET /repos/{repo}/actions/caches` returns at most `per_page` entries. A read that stops after one page does not fail -- it returns a **shorter, plausible** list, and every caller that sums bytes undercounts silently. Undercounting a cache is the one direction that lets a footprint check pass that should have failed.
+
+`ci-lint cache audit` paginates and **raises** at its ceiling (4000 entries) rather than reporting a truncated footprint. `CACHE-033` applies the same rule to repository-side code -- a script, `run:` block or composite action that reads the endpoint without a page walk is a finding. `?per_page=100` with no `page=` is explicitly **not** a walk.
+
 ## `[cache]`
 
 | Field | Type | Meaning |

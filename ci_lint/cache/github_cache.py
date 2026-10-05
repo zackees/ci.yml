@@ -18,6 +18,13 @@ from ci_lint.cargo_messages import JsonValue
 from ci_lint.github_api import DeleteFn, FetchFn, GitHubApiError, GraphQLFn
 
 _CACHES_PER_PAGE = 100
+# Page ceiling for one listing. Without it a repository with a very large
+# cache (zackees/wezterm has 22713 entries) walks hundreds of pages, and a
+# misbehaving endpoint that keeps returning a full page never terminates.
+# Hitting the ceiling RAISES rather than returning a short list: a silently
+# truncated cache audit undercounts the footprint and would let a repository
+# over budget pass the very check meant to catch it.
+_MAX_CACHE_PAGES = 40
 
 
 @dataclass(frozen=True)
@@ -85,6 +92,11 @@ def list_caches(fetch: FetchFn, token: str, repo: str) -> list[CacheEntry]:
         if len(raw_entries) < _CACHES_PER_PAGE:
             break
         page += 1
+        if page > _MAX_CACHE_PAGES:
+            raise CacheApiError(
+                f"listing caches: more than {_MAX_CACHE_PAGES * _CACHES_PER_PAGE} entries for "
+                f"{repo}; refusing to report a truncated cache footprint"
+            )
     return entries
 
 
