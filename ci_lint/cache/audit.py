@@ -41,6 +41,7 @@ import re
 from dataclasses import dataclass, replace
 
 from ci_lint.cache.families import resolve_prefixes, resolve_retired_prefix
+from ci_lint.cache_lineage import parse_ancestor_key
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.cache.github_cache import (
     CacheApiError,
@@ -145,6 +146,14 @@ def _shape(key: str) -> str:
     m = _CARGO_REGISTRY_RE.match(key)
     if m is not None:
         return f"{m.group('head')}<lock>-{m.group('tail')}"
+    # setup-soldr's ancestor pilot (#566, zackees/ci.yml#335) carries its sha
+    # MID-key, so the trailing-hash strip below leaves the key intact and two
+    # saves of one lineage never group -- which silently blinds CACHE-006 to
+    # every ancestor entry at the moment the pilot is adopted. Collapse the
+    # per-save provenance instead; identity and PR scope still separate.
+    ancestor = parse_ancestor_key(key)
+    if ancestor is not None:
+        return ancestor.family
     stripped = _TRAILING_HASH_RE.sub("", key)
     return stripped if stripped else key
 

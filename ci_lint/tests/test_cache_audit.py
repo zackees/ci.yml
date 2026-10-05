@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 import unittest
 
-from ci_lint.cache.audit import ClassifiedEntry, audit_classified, classify, run_audit
+from ci_lint.cache.audit import _TRAILING_HASH_RE, _shape, ClassifiedEntry, audit_classified, classify, run_audit
+from ci_lint.cache_lineage import parse_ancestor_key
 from ci_lint.cache.github_cache import CacheEntry, GitHubApiError, list_caches
 from ci_lint.finding import Status
 from ci_lint.schema import load_ci_toml
@@ -615,3 +616,56 @@ class FamilyLiveExcessTest(unittest.TestCase):
         ])
         self.assertEqual(1, len(found), [f.message for f in found])
         self.assertEqual(Status.NEEDS_REVIEW, found[0].status)
+
+
+class AncestorPilotShapeTest(unittest.TestCase):
+    """setup-soldr's ancestor pilot (#566, zackees/ci.yml#335) carries its sha
+    MID-key, so `_shape`'s trailing-hash strip left the key intact and two
+    saves of one lineage never grouped -- CACHE-006 would go blind to every
+    ancestor entry exactly when the pilot is adopted.
+
+    Same class of bug as #104 (a 64-hex tail `_shape` never matched), one
+    position worse: there the hash was at the end, here it is in the middle.
+    """
+
+    IDENTITY = "63942eb6ab326045"
+
+    def _key(self, sha: str, run: int, pr: int | None = None, identity: str | None = None) -> str:
+        tag = f"-pr-{pr}" if pr is not None else ""
+        ident = identity or self.IDENTITY
+        return f"setup-soldr-ancestor-build-v1-{ident}-source-{sha}-run-{run}-attempt-1{tag}"
+
+    def test_same_lineage_saves_group_despite_differing_provenance(self) -> None:
+        a = parse_ancestor_key(self._key("a" * 40, 1, pr=42))
+        b = parse_ancestor_key(self._key("b" * 40, 9, pr=42))
+        assert a is not None and b is not None
+        # sha/run/attempt are per-save provenance; they must NOT split a group.
+        self.assertEqual(a.family, b.family)
+
+    def test_identity_and_pr_separate_groups(self) -> None:
+        base = parse_ancestor_key(self._key("a" * 40, 1, pr=42))
+        assert base is not None
+        other_ident = parse_ancestor_key(self._key("a" * 40, 1, pr=42, identity="deadbeefdeadbeef"))
+        other_pr = parse_ancestor_key(self._key("a" * 40, 1, pr=43))
+        main_ref = parse_ancestor_key(self._key("a" * 40, 1))
+        assert other_ident is not None and other_pr is not None and main_ref is not None
+        self.assertNotEqual(base.family, other_ident.family)
+        self.assertNotEqual(base.family, other_pr.family)
+        self.assertNotEqual(base.family, main_ref.family)
+
+    def test_shape_groups_two_saves_that_the_old_strip_missed(self) -> None:
+        k1, k2 = self._key("a" * 40, 1, pr=42), self._key("b" * 40, 9, pr=42)
+        # What the old trailing-hash strip produced: two distinct shapes.
+        old1 = _TRAILING_HASH_RE.sub("", k1) or k1
+        old2 = _TRAILING_HASH_RE.sub("", k2) or k2
+        self.assertNotEqual(old1, old2, "fixture no longer reproduces the bug")
+        self.assertEqual(_shape(k1), _shape(k2))
+
+    def test_parser_rejects_other_encodings(self) -> None:
+        # The m<n> label belongs to parse_key; anything else is not ours.
+        self.assertIsNone(parse_ancestor_key("att1-rust.x86_64-unknown-linux-gnu.test-m2189-c1-18204251ce-pr-3532"))
+        self.assertIsNone(parse_ancestor_key("setup-soldr-buildcache-v2-linux-x64-63942eb6ab326045"))
+        # Bounds mirror setup-soldr's own makeAncestorKey: identity >= 16 hex.
+        self.assertIsNone(parse_ancestor_key(self._key("a" * 40, 1, identity="abcd")))
+        # run/attempt must be positive integers.
+        self.assertIsNone(parse_ancestor_key(f"setup-soldr-ancestor-build-v1-{self.IDENTITY}-source-{'a' * 40}-run-0-attempt-1"))
