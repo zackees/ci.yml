@@ -776,6 +776,97 @@
         "all zero-cache repos"
       ],
       "note": "None has a ci.toml except template-python-rust-cmd, so declaring a policy means authoring the file first -- what running-process required, and which needed ci.yml#334's per-shape ceilings to be truthful."
+    },
+    "fleet_reclaim_2026_10_05": {
+      "safe_total": "~180 GiB reclaimed across the fleet (on top of ~9.4 GiB from the three declared repos)",
+      "criteria_used": [
+        {
+          "name": "exact duplicate key",
+          "why_safe": "a lookup by that key hits whichever copy remains; GitHub stores duplicates freely (act2 held 64 entries for 13 distinct keys)",
+          "freed": "act2 5.48 GiB, setup-soldr 5.52, wild 3.25, ai-tools 1.87, mimalloc-pprof 1.49"
+        },
+        {
+          "name": "superseded within family",
+          "why_safe": "dropped only where a strictly newer, non-empty sibling exists in the same family",
+          "freed": "reld 3.77 GiB",
+          "caveat": "grouping must NOT merge distinct targets -- an earlier pass that grouped on the first three key segments reported 25 GB instead of 9.4 GB and was corrected in #325"
+        },
+        {
+          "name": "never read",
+          "why_safe": "GitHub sets last_accessed_at == created_at on save and bumps it on restore, so equality proves no run ever restored it; entries whose key had a newer, genuinely-read sibling were excluded",
+          "freed": "FastLED/FastLED 147.44 GiB (65 entries), FastLED/cli 8.33 (26), soldr 3.61 (122), fbuild 1.33 (86)"
+        }
+      ],
+      "after": [
+        {
+          "repo": "FastLED/FastLED",
+          "GiB": 280.75,
+          "now": 133.31,
+          "pct": 2807,
+          "now_pct": 1333,
+          "status": "STILL 13x over"
+        },
+        {
+          "repo": "zackees/bosn",
+          "GiB": 9.92,
+          "now": 9.92,
+          "pct": 99,
+          "now_pct": 99,
+          "status": "unchanged -- 196 never-read entries but all sub-MB, so the weight is in 221 DISTINCT live keys"
+        },
+        {
+          "repo": "zackees/wild",
+          "GiB": 9.86,
+          "now": 6.61,
+          "pct": 99,
+          "now_pct": 66
+        },
+        {
+          "repo": "zackees/reld",
+          "GiB": 8.83,
+          "now": 5.05,
+          "pct": 88,
+          "now_pct": 51
+        },
+        {
+          "repo": "zackees/act2",
+          "GiB": 8.27,
+          "now": 2.79,
+          "pct": 83,
+          "now_pct": 28
+        },
+        {
+          "repo": "FastLED/cli",
+          "GiB": 10.91,
+          "now": 2.58,
+          "pct": 109,
+          "now_pct": 26
+        },
+        {
+          "repo": "zackees/setup-soldr",
+          "GiB": 7.97,
+          "now": 2.46,
+          "pct": 80,
+          "now_pct": 25
+        },
+        {
+          "repo": "zackees/soldr",
+          "GiB": 7.21,
+          "now": 3.62,
+          "pct": 72,
+          "now_pct": 36
+        }
+      ],
+      "outstanding_structural": {
+        "repo": "FastLED/FastLED",
+        "finding": "278.8 GiB of fbuild-v1 was ONE entry PER BOARD TARGET -- 64 boards (adafruit_feather_nrf52840_sense, apollo3_red, arduino_uno_q, atmega8a, attiny4313, attiny85, attiny88, clearcore, clone-and-compile, esp32c2/3/5/6, esp32dev, esp32s3, teensy40 ...) x a content hash, at ~2.7 GiB each, in fbuild's COMBINED cache mode. The key embeds hashFiles(platformio.ini, library.json, pyproject.toml, uv.lock, ci/boards.py), so one lockfile change retires the whole fleet at once.",
+        "two_independent_fixes": [
+          "fbuild offers `cache-mode: 'split'` (FastLED/fbuild#1433) for exactly this shape -- one board-independent packages cache. build_template.yml does not pass it.",
+          "build_template.yml does not pass `save: 'false'` on PRs, so every PR-context board job adds its own entry."
+        ],
+        "writable": "yes (admin: true, not a fork)",
+        "note": "147 GiB of the 278 was provably never read and is now deleted; what remains IS read, so reclaiming it needs the structural change, not a cleanup."
+      }
     }
   }
 }
