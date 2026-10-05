@@ -540,13 +540,10 @@
     "ci.yml#311": "gate now matches plan-derived matrix lane display names (merged)"
   },
   "result": {
-    "adopted_now": 3,
-    "in_flight": 1,
-    "repos_listed": 34,
-    "not_worth_adopting": 30,
-    "blocker_remaining": "no CI-OK aggregator in most of the tail, and the measured saving there is under 0.5 runner-min/day",
-    "promotable_awaiting_aggregator": 5,
-    "still_blocked": 29
+    "adopted_reuse": 3,
+    "reuse_draft": 1,
+    "cache_policy_declared": 2,
+    "cache_space_reclaimed": "~9.4 GiB"
   },
   "measured_eligibility": {
     "method": "ci-lint reuse-report --limit 10..20 --since 2026-09-20, required-job = the dominant main-push job; costs are mean runner-minutes per successful main push over 5-12 runs.",
@@ -665,20 +662,24 @@
         "before": "10.56 GiB (OVER GitHub's 10GB cap)",
         "after": "8.69 GiB",
         "freed": "1.86 GiB",
-        "how": "superseded entries removed (8), oldest-within-family",
-        "declared": false,
-        "blocked_on": "declares no ci.toml, so ci-lint cache audit/janitor cannot classify its families; adopting one requires a truthful ci.toml derived from its real workflows, not a minimal one"
+        "declared": true,
+        "declared_in": "zackees/clud#1801",
+        "note": "Declared honestly: families sized from the live listing (compile max 1400MB against a 1376MB observed ceiling), evict=\"lru\" on the growing ones, and [flow.main] with cache=\"write\" + pre-prune so CACHE-004 waives the lockfile peak. steady 9.34GB vs a 9.5GB budget. `cache audit` classifies 17 of 24 live entries; the 7 venv-* entries stay undeclared because no `via` resolves to a custom wrapper prefix -- a schema gap, recorded in the file."
       },
       "zackees/running-process": {
         "before": "9.16 GiB",
         "after": "8.61 GiB",
         "freed": "~1.0 GiB",
-        "how": "superseded entries removed (48)",
         "declared": false,
-        "blocked_on": "same as clud -- no ci.toml"
+        "declared_in": null,
+        "note": "NOT declared, and the reason is quantified in zackees/running-process#1321: the budget model multiplies the largest observed entry by the platform count, giving ~12GB against a 9.5GB budget while the repository actually sits at 8.61GB. The over-count is in the model, not the repository -- compile has three large shapes and nine small ones. Declaring `max` low enough to pass would cap real caches below what they already are."
       }
     },
     "why_this_matters": "The cache budget is a means of keeping pull requests warm. At 98.8% (kernal-api) and over the cap (clud), GitHub refuses new saves and PRs run cold -- the failure the budget exists to prevent, reached via the mechanism meant to help.",
-    "sharing": "`[cache.share.<id>] scope = branch|repo` declares how far a family is shared. Promotion (`[cache.promote] mode = \"ancestor\"`, CACHE-024/#185) is a declaration only until setup-soldr#552 lands; per the owner's guidance a daily catch-all is fine for cache revalidation but superseded by cache promotion, so a repository with a scheduled full matrix needs no extra nightly."
+    "sharing": "`[cache.share.<id>] scope = branch|repo` declares how far a family is shared. Promotion (`[cache.promote] mode = \"ancestor\"`, CACHE-024/#185) is a declaration only until setup-soldr#552 lands; per the owner's guidance a daily catch-all is fine for cache revalidation but superseded by cache promotion, so a repository with a scheduled full matrix needs no extra nightly.",
+    "schema_gaps_found": [
+      "No [cache.family].via resolves to a repository's own actions/cache key prefixes (venv-*, fuzz-corpus-*, dylint-target-*): `via=\"ci-lint\"` builds `<family-id>-v1-` and every setup-soldr:* owns a fixed prefix, so such entries are permanently CACHE-001.",
+      "CACHE-004's static `max x cardinality` bound over-counts families with uneven shapes; `evict = \"lru\"` bounds them at run time and could discharge the peak the way pre-prune discharges the lockfile peak (running-process#1321)."
+    ]
   }
 }
