@@ -590,11 +590,24 @@
       "zackees/zccache": {
         "reuse_rate": 0.9,
         "runner_min_per_push": 21.0,
-        "dominant": "Dylint 6.0 (29%)",
-        "saves_per_day": 5.5,
+        "dominant": "Reflink e2e 3.5 (17%)",
+        "saves_per_day": 3.3,
         "pushes_per_day": 10.4,
         "state": "NOT YET ADOPTED -- needs the CI-OK aggregator",
-        "note": "Absent from the #318 measurement entirely. Measured on its dominant main-push job 'Dylint' with an unambiguous display name: 18/20 decisive runs would reuse, 17 safe skips, 0 false-reuse candidates, verdict promotable. Highest reuse rate and highest push rate (10.4/day) measured in the fleet."
+        "note": "Absent from the #318 measurement entirely. Measured on 'Reflink e2e' with an unambiguous display name: 18/20 decisive runs would reuse, 17 safe skips, 0 false-reuse candidates, verdict promotable. Highest reuse rate (0.90) and highest push rate (10.4/day) measured in the fleet. An earlier reading of this entry used Dylint as the required job and quoted ~5.5 runner-min/day; see cache_writer_skips_are_not_savings.",
+        "required_job": "Reflink e2e / Reflink e2e (btrfs)",
+        "skips": [
+          "reflink-e2e"
+        ],
+        "keeps_running": [
+          "ci-mode",
+          "cache-pre-prune",
+          "fmt",
+          "dylint",
+          "msrv",
+          "docs",
+          "miss-overhead"
+        ]
       }
     },
     "skip_do_not_adopt": {
@@ -623,6 +636,13 @@
       "name_matches_nothing": "A --required-job that matches no job at all makes every run decode as `required-job-missing`, which reads identically to a repository that never reuses. This produced the second false reading, on the dominant job name. A 0% reuse verdict should be treated as a probe bug until the exact display name has been checked against `gh run view <id> --json jobs` on a run that did succeed.",
       "consequence_for_measurement": "Two independent probe defects both pointed at 'soldr is not a reuse candidate'. With the ambiguous name removed it measures 75% reusable (#320, required job `Lint` removed) and 65% on its dominant job (this measurement, `Linux x64 / x86_64-unknown-linux-gnu`). Both agree soldr is a high-value adopter and neither matches the recorded 0.0%.",
       "reproduce": "GH_TOKEN=<token> python3 -m ci_lint reuse-report --repo <owner/name> --workflow ci.yml --required-job '<exact, unambiguous plan-derived job display name>' --since 2026-09-20 --limit 20"
+    },
+    "cache_writer_skips_are_not_savings": {
+      "rule": "Name the skip target by whether the job WRITES a cache, not by how long it takes. In zccache every setup-soldr job (fmt, dylint, msrv, docs, miss-overhead) is a main-push cache writer behind `save-cache-remote`, so the most expensive job, Dylint at 5.9 of 20.0 runner-min, must keep running: skipping it freezes the dylint cache family and is the CACHE-022 shape (`ci.yml#153`).",
+      "correction": "This supersedes the first zccache reading in ci.yml#321, which quoted Dylint 6.0 min as the dominant skippable job and ~5.5 runner-min/day. Both were arithmetically correct and operationally wrong: Dylint is a writer, so those minutes are not recoverable by reuse.",
+      "measured_per_job_zccache": "Mean successful main-push cost, 8 runs: Dylint 5.9, Reflink e2e 3.5, Cache pre-prune barrier 2.8, Miss overhead budget 2.5, MSRV 2.1, Formatting 1.7, Documentation 1.4, CI mode 0.2; total 20.0 runner-min per push.",
+      "actual_saving": "Reflink e2e is the only pure-validation job with meaningful cost -- it calls no setup-soldr and writes nothing. 3.5 min at a 0.90 reuse rate and 10.4 pushes/day is ~3.3 runner-min/day, against ~5.5 claimed on the Dylint reading. Still the best-measured repository in the fleet, but a third of what #321 claimed.",
+      "cost_of_being_wrong": "Adopting on the Dylint reading would have produced a green main branch whose dylint caches silently stopped refreshing -- the exact failure the whole mechanism exists to make impossible, introduced by the adoption itself."
     }
   },
   "cache_promotion_gap": {
