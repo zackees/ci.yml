@@ -449,6 +449,26 @@ class Cache034PrepruneTest(unittest.TestCase):
         self.assertEqual(findings[0].status.value, "needs_review")
         self.assertIn("main", findings[0].message)
 
+    @requires_yaml_tooling
+    def test_fix_text_does_not_read_as_just_delete_the_line(self) -> None:
+        """The fix carries both remediations and the cost of each (#354).
+
+        Adding the step needs a job with `actions: write` and same-run
+        ordering ahead of the saves, which some repositories cannot express
+        today; removing the declaration is then the honest fix -- but it
+        returns the waived peak, so the finding must never present deletion
+        as a costless completion of remediation.
+        """
+
+        repo = self._repo_with(declared=True, call=None)
+        ci, _ = load_ci_toml(repo)
+        fix = check_cache_034(ci, repo)[0].fix
+        self.assertIn("actions: write", fix)
+        self.assertIn("WITHIN THE SAME RUN", fix)
+        self.assertIn("remove `pre-prune = true`", fix)
+        self.assertIn("footprint grows", fix)
+        self.assertIn("zackees/ci.yml#354", fix)
+
     def test_unreadable_workflows_do_not_manufacture_a_finding(self) -> None:
         """A tree ci_lint cannot parse is not evidence of a contradiction.
 
