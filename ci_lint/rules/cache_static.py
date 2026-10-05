@@ -34,7 +34,7 @@ from pathlib import Path
 
 from ci_lint.finding import Finding, Status
 from ci_lint.resolve import resolve_flow
-from ci_lint.schema import CiToml
+from ci_lint.schema import CacheFamily, CiToml
 from ci_lint.workflow_scan import as_dict, load_composite_actions, load_workflows
 from ci_lint.yaml_io import LoadStatus, YamlValue
 from ci_lint.rules.tools import _iter_uses_with, _is_plan_expr
@@ -251,13 +251,32 @@ def _cardinality(ci: CiToml, per: str | None) -> int:
     return 1
 
 
-def cardinality(ci: CiToml, per: str | None) -> int:
+def cardinality(ci: CiToml, per: str | None, shapes: int = 0) -> int:
     """Public alias of `_cardinality`, for callers outside this module
     (round-4A: `ci_lint.cache.ops.preprune` reuses the exact same `per`
     arithmetic CACHE-004 uses, with live sizes substituted where known --
-    one implementation of the cardinality rule, not two)."""
+    one implementation of the cardinality rule, not two).
 
+    A family that declares `shapes` has already said how many entries it
+    holds, so its own shape count wins over the `per` axis -- which is the
+    whole point of declaring them (zackees/ci.yml#1321)."""
+
+    if shapes > 0:
+        return shapes
     return _cardinality(ci, per)
+
+
+def family_footprint(ci: CiToml, fam: CacheFamily) -> int:
+    """The family's steady-state bytes, the number both CACHE-004 and
+    `ci-lint cache janitor`'s LRU trim have to agree on.
+
+    With `shapes`, it is the SUM of the per-shape ceilings -- an honest
+    bound for a family whose entries differ in size. Without, it is
+    `max x cardinality`, which over-counts exactly those families."""
+
+    if fam.shapes:
+        return sum(parse_size(sh.max) or 0 for sh in fam.shapes)
+    return (parse_size(fam.max) or 0) * cardinality(ci, fam.per)
 
 
 def check_cache_004(ci: CiToml) -> tuple[list[Finding], str]:  # noqa: C901
@@ -302,11 +321,18 @@ def check_cache_004(ci: CiToml) -> tuple[list[Finding], str]:  # noqa: C901
             )
             unparseable = True
             continue
-        card = _cardinality(ci, fam.per)
-        steady = max_bytes * card
+        if fam.shapes:
+            card = len(fam.shapes)
+            steady = sum(parse_size(sh.max) or 0 for sh in fam.shapes)
+            detail = ", ".join(f"{sh.scope}={sh.max}" for sh in fam.shapes)
+            label = f"{len(fam.shapes)} shapes [{detail}]"
+        else:
+            card = _cardinality(ci, fam.per)
+            steady = max_bytes * card
+            label = f"{fam.max} x {card} ({fam.per or 'none'})"
         steady_total += steady
         tag = " (lockfile peak counted again)" if fam.lockfile else ""
-        lines.append(f"  {fam_id}: {fam.max} x {card} ({fam.per or 'none'}) = {steady} B{tag}")
+        lines.append(f"  {fam_id}: {label} = {steady} B{tag}")
         if fam.lockfile:
             lockfile_total += steady
 
