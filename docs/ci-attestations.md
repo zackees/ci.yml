@@ -94,6 +94,58 @@ What makes the labels ancestor-defining:
   - a main entry can precede a PR commit only if its ordinal is at most the PR's base ordinal.
 - **The SHA prefix lets git confirm it** (`merge-base --is-ancestor`) when history was rewritten.
 
+## Two encodings of ancestry (unreconciled, #185)
+
+setup-soldr's ancestor pilot ([#566](https://github.com/zackees/setup-soldr/pull/566))
+records ancestry under a **different key shape** than the one above:
+
+```
+setup-soldr-ancestor-build-v1-<identity>-source-<sha>-run-<n>-attempt-<n>[-pr-<N>]
+```
+
+`ci_lint.cache_lineage.parse_key` returns `None` for these. They are two encodings,
+not two truths -- both record ancestry and both survive a merge. They differ in **how
+selection is decided**, and the difference is a real tradeoff rather than a cosmetic one:
+
+| | this document's `m<n>` label | setup-soldr's ancestor key |
+| --- | --- | --- |
+| selection | first-parent ordinal, read from the key | shortest **parent-edge distance** from a live `git` DAG walk (`dagDistances`) |
+| needs git at selection time | no | yes (bounded to 200 nodes, one bounded `fetch --depth=200`, `merge-base --is-ancestor` confirm) |
+| survives history rewrite | ordinal moves with a rebase | distance is recomputed, so it cannot go stale |
+| across a merge | `m<i>`/`m<j>` compare ordinals | edge distance crosses both arms correctly |
+| implemented | `ci_lint.cache_lineage.resolve` | merged (#566) but **unreleased** -- no tag contains it |
+
+**Neither is wrong.** The ordinal is cheaper (no checkout, no fetch, works in a
+`ci-lint` invocation far from a git repo) but it is a proxy for ancestry, and it can
+collide. Measured on a scratch repo (2026-10-05):
+
+- a rewritten main commit (amend or squash replacing a commit) shares `m<n>` with the
+  commit it replaced -- both report `m5` -- and differs only in the 10-hex SHA, so
+  `m<i>` precedes `m<j>` iff i < j is **false** there: neither precedes the other, they
+  are siblings wearing one ordinal;
+- two sibling PR branches at the same depth share `c<k>` too, which is harmless because
+  `pr-<N>` already separates them.
+
+So the ordinal orders *history positions*, not *ancestry*, and the SHA prefix is load-
+bearing rather than decorative: it is the only part of the label that distinguishes a
+rewritten commit from its replacement. That is exactly why experiment K1 measures 17% of
+soldr's PR pushes rewriting history (12 rebases, 4 amends) and why `resolve` confirms with
+`merge-base --is-ancestor`. Edge distance has no such case -- it is recomputed from the
+live DAG, so it cannot go stale -- but it costs a bounded DAG walk per candidate, which
+is why `selectAncestorCache` caps candidates at 200 inspected and 20 ranked and falls
+back to `legacy-fallback` on any backend error.
+
+Which one the fleet standardizes on is [#185](https://github.com/zackees/ci.yml/issues/185)'s
+open question, and it should be decided **before** repositories start producing keys in
+both shapes -- two live encodings with different selection semantics is how promotion
+ends up looking broken when it is not. Until it is decided, `parse_key` must not be
+widened to accept both: a parser that accepts two incompatible ancestry semantics would
+silently rank entries under the wrong one.
+
+Adoption state, 2026-10-05: this label is live only on `att1-*` attestation side-entries
+(70 entries/0.00 GiB in soldr, 85/0.00 GiB in bosn) against 5.97 GiB and 4.41 GiB of
+bare-hash build caches; zccache, clud and kernal-api have none. See `CACHE-031`.
+
 ## Experiments (soldr pilot)
 
 - **K1, ancestry across pushes.** 92 consecutive PR-head transitions (46 branches, 2026-09-25..10-02, GitHub compare API):

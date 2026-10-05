@@ -86,6 +86,26 @@ class KeyedEntry:
 
 
 def parse_key(key: str) -> KeyedEntry | None:
+    """Parse THIS module's label only.
+
+    setup-soldr's ancestor pilot (#566) keys caches as
+    `setup-soldr-ancestor-build-v1-<identity>-source-<sha>-run-<n>-attempt-<n>
+    [-pr-<N>]` and selects by shortest parent-edge distance from a live git DAG
+    walk, not by the `m<n>` first-parent ordinal. Those keys deliberately return
+    None here rather than being half-accepted: accepting both encodings would
+    rank entries under whichever selection semantics happened to parse, which
+    is how promotion ends up looking broken when it is not. Reconciling the two
+    is zackees/ci.yml#185's open question; see docs/ci-attestations.md's "Two
+    encodings of ancestry".
+
+    Note the ordinal is a proxy for ancestry, not ancestry: a rewritten main
+    commit shares `m<n>` with the commit it replaced (measured on a scratch
+    repo: both report `m5`, differing only in the 10-hex SHA), so the SHA
+    prefix is load-bearing rather than decorative -- it is the only part of the
+    label separating a rewritten commit from its replacement. `resolve`
+    confirms with `merge-base --is-ancestor` for exactly this reason.
+    """
+
     match = _LABEL.search(key)
     if match is None or (match.group("c") is None) != (match.group("pr") is None):
         return None  # a PR label needs both its ordinal and its tag; main has neither
