@@ -565,6 +565,22 @@ class ReportTest(unittest.TestCase):
             "false-reuse-candidate",
         )
 
+    def test_an_ambiguous_required_job_name_is_named_as_such(self) -> None:
+        """soldr's `ci.yml` has two jobs both named `Lint` -- `lint-docs`,
+        a deliberate no-op for docs-only and attested heads (soldr#3318),
+        and the real `lint`. The no-op skips by design, so the generic
+        `required-job-not-success` pointed at the test suite instead of at
+        the duplicate display name, and read as "reuse is unsafe here" when
+        the truth was "this name proves nothing".
+
+        Measured cost of the confusion: soldr measured 0% reuse across 15
+        decisive runs. With `Lint` out of the required list the same runs
+        measure 75% reusable, 9 safe skips, 0 candidates, `promotable`.
+
+        Still fail-closed -- the same refusal, named."""
+
+        self.assertIn("ambiguous-required-job", REASONS)
+
     def test_listing_error_is_an_error_verdict(self) -> None:
         report = run_report(replay_fetch({}), "t", req(jobs=STABLE), "2026-09-29")
         self.assertEqual((report.verdict, report.rows), ("error", ()))

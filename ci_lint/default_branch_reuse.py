@@ -91,6 +91,7 @@ REASONS: tuple[str, ...] = (
     "fork-run",
     "too-many-jobs",
     "required-job-missing",
+    "ambiguous-required-job",
     "required-job-not-success",
     "stale-run",
     "run-after-decision",
@@ -372,6 +373,23 @@ def _check_jobs(api: _Api, req: ReuseRequest, runs: list[RunEvidence]) -> tuple[
                 "required-job-missing",
                 f"required job '{name}' is not a job of the proving run(s) (renamed, matrix/reusable-workflow "
                 "display name mismatch, or a different CI tier)",
+            )
+        not_ok = [j for j in matches if j.conclusion != "success"]
+        if not_ok and len(matches) > 1:
+            # A display name that maps to more than one job cannot say WHICH
+            # job proved what. soldr's `ci.yml` has two jobs both named `Lint`
+            # (`lint-docs`, a deliberate no-op for docs-only and attested
+            # heads per soldr#3318, and the real `lint`); the no-op skips by
+            # design, so the generic `required-job-not-success` sent the
+            # reader hunting in the test suite instead of at the duplicate
+            # name. Still fail-closed -- this is the same refusal, named.
+            detail = ", ".join(
+                f"id {j.job_id} concluded '{j.conclusion}'" for j in matches
+            )
+            raise _Stop(
+                "ambiguous-required-job",
+                f"required job name '{name}' matches {len(matches)} different jobs in the proving "
+                f"run ({detail}); give each a distinct display name so the proof names one job",
             )
         for job in matches:
             if job.conclusion != "success":

@@ -1,4 +1,4 @@
-"""CACHE-001, CACHE-002, CACHE-003, CACHE-004, CACHE-010, CACHE-014 -- ci_lint/rules/cache_static.py."""
+"""CACHE-001, CACHE-002, CACHE-003, CACHE-004, CACHE-010, CACHE-014, CACHE-029 -- ci_lint/rules/cache_static.py."""
 
 from __future__ import annotations
 
@@ -12,9 +12,11 @@ from ci_lint.rules.cache_static import (
     check_cache_004,
     check_cache_010,
     check_cache_014,
+    check_cache_029,
+    check_cache_030,
     parse_size,
 )
-from ci_lint.schema import load_ci_toml
+from ci_lint.schema import CachePromote, load_ci_toml
 from ci_lint.tests.helpers import fixture, requires_yaml_tooling
 
 
@@ -155,6 +157,64 @@ class CacheStaticFixtureTest(unittest.TestCase):
         findings, arithmetic = check_cache_004(replace(one_flow_only, cache=replace(one_flow_only.cache, budget="1100MB")))
         self.assertIn("CACHE-004", [f.rule for f in findings], msg=arithmetic)
         self.assertIn("not every writer flow pre-prunes", arithmetic)
+
+    def test_cache_029_large_family_without_eviction_is_a_finding(self) -> None:
+        """A large family with nothing bounding its entry count fills the
+        repository's whole cache budget. Measured 2026-10-04 across the
+        three largest Rust repositories: 83-87% of every one was superseded
+        entries, ~25GB total, and clud had already crossed GitHub's 10GB cap
+        so new saves were being refused."""
+
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        fam = dict(ci.cache.family)
+        fam["huge"] = replace(fam["uv"], max="700MB", evict=None, per="none")
+        findings = check_cache_029(replace(ci, cache=replace(ci.cache, family=fam)))
+        hit = [f for f in findings if "'huge'" in f.message]
+        self.assertEqual(len(hit), 1, [f.message for f in findings])
+
+    def test_cache_029_evict_lru_satisfies_it(self) -> None:
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        fam = dict(ci.cache.family)
+        fam["huge"] = replace(fam["uv"], max="700MB", evict="lru", per=None)
+        findings = check_cache_029(replace(ci, cache=replace(ci.cache, family=fam)))
+        self.assertFalse(any("'huge'" in f.message for f in findings), [f.message for f in findings])
+
+    def test_cache_029_per_alone_does_not_satisfy_it(self) -> None:
+        """`per` declares the WRITER shape, not the entry count. kernal-api
+        declares per = "none" on every family while `dylint` still holds 13
+        live entries, so accepting `per` as an exemption would have missed
+        the exact repositories this rule exists for."""
+
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        fam = dict(ci.cache.family)
+        fam["huge"] = replace(fam["uv"], max="700MB", evict=None, per="platform")
+        findings = check_cache_029(replace(ci, cache=replace(ci.cache, family=fam)))
+        self.assertTrue(any("'huge'" in f.message for f in findings), [f.message for f in findings])
+
+    def test_cache_029_small_family_is_not_flagged(self) -> None:
+        """Below 256MB an unbounded entry count is noise, not a budget
+        threat -- the uv family holds 22 entries totalling 2.3MB."""
+
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        fam = dict(ci.cache.family)
+        fam["small"] = replace(fam["uv"], max="5MB", evict=None, per=None)
+        findings = check_cache_029(replace(ci, cache=replace(ci.cache, family=fam)))
+        self.assertFalse(any("'small'" in f.message for f in findings), [f.message for f in findings])
+
+    def test_cache_030_promotion_is_needs_review_until_it_is_implemented(self) -> None:
+        """`[cache.promote] mode = "ancestor"` is a policy statement today.
+        setup-soldr declares an `auto-key` input in its action.yml, but the
+        input appears nowhere in its source or its built bundle, and
+        zackees/setup-soldr#552 is open. Recording the intent must be allowed;
+        believing it happened must not."""
+
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        self.assertEqual(check_cache_030(ci), [])
+        promoted = replace(ci, cache=replace(ci.cache, promote=CachePromote(mode="ancestor")))
+        findings = check_cache_030(promoted)
+        self.assertEqual([f.rule for f in findings], ["CACHE-030"])
+        self.assertEqual(findings[0].status.value, "needs_review")
+        self.assertIn("#552", findings[0].fix)
 
     @requires_yaml_tooling
     def test_cache_014_no_optional_inputs_is_silent(self) -> None:

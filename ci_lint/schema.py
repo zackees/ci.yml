@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ci_lint.cache.families import ALLOWED_VIA_VALUES
@@ -193,6 +193,42 @@ class CacheFamily:
 CACHE_FAMILY_EVICT_VALUES: frozenset[str] = frozenset({"lru"})
 
 
+CACHE_PROMOTE_MODES: tuple[str, ...] = ("off", "ancestor")
+CACHE_SHARE_SCOPES: tuple[str, ...] = ("branch", "repo")
+
+
+@dataclass(frozen=True)
+class CachePromote:
+    """`[cache.promote]` -- how a pull request's cache entry becomes the
+    default branch's, rather than the default branch rewriting it on every
+    push.
+
+    CACHE-024 / zackees/ci.yml#185, mechanism zackees/setup-soldr#552. The
+    `mode = "ancestor"` declaration is a POLICY statement until that lands:
+    setup-soldr's `action.yml` declares an `auto-key` input, but the input
+    appears nowhere in its source or its built bundle, so enabling it today
+    would be a promise nothing implements. CACHE-030 reports it as
+    needs_review rather than pretending otherwise."""
+
+    mode: str = "off"
+    max_age_hours: float = 168.0
+
+
+@dataclass(frozen=True)
+class CacheShare:
+    """`[cache.share.<family-id>]` -- how far a family's entries are shared.
+
+    "branch" (the default, and what an unqualified family already does) keeps
+    a family within its own repository, restored by any branch that can
+    prove the same lockfile/shape. "repo" declares that every branch reads
+    and writes one shared entry for this family, which is only coherent for
+    a family whose `lockfile = true` key makes every branch's entry
+    interchangeable."""
+
+    family: str
+    scope: str = "branch"
+
+
 @dataclass(frozen=True)
 class CacheConfig:
     budget: str
@@ -201,6 +237,11 @@ class CacheConfig:
     retired: tuple[str, ...]
     pr: PrCache
     family: dict[str, CacheFamily]
+    promote: CachePromote = CachePromote()
+    # A tuple of records, not a map: `[cache.share.<id>]` is a declaration
+    # list, and the owner directive prefers a record sequence to a map even
+    # when the map's values are dataclasses (PY-002).
+    share: tuple[CacheShare, ...] = ()
 
 
 # ── Local (bosn -> act) ──────────────────────────────────────────────────
@@ -617,10 +658,75 @@ def _parse_cache(root: Cursor) -> CacheConfig:
             id=fam_id, via=via, max=max_, lockfile=bool(lockfile), per=per, min=min_, key=key or None,
             evict=evict,
         )
+    promote = _parse_cache_promote(root, sub)
+    share = _parse_cache_share(root, sub, family)
     sub.finish()
     return CacheConfig(
-        budget=budget, write_on=write_on, never=never, retired=retired, pr=pr, family=family
+        budget=budget, write_on=write_on, never=never, retired=retired, pr=pr, family=family,
+        promote=promote, share=share,
     )
+
+
+def _parse_cache_promote(root: Cursor, sub: Cursor) -> CachePromote:
+    """`[cache.promote]`. Absent means `mode = "off"` -- today's behavior:
+    a default-branch push rewrites its own cache rather than inheriting the
+    one a pull request proved."""
+
+    table = sub.table_("promote", required=False)
+    if table is None:
+        return CachePromote()
+    psub = Cursor(table, "cache.promote", root.findings, root.source)
+    mode = psub.str_("mode", required=False, default="off") or "off"
+    if mode not in CACHE_PROMOTE_MODES:
+        root.findings.append(
+            Finding(
+                rule="CT-002",
+                path=root.source,
+                message=f"'cache.promote.mode' must be one of {sorted(CACHE_PROMOTE_MODES)}, got {mode!r}",
+                fix=f"set 'cache.promote.mode' to \"off\" (the default) or \"ancestor\"",
+            )
+        )
+        mode = "off"
+    hours = psub.number_("max-age-hours", required=False, default=168.0)
+    psub.finish()
+    return CachePromote(mode=mode, max_age_hours=168.0 if hours is None else hours)
+
+
+def _parse_cache_share(
+    root: Cursor, sub: Cursor, family: dict[str, CacheFamily]
+) -> tuple[CacheShare, ...]:
+    """`[cache.share.<family-id>]` -- the scope each named family is shared
+    over. A share entry must name a family this ci.toml declares: a scope
+    for a family that does not exist describes nothing."""
+
+    out: list[CacheShare] = []
+    for fid, table in sub.raw_table_of_tables("share", required=False).items():
+        sub = Cursor(table, f"cache.share.{fid}", root.findings, root.source)
+        scope = sub.str_("scope", required=False, default="branch") or "branch"
+        sub.finish()
+        if scope not in CACHE_SHARE_SCOPES:
+            root.findings.append(
+                Finding(
+                    rule="CT-002",
+                    path=root.source,
+                    message=f"'cache.share.{fid}.scope' must be one of {sorted(CACHE_SHARE_SCOPES)}, got {scope!r}",
+                    fix=f"set 'cache.share.{fid}.scope' to \"branch\" (within this repository) or \"repo\"",
+                )
+            )
+            continue
+        if fid not in family:
+            root.findings.append(
+                Finding(
+                    rule="CT-002",
+                    path=root.source,
+                    message=f"'cache.share.{fid}' names a family this ci.toml does not declare "
+                    f"({', '.join(sorted(family)) or 'none'})",
+                    fix=f"declare '[cache.family.{fid}]', or drop the '[cache.share.{fid}]' table",
+                )
+            )
+            continue
+        out.append(CacheShare(family=fid, scope=scope))
+    return tuple(out)
 
 
 def _parse_local(root: Cursor) -> LocalConfig:

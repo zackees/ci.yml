@@ -199,6 +199,36 @@ platforms), `ci-test-<suite>` (add a suite), `no-test-<suite>` (remove one
 suite; also sets `mergeable = false`), and `ci-perf-<group>` (add the `perf`
 suite, when one is declared).
 
+## `[cache.promote]` and `[cache.share.<id>]` (CACHE-024, #185)
+
+Two tables describing how a cache entry moves **between** branches. Both are
+declarations of policy; neither is a mechanism on its own.
+
+| `[cache.promote]` | type | default | meaning |
+| --- | --- | --- | --- |
+| `mode` | `"off"` \| `"ancestor"` | `"off"` | `ancestor`: a default-branch push inherits the entry a pull request proved, through the git DAG, instead of rewriting it on every push. `off` (today's behavior) rewrites. |
+| `max-age-hours` | number | `168` | how old a promotable entry may be. |
+
+| `[cache.share.<family-id>]` | type | default | meaning |
+| --- | --- | --- | --- |
+| `scope` | `"branch"` \| `"repo"` | `"branch"` | `branch`: the family is restored within this repository by any branch that proves the same lockfile/shape. `repo`: every branch reads and writes one shared entry. |
+
+Both tables must name real families: `[cache.share.<id>]` for a family the
+`ci.toml` does not declare is `CT-002`, because a scope for a family that does
+not exist describes nothing.
+
+**Promotion is a policy statement today, not a mechanism.** `zackees/setup-soldr`
+declares an `auto-key` input in its `action.yml` — *"treat an omitted key as
+`auto` for the source-dependent build-cache pilot"* — but that input appears
+nowhere in its source or in its built bundle, and [setup-soldr#552](https://github.com/zackees/setup-soldr/issues/552)
+is open. `CACHE-030` therefore reports `mode = "ancestor"` as **`needs_review`**,
+pointing at the implementation, rather than accepting it silently or refusing
+it: a repository may record the policy it intends to adopt, but must not drop
+its drift backstop on the strength of the declaration.
+
+`scope = "repo"` is only coherent for a family whose key is `lockfile = true`,
+since that is what makes every branch's entry interchangeable.
+
 ## `[cache]`
 
 | Field | Type | Meaning |
@@ -814,6 +844,7 @@ when neither PyYAML nor `yq` is available).
 | `CACHE-006` | (round-4A, live) >= 2 entries of the same declared family whose keys differ only in a trailing lockfile/version hash -- the family is superseded, not per-platform-distinct. | Delete the superseded (non-newest) entry (`ci-lint cache janitor`); disambiguate with `[cache.family.<id>].per` if more than one entry is legitimate. |
 | `CACHE-008` | (round-4A, live; widened by #23 §4.1) Any entry of a closed/merged PR -- key with a delimited `pr-<N>` component, a legacy `delta-v1-pr<N>-...` key, or ref `refs/pull/<N>/merge` -- or a PR delta whose base hash matches none of that family's live base entries. A `pr-<N>`-keyed entry is PR-scoped, never a `CACHE-003` base layer. | Delete it (`ci-lint cache janitor` deletes closed-PR entries on every push sweep; `ci-lint cache trim` also covers stale-base deltas). |
 | `CACHE-013` | (#23 §5, static) A cache save reachable from a PR (a workflow with `pull_request`/`workflow_call`, or a composite action) whose key input lacks a delimited `pr-<N>` component: `zackees/setup-soldr` `cache-key-suffix` (unless `save-cache: "false"`), `astral-sh/setup-uv` `cache-suffix` (unless `enable-cache: false` or `save-cache: false`), `actions/cache`/`actions/cache/save` `key`. Accepted: an expression containing `github.event.pull_request.number`, or the plan output `cache_key_pr` (`pr-<N>` on `pull_request`, empty elsewhere, from `ci-lint plan/precheck --github-output`); inside a composite action, an `inputs.*` passthrough. | Set the key input to `${{ needs.precheck.outputs.cache_key_pr }}` (or a `format('pr-{0}', github.event.pull_request.number)` expression). |
+| `CACHE-029` | (static) A `[cache.family.<id>]` declaring `max` >= 256 MB with no `evict = "lru"` -- nothing bounds how many entries the family may hold at once. `max` sizes ONE entry, not the family's footprint, so it cannot catch this. `per` is **not** accepted as an exemption: it declares the writer shape, not the entry count. | Add `evict = "lru"` to the family so `ci-lint cache janitor` keeps it at `max x cardinality`. Measure first with `ci-lint cache audit --repo .` -- CACHE-006 names the superseded entries eating the budget. |
 | `CACHE-014` | (M2-17, ci.yml#42, static; only fires when the corresponding optional input is set) `[cache.pr].max-per-pr x expected-open-prs > [cache.pr].budget`, and/or `[cache.pr].max-per-pr < [cache.pr].measured-largest-delta`. | Lower `max-per-pr` or `expected-open-prs`, or raise `[cache.pr].budget`; and/or raise `max-per-pr` to at least the measured largest delta -- see "Sizing `[cache.pr]` for repository scale" above. |
 | `CACHE-025` | (#209, static; also `ci-lint local-gate lint` and `ci-lint fleet scan`) A workflow or composite-action step `uses: Swatinem/rust-cache@<ref>`. | Delete it. Rust build caching goes through `zackees/setup-soldr@v0` (cache on) or `soldr cargo`/`soldr cook`. There are no exceptions (maintainer decision 2026-10-02): no same-line allow comment, no `[[exceptions]]` entry, not for a soldr bootstrap job or a benchmark baseline (docs/policy-rust.md). |
 | `SEC-005` | (round-5, live, `ci-lint audit`) Any repository or `[publish].pypi.environment` environment Actions secret exists; a 403 (needs an admin token) is `needs_review`, never a pass. | This profile is OIDC-only (issue #6 §7): delete the stored secret(s). |
@@ -1076,6 +1107,7 @@ Reason codes (every value except `verified` means `reuse=false`,
 | `too-many-jobs` | More than 300 jobs in a proving run. |
 | `required-job-missing` | No job with that exact display name in the proving run(s) (renamed job, different tier). |
 | `required-job-not-success` | A required job is skipped, cancelled, neutral, failed, or unfinished (e.g. an iteration-mode run that skipped the Linux lanes). |
+| `ambiguous-required-job` | A required job *display name* matches more than one job in the proving run, and not all of them succeeded. The name cannot say which job proved what -- e.g. soldr's `ci.yml`, where `lint-docs` (a deliberate no-op for docs-only and attested heads, soldr#3318) and the real `lint` are both named `Lint`, and the no-op skips by design. Fail-closed, same refusal as `required-job-not-success`; the fix is to give each job a distinct display name. |
 | `stale-run` | A proving job completed more than `--max-age-hours` before the clock. |
 | `run-after-decision` | A proving job completed after the clock (retroactive evaluation only). |
 

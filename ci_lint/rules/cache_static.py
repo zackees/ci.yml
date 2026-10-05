@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ci_lint.finding import Finding
+from ci_lint.finding import Finding, Status
 from ci_lint.resolve import resolve_flow
 from ci_lint.schema import CiToml
 from ci_lint.workflow_scan import as_dict, load_composite_actions, load_workflows
@@ -42,6 +42,9 @@ from ci_lint.rules.tools import _iter_uses_with, _is_plan_expr
 SIZE_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)$", re.IGNORECASE)
 SIZE_UNITS: dict[str, int] = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3}
 TEN_GB = 10 * 1024**3
+# CACHE-029: a family this large, with nothing bounding how many entries may
+# exist at once, is what fills a repository's 10GB cache budget.
+UNBOUNDED_FAMILY_BYTES = 256 * 1024**2
 
 VOLATILE_TOKENS: tuple[str, ...] = ("github.sha", "github.run_id", "github.run_number")
 KEY_FIELD_NAMES: frozenset[str] = frozenset({"key", "cache-key-suffix"})
@@ -497,6 +500,95 @@ def check_cache_014(ci: CiToml) -> list[Finding]:
     return findings
 
 
+def check_cache_029(ci: CiToml) -> list[Finding]:
+    """A large family with nothing bounding how many entries may exist at
+    once will fill the repository's whole cache budget.
+
+    Measured across the three largest Rust repositories, 2026-10-04:
+
+        clud            32 entries, 10.56 GiB, 83% superseded  (OVER the 10GB cap)
+        kernal-api      49 entries,  9.39 GiB, 87% superseded
+        running-process 100 entries, 9.16 GiB, 86% superseded
+
+    About 25 GB of dead cache, and in clud's case the ceiling was already
+    crossed -- so new saves were being refused and pull requests ran on
+    cold caches. The mechanism is that these families' keys embed a per-run
+    hash, so every run appends a new entry that nothing ever retires.
+
+    `max` declares the size of ONE entry, not the family's footprint, so it
+    cannot catch this. Only `evict = "lru"` bounds it: the janitor keeps the
+    family at `max x cardinality`, evicting least-recently-used.
+
+    `per` is deliberately NOT accepted as an exemption. It declares the
+    *writer shape*, not the entry count, and kernal-api is the proof:
+    every one of its families declares `per = "none"` while `dylint` still
+    accumulated 13 live entries. docs/ci-toml.md records the same problem
+    for `setup-uv`, whose key encodes arch, platform, OS version, Python
+    version and a content hash -- so its live cardinality can exceed what
+    `per = "os"` claims.
+
+    Only families at or above 256 MB are flagged: below that, unbounded
+    entry counts are noise rather than a budget threat."""
+
+    findings: list[Finding] = []
+    for fid, family in sorted(ci.cache.family.items()):
+        if family.evict == "lru":
+            continue
+        declared = parse_size(family.max)
+        if declared is None or declared < UNBOUNDED_FAMILY_BYTES:
+            continue
+        findings.append(
+            Finding(
+                rule="CACHE-029",
+                path="ci.toml",
+                message=(
+                    f"cache family '{fid}' declares max = {family.max} but nothing bounds how many "
+                    f"entries may exist at once, so the family can grow without limit until the "
+                    "repository's whole cache budget is consumed"
+                ),
+                fix=(
+                    f"add evict = \"lru\" to '[cache.family.{fid}]' so ci-lint cache janitor keeps "
+                    f"the family at max x cardinality. Measure the current state with "
+                    f"'ci-lint cache audit --repo .' -- CACHE-006 names the superseded entries that "
+                    f"are consuming the budget."
+                ),
+            )
+        )
+    return findings
+
+
+def check_cache_030(ci: CiToml) -> list[Finding]:
+    """`[cache.promote] mode = "ancestor"` declares that a default-branch
+    push inherits the cache a pull request proved, instead of rewriting it.
+
+    It is a POLICY statement today, not a mechanism. zackees/setup-soldr
+    declares an `auto-key` input in its `action.yml` -- "treat an omitted
+    key as 'auto' for the source-dependent build-cache pilot" -- but the
+    input appears nowhere in setup-soldr's source or in its built bundle
+    (`dist/main.js`, `dist/post.js`), and zackees/setup-soldr#552 is still
+    open. Declaring `ancestor` today would be a promise nothing keeps, so
+    it is reported as needs_review pointing at the implementation, rather
+    than accepted silently or refused outright -- a repository is allowed
+    to record the policy it intends to adopt."""
+
+    if ci.cache.promote.mode != "ancestor":
+        return []
+    return [
+        Finding(
+            rule="CACHE-030",
+            status=Status.NEEDS_REVIEW,
+            path="ci.toml",
+            message="'cache.promote.mode = \"ancestor\"' declares nearest-ancestor cache promotion, "
+            "but setup-soldr does not implement it yet (the `auto-key` input is declared in its "
+            "action.yml and absent from its source and bundle; zackees/setup-soldr#552 is open)",
+            fix="record the intent now and revisit once zackees/setup-soldr#552 lands; until then "
+            "promotion does not happen, so keep the declared drift backstop (a scheduled full "
+            "default-branch run, or enough naturally-must-run pushes) and do not remove it on the "
+            "strength of this declaration",
+        )
+    ]
+
+
 def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     findings: list[Finding] = []
     findings.extend(check_cache_001(ci, repo_root))
@@ -506,4 +598,6 @@ def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     cache_004_findings, arithmetic = check_cache_004(ci)
     findings.extend(cache_004_findings)
     findings.extend(check_cache_014(ci))
+    findings.extend(check_cache_029(ci))
+    findings.extend(check_cache_030(ci))
     return findings, arithmetic
