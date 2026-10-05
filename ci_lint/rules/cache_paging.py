@@ -108,14 +108,6 @@ def _shell_findings(text: str, path: str, where: str) -> list[Finding]:
 
 
 def _python_script_findings(repo_root: Path) -> list[Finding]:
-    """`ci/` and tool scripts, one level deep like GHAPI-001's scanner."""
-
-    findings: list[Finding] = []
-    findings.extend(_python_script_findings(repo_root))
-    return findings
-
-
-def _python_script_findings(repo_root: Path) -> list[Finding]:
     """`ci/` and tool scripts, repo-relative like GHAPI-001's scanner."""
 
     findings: list[Finding] = []
