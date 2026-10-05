@@ -139,7 +139,10 @@ def trim(
     classified = classify(ci, entries)
     report = audit_classified(ci, classified, graphql=graphql, token=token, repo=repo, default_branch=default_branch)
     plan = _findings_to_plan(report.findings, list(classified), frozenset({"CACHE-008"}))
-    planned = list(plan.values())[:max_deletes]
+    # Same reasoning as the janitor (#357): `trim`'s plan can exceed
+    # `max_deletes` too, and truncating in insertion order would spend the whole
+    # cap on the smallest entries. Largest-first within the class.
+    planned = _prioritise_plan(plan)[:max_deletes]
     result = _apply(planned, delete=delete, token=token, repo=repo, dry_run=dry_run)
     if report.warning and result.warning is None:
         result = OpsResult(**{**result.__dict__, "warning": report.warning})
@@ -296,7 +299,7 @@ def janitor(  # noqa: C901
         elif entry.id in protected and not entry.reason.startswith(("CACHE-005", "CACHE-009", "closed PR")):
             del plan[cache_id]  # the newest entry a required job restores
 
-    planned = list(plan.values())[:max_deletes]
+    planned = _prioritise_plan(plan)[:max_deletes]
     result = _apply(planned, delete=delete, token=token, repo=repo, dry_run=dry_run)
     deleted_or_planned_ids = {p.id for p in (result.deleted if not result.dry_run else result.planned)}
     table = _before_after_table(list(classified), deleted_or_planned_ids)
@@ -401,3 +404,48 @@ def preprune(
     planned = planned[:max_deletes]
     result = _apply(planned, delete=delete, token=token, repo=repo, dry_run=dry_run)
     return result, summary + f"\n  OVER budget: pruning {len(planned)} superseded lockfile-keyed entrie(s)"
+
+
+# Reasons ordered by how much a bounded run should prefer them. `max_deletes`
+# bounds a single run's blast radius, so when the plan is larger than the cap
+# the cap must select the entries that reclaim the most bytes -- otherwise the
+# bound silently inverts its value.
+#
+# Measured 2026-10-05 on zackees/bosn (#357): the plan held 256 findings, of
+# which 238 were 440-byte attestation entries (CACHE-001/CACHE-008) and 15
+# were superseded multi-hundred-MB `compile` entries (CACHE-006). Truncating in
+# dict-insertion order put the ENTIRE default cap on the attestation entries,
+# so `cache janitor` reclaimed 44 KB of 9.44 GiB available. The selection was
+# always correct -- a CACHE-006 entry names the newer entry it keeps -- only
+# the ordering before truncation was wrong.
+_PLAN_PRIORITY: tuple[str, ...] = (
+    "CACHE-006",  # superseded: a newer sibling is kept, so these are pure reclaim
+    "CACHE-009",  # retired family
+    "CACHE-008",  # entry belongs to a closed/merged PR
+    "CACHE-001",  # undeclared family
+    "CACHE-003",
+    "CACHE-005",
+)
+
+
+def _plan_rank(reason: str) -> int:
+    for index, prefix in enumerate(_PLAN_PRIORITY):
+        if reason.startswith(prefix):
+            return index
+    # LRU and stale-age entries carry a prose reason; treat them as the lowest
+    # priority since they are the least provable of the six.
+    return len(_PLAN_PRIORITY)
+
+
+def _prioritise_plan(plan: dict[int, DeletePlanEntry]) -> list[DeletePlanEntry]:
+    """Order a delete plan so a truncated run reclaims the most it safely can.
+
+    Within a reason class, largest first: at 1 GiB per entry the difference
+    between reclaiming the big entries and the small ones is the whole point of
+    ordering at all. Ties break on id so the order is deterministic.
+    """
+
+    return sorted(
+        plan.values(),
+        key=lambda e: (_plan_rank(e.reason), -e.size_in_bytes, e.id),
+    )
