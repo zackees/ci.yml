@@ -65,6 +65,19 @@ EXTERNAL_FAMILY_SHAPES: tuple[FamilyShape, ...] = (
         source="setup-soldr src/lib/blessed-cross-prepare.ts:89",
     ),
     FamilyShape(
+        via="setup-soldr:ancestor-build",
+        prefix="setup-soldr-ancestor-build-v1-",
+        source="setup-soldr src/lib/ancestor-cache.ts:37-40 -- ancestorKeyPrefix(identity) "
+        "returns `setup-soldr-ancestor-build-v1-${identity}-`",
+        note="the ancestor pilot (zackees/ci.yml#335, setup-soldr#566). The prefix is followed by a "
+        "16-64 hex identity, so the key does NOT end in a hash: cache.audit._shape collapses the "
+        "per-save `-source-<sha>-run-<n>-attempt-<n>` tail (see cache_lineage.parse_ancestor_key) or "
+        "every save of one lineage lands in its own group and CACHE-006 goes blind. BOTH halves are "
+        "required -- this shape so classify() resolves the entry to a declared family, and _shape so "
+        "same-lineage saves group once it has. MERGED BUT UNRELEASED: no setup-soldr tag contains "
+        "#566, so no entry exists in any live repository yet (CACHE-032).",
+    ),
+    FamilyShape(
         via="setup-soldr:dylint",
         prefix="setup-soldr-dylint-v2-",
         source="setup-soldr src/lib/resolve-setup.ts:1185-1186 -- "
