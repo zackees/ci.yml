@@ -12,8 +12,8 @@
   },
   "summary": {
     "total_repos_with_main_push_ci": 34,
-    "adopt_now": 2,
-    "needs_aggregator": 32
+    "adopt_now": 5,
+    "needs_aggregator": 29
   },
   "repos": [
     {
@@ -462,7 +462,8 @@
   "blocking_facts": {
     "no_gate_no_consumer": "ci-lint gate IS the CI-OK aggregator. A repo without one has nowhere to consume a reuse decision; only 2 of 34 have it.",
     "economics_flip": "Measured on clud: a main-push run is 14.9 runner-min, 7.1 (48%) skippable. At 1.63 pushes/day reuse saves ~5 runner-min/day, while a nightly minimal-tier run costs 14.9/day and a full-tier one ~60/day. The design's drift backstop costs 3-12x what it protects at clud's real push rate (the design assumed ~30 pushes/day). Prefer --max-age-hours over a nightly until a repo's push rate justifies one.",
-    "low_traffic_repos": "reld (1) and llvm-ld (2) decisive runs since wiring -- the old 100-run bar made promotion impossible for them; removed in ci.yml#310."
+    "low_traffic_repos": "reld (1) and llvm-ld (2) decisive runs since wiring -- the old 100-run bar made promotion impossible for them; removed in ci.yml#310.",
+    "probe_before_concluding_no_reuse": "Two separate probe defects have each produced a false 0% reuse reading for soldr: a duplicate job display name (ci.yml#320) and a required-job name matching nothing. A 0% verdict is a statement about the probe until the exact display names have been checked."
   },
   "adopted": [
     {
@@ -543,7 +544,9 @@
     "in_flight": 1,
     "repos_listed": 34,
     "not_worth_adopting": 30,
-    "blocker_remaining": "no CI-OK aggregator in most of the tail, and the measured saving there is under 0.5 runner-min/day"
+    "blocker_remaining": "no CI-OK aggregator in most of the tail, and the measured saving there is under 0.5 runner-min/day",
+    "promotable_awaiting_aggregator": 5,
+    "still_blocked": 29
   },
   "measured_eligibility": {
     "method": "ci-lint reuse-report --limit 10..20 --since 2026-09-20, required-job = the dominant main-push job; costs are mean runner-minutes per successful main push over 5-12 runs.",
@@ -572,9 +575,7 @@
         "dominant": "preflight 13.4, dylint 2.1",
         "saves_per_day": 10.4,
         "state": "PR open"
-      }
-    },
-    "skip_do_not_adopt": {
+      },
       "zackees/soldr": {
         "reuse_rate": 0.75,
         "runner_min_per_push": 12.9,
@@ -582,8 +583,21 @@
         "saves_per_day": 10.7,
         "state": "NOT adopted -- blocked on a one-line rename, see blocker",
         "blocker": "soldr's ci.yml has two jobs both named `Lint`: `lint-docs`, a deliberate no-op for docs-only and attested heads (soldr#3318), and the real `lint`. `reuse-check` requires every job carrying a required display name to conclude success, so the sibling that skips by design fails it closed. Measured 0% with `Lint` in the required list; 75% (9 safe skips in 12, 0 candidates, promotable) without it. Give `lint-docs` a distinct display name and it unblocks.",
-        "correction": "Earlier triage recorded soldr as 'reuse never fires -- merge shape defeats tree identity'. That was wrong: only 1 of 12 runs was tree-mismatch. The real cause was an ambiguous display name. ci_lint#320 added the `ambiguous-required-job` reason so the report says so."
+        "correction": "Earlier triage recorded soldr as 'reuse never fires -- merge shape defeats tree identity'. That was wrong: only 1 of 12 runs was tree-mismatch. The real cause was an ambiguous display name. ci_lint#320 added the `ambiguous-required-job` reason so the report says so.",
+        "dominant_job_measured_independently": "Re-measured on the dominant main-push job rather than `Lint`: 13/20 decisive runs reuse, 12 safe skips, 0 false-reuse candidates, verdict promotable (rate 0.65, 10.1 of 12.7 runner-min = 79% of the push, 7.7 pushes/day). Tree identity verified directly: PRs #3559/#3560/#3562/#3568 each merge to a tree byte-identical to the PR head (three squash, one merge commit), so 'merge shape defeats tree identity' does not hold.",
+        "tree_identity_holds": true
       },
+      "zackees/zccache": {
+        "reuse_rate": 0.9,
+        "runner_min_per_push": 21.0,
+        "dominant": "Dylint 6.0 (29%)",
+        "saves_per_day": 5.5,
+        "pushes_per_day": 10.4,
+        "state": "NOT YET ADOPTED -- needs the CI-OK aggregator",
+        "note": "Absent from the #318 measurement entirely. Measured on its dominant main-push job 'Dylint' with an unambiguous display name: 18/20 decisive runs would reuse, 17 safe skips, 0 false-reuse candidates, verdict promotable. Highest reuse rate and highest push rate (10.4/day) measured in the fleet."
+      }
+    },
+    "skip_do_not_adopt": {
       "zackees/bosn": {
         "reuse_rate": 0.1,
         "runner_min_per_push": 4.7,
@@ -602,7 +616,18 @@
         "reason": "no successful ci.yml main pushes in window"
       }
     },
-    "finding": "The ROI is concentrated. Four repositories carry essentially all of the measurable saving; the long tail of 30 is each worth well under a runner-minute a day or has no eligible merges at all. Adopting the tail would add review surface and skip-guarding risk for noise. Prioritise the four, and re-measure rather than adopt blindly. soldr was initially mis-triaged as 'reuse never fires'; the real blocker was a duplicate job display name, and it is a one-line rename away.",
-    "note_on_cache": "Per owner directive 2026-10-04: a daily catch-all run is fine for cache revalidation but is superseded by cache promotion (setup-soldr `auto`, nearest-ancestor restore, CACHE-024). Where a repository already has a scheduled full matrix (running-process, template-python-rust-cmd) or enough naturally-must-run pushes to refresh on their own (kernal-api, ~1 full run per 6 days at 89.5% reuse), no nightly is added. setup-soldr's `auto` key covers the build-cache family today; it does not yet cover `dylint`."
+    "finding": "The ROI is concentrated, and concentrated harder than #318 recorded. Five repositories carry essentially all of the measurable saving: clud, kernal-api and template-python-rust-cmd are adopted; soldr and zccache are promotable on measurement but blocked on wiring, not on economics. The long tail of 29 is each worth well under a runner-minute a day or has no eligible merges at all, so adopting it would add review surface and skip-guarding risk for noise. Two independent probe defects had written off the second-largest prize (soldr) as a non-adopter; see probe_failure_modes. Re-measure rather than adopt blindly.",
+    "note_on_cache": "Per owner directive 2026-10-04: a daily catch-all run is fine for cache revalidation but is superseded by cache promotion (setup-soldr `auto`, nearest-ancestor restore, CACHE-024). Where a repository already has a scheduled full matrix (running-process, template-python-rust-cmd) or enough naturally-must-run pushes to refresh on their own (kernal-api, ~1 full run per 6 days at 89.5% reuse), no nightly is added. setup-soldr's `auto` key covers the build-cache family today; it does not yet cover `dylint`.",
+    "probe_failure_modes": {
+      "duplicate_display_name": "soldr's ci.yml has two jobs whose display name is both `Lint` (lint-docs, a deliberate no-op for docs-only and attested heads, and lint, the real one). reuse-check requires every job carrying a required name to conclude success, so the sibling that skips by design failed the check and reported `required-job-not-success`. Fixed in ci.yml#320, which now reports `ambiguous-required-job` naming the offending job ids and conclusions. That single ambiguity is what produced the false 'soldr never reuses' conclusion.",
+      "name_matches_nothing": "A --required-job that matches no job at all makes every run decode as `required-job-missing`, which reads identically to a repository that never reuses. This produced the second false reading, on the dominant job name. A 0% reuse verdict should be treated as a probe bug until the exact display name has been checked against `gh run view <id> --json jobs` on a run that did succeed.",
+      "consequence_for_measurement": "Two independent probe defects both pointed at 'soldr is not a reuse candidate'. With the ambiguous name removed it measures 75% reusable (#320, required job `Lint` removed) and 65% on its dominant job (this measurement, `Linux x64 / x86_64-unknown-linux-gnu`). Both agree soldr is a high-value adopter and neither matches the recorded 0.0%.",
+      "reproduce": "GH_TOKEN=<token> python3 -m ci_lint reuse-report --repo <owner/name> --workflow ci.yml --required-job '<exact, unambiguous plan-derived job display name>' --since 2026-09-20 --limit 20"
+    }
+  },
+  "cache_promotion_gap": {
+    "setup-soldr-auto-is-build-cache-only": "Per setup-soldr's own README, the `key: auto` nearest-ancestor pilot is a 'Build-cache override only' -- 'Other families keep their identity keys.' So dylint-output-cache (and every other family) gets no ancestor promotion.",
+    "why_it_matters": "zccache's dominant main-push job is Dylint (~6.0 runner-min, 29% of a 21.0 min push). Its dylint-output-cache is saved on success but only ever restored under its own identity key, so the nearest-ancestor win that makes the build cache cheap is unavailable to the job that costs the most.",
+    "candidate": "Extend `auto` from build-cache-only to the whole family, or at minimum to dylint-output-cache. Owner directive 2026-10-04: 'caches from the family should be promoted when possible.'"
   }
 }
