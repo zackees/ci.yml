@@ -3,3 +3,6 @@ __pycache__/
 .claude/worktrees/
 build/
 *.egg-info/
+
+# Local agent settings, not part of the repository.
+.clud/settings.local.json

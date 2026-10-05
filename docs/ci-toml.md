@@ -1076,6 +1076,7 @@ Reason codes (every value except `verified` means `reuse=false`,
 | `too-many-jobs` | More than 300 jobs in a proving run. |
 | `required-job-missing` | No job with that exact display name in the proving run(s) (renamed job, different tier). |
 | `required-job-not-success` | A required job is skipped, cancelled, neutral, failed, or unfinished (e.g. an iteration-mode run that skipped the Linux lanes). |
+| `ambiguous-required-job` | A required job *display name* matches more than one job in the proving run, and not all of them succeeded. The name cannot say which job proved what -- e.g. soldr's `ci.yml`, where `lint-docs` (a deliberate no-op for docs-only and attested heads, soldr#3318) and the real `lint` are both named `Lint`, and the no-op skips by design. Fail-closed, same refusal as `required-job-not-success`; the fix is to give each job a distinct display name. |
 | `stale-run` | A proving job completed more than `--max-age-hours` before the clock. |
 | `run-after-decision` | A proving job completed after the clock (retroactive evaluation only). |
 
