@@ -711,10 +711,21 @@ def check_cache_032(ci: CiToml) -> list[Finding]:
 
     RUST-014 cannot cover this. It flags a pin that predates a release marked
     critical, and there is no release here to mark -- the feature is ahead of
-    the tags. This is the static half: it says the declared opt-in is
-    unreachable, which is a different and weaker claim than "promotion is not
-    happening" (CACHE-030/031), and it stays needs_review because a `v0`
-    float can legitimately be ahead of the pilot.
+    the tags.
+
+    The `v0` float is NOT an escape hatch. `zackees/setup-soldr@v0` resolves to
+    `dfbe962` (#532), which is 33 commits BEHIND `main` and has no `auto-key`;
+    `v0` trails `v0.9.85` as well. So SEC-004's single sanctioned float cannot
+    reach the pilot either -- every legal way to reference the action lands
+    before #566. An earlier revision of this rule claimed the float "can
+    legitimately be ahead of the pilot"; that was wrong, and measured against
+    the tags on 2026-10-05.
+
+    It stays `needs_review` rather than a violation because the gate is a
+    release cadence, not a repository defect: nothing in this repository is
+    wrong, and the finding must clear itself the moment a tag carries #566.
+    Its claim is that the declared opt-in is unreachable -- weaker and
+    different from CACHE-030/031's "promotion is not happening".
     """
 
     if ci.cache.promote.mode != "ancestor":
@@ -725,13 +736,13 @@ def check_cache_032(ci: CiToml) -> list[Finding]:
             status=Status.NEEDS_REVIEW,
             path="ci.toml",
             message='\'cache.promote.mode = "ancestor"\' is declared, but setup-soldr\'s ancestor '
-            "pilot (#566) is merged and unreleased: no tag contains it and no released tag's "
-            "action.yml declares `auto-key`, so a SHA-pinned setup-soldr (SEC-004) cannot reach it",
-            fix="confirm the workflow's pinned setup-soldr SHA declares `auto-key` in its action.yml "
-            "before relying on this; if it does not, the opt-in is silently inert and promotion "
-            "cannot happen until the pilot ships in a release (zackees/setup-soldr#552). Pinning "
-            "the `zackees/setup-soldr@v0` float is the sanctioned exception, but it still must "
-            "carry #566",
+            "pilot (#566) is merged and unreleased: no tag contains it, no released tag's action.yml "
+            "declares `auto-key`, and the sanctioned `v0` float trails main by 33 commits -- so no "
+            "SEC-004-legal reference to the action can reach it",
+            fix="confirm the referenced setup-soldr revision declares `auto-key` in its action.yml "
+            "before relying on this. Today none does -- not a pinned SHA (SEC-004), and not the "
+            "sanctioned `zackees/setup-soldr@v0` float, which is 33 commits behind main. The opt-in "
+            "is silently inert until the pilot ships in a release (zackees/setup-soldr#552)",
         )
     ]
 

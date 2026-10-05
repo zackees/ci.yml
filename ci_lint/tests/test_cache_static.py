@@ -276,6 +276,12 @@ class CacheStaticFixtureTest(unittest.TestCase):
         self.assertEqual(findings[0].status.value, "needs_review")
         self.assertIn("auto-key", findings[0].message)
         self.assertIn("#552", findings[0].fix)
+        # The sanctioned v0 float is NOT an escape hatch: it resolves to
+        # dfbe962 (#532), 33 commits behind main, with no auto-key. An
+        # earlier revision told users the float "can run ahead of the
+        # pilot"; measured against the tags on 2026-10-05, it trails.
+        self.assertIn("trails main by 33 commits", findings[0].message)
+        self.assertNotIn("sanctioned exception", findings[0].fix)
 
     @requires_yaml_tooling
     def test_cache_014_no_optional_inputs_is_silent(self) -> None:
