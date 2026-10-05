@@ -199,6 +199,34 @@ platforms), `ci-test-<suite>` (add a suite), `no-test-<suite>` (remove one
 suite; also sets `mergeable = false`), and `ci-perf-<group>` (add the `perf`
 suite, when one is declared).
 
+## `[cache.promote]` and `[cache.share.<id>]` (CACHE-024, #185)
+
+Two tables describing how a cache entry moves **between** branches. Both are declarations of policy; neither is a mechanism on its own.
+
+| `[cache.promote]` | type | default | meaning |
+| --- | --- | --- | --- |
+| `mode` | `"off"` \| `"ancestor"` | `"off"` | `ancestor`: a default-branch push inherits the entry a pull request proved, through the git DAG, instead of rewriting it on every push. `off` (today's behavior) rewrites. |
+| `max-age-hours` | number | `168` | how old a promotable entry may be. |
+
+| `[cache.share.<family-id>]` | type | default | meaning |
+| --- | --- | --- | --- |
+| `scope` | `"branch"` \| `"repo"` | `"branch"` | `branch`: the family is restored within this repository by any branch that proves the same lockfile/shape. `repo`: every branch reads and writes one shared entry. |
+
+`[cache.share.<id>]` must name a family the `ci.toml` declares: a scope for a
+family that does not exist describes nothing, and is `CT-002`. `scope = "repo"`
+is only coherent for a family whose key is `lockfile = true`, since that is what
+makes every branch's entry interchangeable.
+
+**Promotion is a policy statement today, not a mechanism.** `zackees/setup-soldr`
+declares an `auto-key` input in its `action.yml` -- *"treat an omitted key as
+`auto` for the source-dependent build-cache pilot"* -- but that input appears
+nowhere in its source or in its built bundle (`dist/main.js`, `dist/post.js`), and
+[setup-soldr#552](https://github.com/zackees/setup-soldr/issues/552) is open.
+`CACHE-030` therefore reports `mode = "ancestor"` as **`needs_review`** pointing at
+the implementation, rather than accepting it silently or refusing it: a repository
+may record the policy it intends to adopt, but must not drop its drift backstop on
+the strength of the declaration.
+
 ## `[cache]`
 
 | Field | Type | Meaning |
