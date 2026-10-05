@@ -504,16 +504,25 @@ def check_cache_029(ci: CiToml) -> list[Finding]:
     """A large family with nothing bounding how many entries may exist at
     once will fill the repository's whole cache budget.
 
-    Measured across the three largest Rust repositories, 2026-10-04:
+    Measured across the three largest Rust repositories, 2026-10-04, with
+    `ci-lint cache audit` on the one that declares its families:
 
-        clud            32 entries, 10.56 GiB, 83% superseded  (OVER the 10GB cap)
-        kernal-api      49 entries,  9.39 GiB, 87% superseded
-        running-process 100 entries, 9.16 GiB, 86% superseded
+        kernal-api   49 entries, 9.39 GiB, 87% superseded -> 6.5 GiB reclaimed,
+                     3.01 GiB left (it declares `[cache.family]`, so the
+                     family boundary is known)
+        clud         32 entries, 10.56 GiB -- ALREADY OVER GitHub's 10GB cap,
+                     so new saves were being refused; 1.86 GiB recoverable
+        running-process 100 entries, 9.16 GiB; 1.01 GiB recoverable
 
-    About 25 GB of dead cache, and in clud's case the ceiling was already
-    crossed -- so new saves were being refused and pull requests ran on
-    cold caches. The mechanism is that these families' keys embed a per-run
-    hash, so every run appends a new entry that nothing ever retires.
+    clud and running-process declare no `[cache.family]`, so their family
+    boundaries have to be inferred from the key shape
+    (`...-v<n>-<runner>-<lockhash>-<shape>-<contenthash>`, grouping on
+    everything but the hex components). That inference is deliberately
+    conservative -- it keeps entries rather than guessing -- which is why
+    their recoverable fraction is far below kernal-api's.
+
+    The mechanism is the same in all three: these families' keys embed a
+    per-run hash, so every run appends an entry nothing ever retires.
 
     `max` declares the size of ONE entry, not the family's footprint, so it
     cannot catch this. Only `evict = "lru"` bounds it: the janitor keeps the
