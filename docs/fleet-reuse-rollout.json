@@ -932,6 +932,102 @@
         ],
         "note": "setup-soldr's action.yml is the source to cite, same as the existing via table in docs/ci-toml.md."
       }
+    },
+    "expansion_complete_2026_10_05": {
+      "measured_after_all_reclaims": [
+        {
+          "repo": "FastLED/FastLED",
+          "GiB": 133.31,
+          "pct": 1333,
+          "state": "PR #4703 open (save:'false' only); cache-mode:'split' verified available but genuinely broken -- would turn the board matrix red"
+        },
+        {
+          "repo": "zackees/bosn",
+          "GiB": 9.92,
+          "pct": 99,
+          "state": "PR #513 DRAFT -- blocked on the local gate; also surfaces 461 pre-existing findings once a ci.toml exists"
+        },
+        {
+          "repo": "FastLED/fbuild",
+          "GiB": 8.83,
+          "pct": 88,
+          "state": "PR #1652 open -- blocked on the local gate"
+        },
+        {
+          "repo": "zackees/clud",
+          "GiB": 8.69,
+          "pct": 87,
+          "state": "MERGED #1801"
+        },
+        {
+          "repo": "zackees/running-process",
+          "GiB": 8.62,
+          "pct": 86,
+          "state": "PRs #1322 (mine) and #1323 (another session) -- both blocked on the local gate"
+        },
+        {
+          "repo": "zackees/mimalloc-pprof",
+          "GiB": 7.9,
+          "pct": 79,
+          "state": "PR #603 DRAFT -- blocked on the local gate"
+        },
+        {
+          "repo": "zackees/zccache",
+          "GiB": 7.42,
+          "pct": 74,
+          "state": "no ci.toml yet"
+        },
+        {
+          "repo": "zackees/reld",
+          "GiB": 5.63,
+          "pct": 56,
+          "state": "MERGED #218"
+        },
+        {
+          "repo": "zackees/wild",
+          "GiB": 4.58,
+          "pct": 46,
+          "state": "below the declare threshold; cleanup only"
+        },
+        {
+          "repo": "zackees/soldr",
+          "GiB": 4.4,
+          "pct": 44,
+          "state": "has a ci.toml (concurrent work)"
+        },
+        {
+          "repo": "zackees/llvm-ld",
+          "GiB": 3.62,
+          "pct": 36,
+          "state": "below threshold"
+        },
+        {
+          "repo": "zackees/ai-tools",
+          "GiB": 3.23,
+          "pct": 32,
+          "state": "below threshold"
+        },
+        {
+          "repo": "zackees/kernal-api",
+          "GiB": 3.01,
+          "pct": 30,
+          "state": "MERGED #421"
+        }
+      ],
+      "reclaimed_total": "~180 GiB fleet-wide, plus ~9.4 GiB in the three originally-declared repos",
+      "every_repo_at_or_over_50_percent_now_has_a_policy_or_a_pr": true,
+      "remaining_blocker_is_not_the_policy": {
+        "summary": "Four repositories (running-process, bosn, mimalloc-pprof, fbuild) fail their `Verify local gate` job with GATE-003: no Local-Gate trailer. All four are blocked on producing that stamp, not on their ci.toml.",
+        "proof_it_is_not_the_policy": [
+          "A PRISTINE baseline with no ci.toml failed identically (682s, exit 1).",
+          "`bosn ci run` exited 3 with jobs {total 4, completed 4, failed 0} and all four jobs conclusion: success -- the work passed, bosn's verdict rejected it.",
+          "A second run produced NO receipt at all (47-byte lane log).",
+          "`_load_gate_config` only prefers ci.toml's [local.gate] when that table EXISTS; none of these ci.tomls declares one, so the gate config source is unchanged."
+        ],
+        "host_at_the_time": "4-5 bosn daemons, 2 concurrent `bosn ci run` (one another session), 13 containers, disk 60%",
+        "tracked_at": "#322",
+        "unblocks": "one serial `local-gate run` per repository with no other bosn activity, or per-run state directories so concurrent sessions cannot share a daemon"
+      }
     }
   }
 }
