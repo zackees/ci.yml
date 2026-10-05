@@ -11,17 +11,39 @@ from __future__ import annotations
 import json
 import unittest
 
-from ci_lint.cache.audit import _TRAILING_HASH_RE, _shape, ClassifiedEntry, audit_classified, classify, run_audit
+from ci_lint.cache.audit import (
+    _TRAILING_HASH_RE,
+    _check_cache_006,
+    _shape,
+    ClassifiedEntry,
+    audit_classified,
+    classify,
+    run_audit,
+)
 from ci_lint.cache_lineage import parse_ancestor_key
 from ci_lint.cache.github_cache import CacheEntry, GitHubApiError, list_caches
 from ci_lint.finding import Status
-from ci_lint.schema import load_ci_toml
+from ci_lint.schema import CiToml, load_ci_toml
 from ci_lint.tests.helpers import FIXTURES
 
 CACHE_FIXTURES = FIXTURES / "runtime" / "cache"
 REPO = CACHE_FIXTURES / "repo"
 TOKEN = "t"
 REPO_SLUG = "zackees/template-python-rust-cmd"
+
+
+def _load_ci_toml_text(text: str) -> CiToml:
+    """Load a ci.toml from a literal, in a temp dir (schema 3 is strict, so a
+    test cannot skip keys)."""
+    import tempfile
+    from pathlib import Path as _P
+
+    d = _P(tempfile.mkdtemp())
+    (d / "ci.toml").write_text(text)
+    ci, findings = load_ci_toml(d)
+    hard = [f for f in findings if f.rule != "CT-002"]
+    assert not hard, [f.message for f in hard]
+    return ci
 
 
 def _load(name: str) -> dict[str, object]:
@@ -660,6 +682,65 @@ class AncestorPilotShapeTest(unittest.TestCase):
         old2 = _TRAILING_HASH_RE.sub("", k2) or k2
         self.assertNotEqual(old1, old2, "fixture no longer reproduces the bug")
         self.assertEqual(_shape(k1), _shape(k2))
+
+    def test_end_to_end_cache_006_sees_two_ancestor_saves(self) -> None:
+        """Both halves are load-bearing, and neither alone is enough.
+
+        #337 fixed `_shape` (which collapses the mid-key provenance), but a
+        repo can only reach it once `classify()` has resolved the entry to a
+        DECLARED family. Without the `setup-soldr-ancestor-build-v1-` shape,
+        `family_id` is None, `_check_cache_006` skips on `family_id is None`,
+        and the rule is blind -- verified by removing the shape and re-running.
+        """
+
+        ci = _load_ci_toml_text(
+            """
+schema = 3
+profile = "rust-pypi-app"
+linter = "zackees/ci.yml@0000000000000000000000000000000000000000"
+[platforms]
+linux-x64 = { target = "x86_64-unknown-linux-gnu", runs-on = "ubuntu-24.04", group = "linux" }
+[python]
+backend = "soldr"
+cli = { name = "x", crate = "x", native = false }
+abi3 = "cp310"
+pythons = ["3.12"]
+[rust]
+public = "."
+private = ""
+[rust.tests]
+binaries = []
+[suites]
+unit = { run = "ci/test.py unit", required = true }
+[flow.pr]
+[flow.main]
+[tags]
+[cache]
+budget = "9GB"
+write-on = ["main"]
+pr = { mode = "none", families = [], max-per-pr = "0MB", budget = "0MB", trim = "on-close" }
+[cache.family]
+compile = { via = "setup-soldr:ancestor-build", max = "2GB", lockfile = true, per = "platform", promote = "ancestor" }
+[cache.promote]
+mode = "ancestor"
+max-age-hours = 168
+"""
+        )
+        ident = self.IDENTITY
+        old = f"setup-soldr-ancestor-build-v1-{ident}-source-{'a' * 40}-run-1-attempt-1-pr-42"
+        new = f"setup-soldr-ancestor-build-v1-{ident}-source-{'b' * 40}-run-2-attempt-1-pr-42"
+        entries = [
+            CacheEntry(id=1, ref="refs/pull/42/merge", key=old, version="1", size_in_bytes=10**9,
+                       created_at="2026-10-01T00:00:00Z", last_accessed_at="2026-10-01T00:00:00Z"),
+            CacheEntry(id=2, ref="refs/pull/42/merge", key=new, version="1", size_in_bytes=10**9,
+                       created_at="2026-10-02T00:00:00Z", last_accessed_at="2026-10-03T00:00:00Z"),
+        ]
+        classified = classify(ci, entries)
+        # Both must resolve to the declared family, or the rule never runs.
+        self.assertEqual(["compile", "compile"], [c.family_id for c in classified])
+        findings = _check_cache_006(classified)
+        self.assertEqual(["CACHE-006"], [f.rule for f in findings])
+        self.assertEqual(1, findings[0].cache_id)  # the older access is superseded
 
     def test_parser_rejects_other_encodings(self) -> None:
         # The m<n> label belongs to parse_key; anything else is not ours.
