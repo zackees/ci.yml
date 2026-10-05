@@ -5,8 +5,12 @@ from __future__ import annotations
 import pathlib
 
 import unittest
+import unittest.mock
 from dataclasses import replace
 
+from ci_lint.rules import cache_static
+from ci_lint.workflow_scan import ParsedYamlFile
+from ci_lint.yaml_io import LoadStatus
 from ci_lint.rules.cache_static import (
     check_cache_001,
     check_cache_002,
@@ -18,6 +22,7 @@ from ci_lint.rules.cache_static import (
     check_cache_030,
     check_cache_031,
     check_cache_032,
+    check_cache_034,
     parse_size,
 )
 from ci_lint.schema import CachePromote, load_ci_toml
@@ -395,3 +400,87 @@ def load_ci_toml_text(text: str):
     d = pathlib.Path(tempfile.mkdtemp())
     (d / "ci.toml").write_text(text, encoding="utf-8")
     return load_ci_toml(d)
+
+
+class Cache034PrepruneTest(unittest.TestCase):
+    """CACHE-034: `pre-prune = true` waives a real term from CACHE-004's
+    worst case, so it must correspond to an actual pre-prune call.
+
+    Evidence: FastLED/fbuild#1652 (2026-10-05) declared `pre-prune = true` on
+    `[flow.main]` with `ci-lint cache preprune` in zero workflow files.
+    Removing the declaration moved the modelled worst case 7.92 -> 15.84 GB
+    against a 10.20 GB budget.
+    """
+
+    def _repo_with(self, *, declared: bool, call: str | None) -> pathlib.Path:
+        import tempfile
+
+        root = pathlib.Path(tempfile.mkdtemp(prefix="cache034-"))
+        (root / "ci.toml").write_text(
+            "[schema]\nnothing = true\n"
+            if False
+            else (
+                'schema = 3\nprofile = "library"\n'
+                '[platforms]\nlinux-x64 = { target = "x86_64-unknown-linux-gnu", runs-on = "ubuntu-24.04", group = "linux" }\n'
+                "[suites]\nunit = { run = \"pytest\", required = true }\n"
+                "[flow.main]\nextends = \"main\"\ncache = \"write\"\n"
+                + ("pre-prune = true\n" if declared else "")
+                + "[cache]\nbudget = \"9GB\"\nwrite-on = [\"main\"]\n"
+                "[cache.family]\nsmall = { via = \"setup-uv\", max = \"5MB\", per = \"none\" }\n"
+                "[allow]\nworkflows = { \"ci.yml\" = [\"push:main\"] }\n"
+            ),
+            encoding="utf-8",
+        )
+        wf = root / ".github" / "workflows"
+        wf.mkdir(parents=True)
+        (wf / "ci.yml").write_text(
+            "name: ci\non: [push]\njobs:\n  build:\n    runs-on: ubuntu-24.04\n    steps:\n"
+            + (f"      - run: {call}\n" if call else "      - run: echo hi\n"),
+            encoding="utf-8",
+        )
+        return root
+
+    @requires_yaml_tooling
+    def test_declared_without_a_call_is_flagged(self) -> None:
+        repo = self._repo_with(declared=True, call=None)
+        ci, _ = load_ci_toml(repo)
+        findings = check_cache_034(ci, repo)
+        self.assertEqual([f.rule for f in findings], ["CACHE-034"])
+        self.assertEqual(findings[0].status.value, "needs_review")
+        self.assertIn("main", findings[0].message)
+
+    def test_unreadable_workflows_do_not_manufacture_a_finding(self) -> None:
+        """A tree ci_lint cannot parse is not evidence of a contradiction.
+
+        Without a YAML parser the workflows are skipped, so a naive scan would
+        report every declaration as unhonoured. That would accuse a repository
+        on the strength of a missing dependency, so the rule stays silent
+        instead -- and this test pins that, so it cannot regress into a false
+        positive when the selftest runs without PyYAML.
+        """
+
+        repo = self._repo_with(declared=True, call=None)
+        ci, _ = load_ci_toml(repo)
+        unparsed = [
+            ParsedYamlFile(
+                path=".github/workflows/ci.yml",
+                document=None,
+                status=LoadStatus.NEEDS_REVIEW,
+                reason="PyYAML not importable and yq not on PATH",
+            )
+        ]
+        with (
+            unittest.mock.patch.object(cache_static, "load_workflows", return_value=unparsed),
+            unittest.mock.patch.object(cache_static, "load_composite_actions", return_value=[]),
+        ):
+            self.assertEqual(check_cache_034(ci, repo), [])
+
+    def test_declared_with_a_call_is_clean(self) -> None:
+        repo = self._repo_with(declared=True, call="ci-lint cache preprune --lockfile-changed")
+        ci, _ = load_ci_toml(repo)
+        self.assertEqual(check_cache_034(ci, repo), [])
+
+    def test_undeclared_is_clean_whatever_the_workflows_do(self) -> None:
+        repo = self._repo_with(declared=False, call=None)
+        ci, _ = load_ci_toml(repo)
+        self.assertEqual(check_cache_034(ci, repo), [])
