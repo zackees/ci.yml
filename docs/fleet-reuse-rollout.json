@@ -542,7 +542,7 @@
   "result": {
     "adopted_reuse": 3,
     "reuse_draft": 1,
-    "cache_policy_declared": 2,
+    "cache_policy_declared": 3,
     "cache_space_reclaimed": "~9.4 GiB"
   },
   "measured_eligibility": {
@@ -670,16 +670,17 @@
         "before": "9.16 GiB",
         "after": "8.61 GiB",
         "freed": "~1.0 GiB",
-        "declared": false,
-        "declared_in": null,
-        "note": "NOT declared, and the reason is quantified in zackees/running-process#1321: the budget model multiplies the largest observed entry by the platform count, giving ~12GB against a 9.5GB budget while the repository actually sits at 8.61GB. The over-count is in the model, not the repository -- compile has three large shapes and nine small ones. Declaring `max` low enough to pass would cap real caches below what they already are."
+        "declared": true,
+        "declared_in": "zackees/running-process#1322",
+        "note": "Declared with per-shape ceilings (ci.yml#334): compile's two ~1.25GiB shapes and eight at <=529MB cannot be expressed as one `max`, and the only `per` values that fit under-count, which is the direction that makes `cache janitor` delete live entries. steady 7.31GB against a 9.5GB budget; audit classifies 40 of 61 entries, budget 90.7%."
       }
     },
     "why_this_matters": "The cache budget is a means of keeping pull requests warm. At 98.8% (kernal-api) and over the cap (clud), GitHub refuses new saves and PRs run cold -- the failure the budget exists to prevent, reached via the mechanism meant to help.",
     "sharing": "`[cache.share.<id>] scope = branch|repo` declares how far a family is shared. Promotion (`[cache.promote] mode = \"ancestor\"`, CACHE-024/#185) is a declaration only until setup-soldr#552 lands; per the owner's guidance a daily catch-all is fine for cache revalidation but superseded by cache promotion, so a repository with a scheduled full matrix needs no extra nightly.",
     "schema_gaps_found": [
-      "No [cache.family].via resolves to a repository's own actions/cache key prefixes (venv-*, fuzz-corpus-*, dylint-target-*): `via=\"ci-lint\"` builds `<family-id>-v1-` and every setup-soldr:* owns a fixed prefix, so such entries are permanently CACHE-001.",
-      "CACHE-004's static `max x cardinality` bound over-counts families with uneven shapes; `evict = \"lru\"` bounds them at run time and could discharge the peak the way pre-prune discharges the lockfile peak (running-process#1321)."
-    ]
+      "No [cache.family].via resolves to a repository's own actions/cache key prefixes (venv-*, fuzz-corpus-*, dylint-target-*): `via=\"ci-lint\"` builds `<family-id>-v1-` and every setup-soldr:* owns a fixed prefix. Affects clud (7 entries) and running-process (21).",
+      "CLOSED by ci.yml#334: `[cache.family].shapes.<scope>]` per-shape ceilings, so a family whose entries differ in size can be declared truthfully instead of as `max x cardinality`."
+    ],
+    "declared_all_three": true
   }
 }
