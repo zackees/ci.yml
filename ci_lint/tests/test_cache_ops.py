@@ -9,7 +9,9 @@ from __future__ import annotations
 import json
 import unittest
 
-from ci_lint.cache.ops import heal, janitor, preprune, trim
+from ci_lint.cache.audit import ClassifiedEntry
+from ci_lint.cache.github_cache import CacheEntry
+from ci_lint.cache.ops import _lru_evictions, heal, janitor, preprune, trim
 from ci_lint.github_api import GitHubApiError
 from ci_lint.schema import load_ci_toml
 from ci_lint.tests.helpers import FIXTURES
@@ -314,3 +316,64 @@ class PrepruneTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LruFootprintTest(unittest.TestCase):
+    """The janitor's LRU budget and CACHE-004's arithmetic must be the
+    SAME number.
+
+    Found by an agent adopting the policy in zackees/reld: `shapes`
+    (ci.yml#334) makes CACHE-004 sum the shape maxima, but `_lru_evictions`
+    still computed `max x cardinality(per)` and ignored `shapes` entirely.
+    When those diverge the janitor is the stricter of the two, so it evicts
+    live entries precheck had just approved -- the one failure mode this
+    whole policy exists to avoid.
+    """
+
+    def _ci(self, fam: object):
+        from dataclasses import replace as _replace
+
+        ci, _ = load_ci_toml(REPO)
+        return _replace(ci, cache=_replace(ci.cache, family={"compile": fam}))
+
+    def _entry(self, eid: int, used: str, mb: int) -> object:
+        from ci_lint.cache.audit import ClassifiedEntry
+
+        return ClassifiedEntry(
+            entry=CacheEntry(
+                id=eid, ref="refs/heads/main", key=f"k{eid}", version="v",
+                size_in_bytes=mb * 1024**2,
+                created_at="2026-10-01T00:00:00Z", last_accessed_at=used,
+            ),
+            family_id="compile", is_delta=False, delta=None,
+            is_retired=False, pr=None, pr_in_key=False,
+        )
+
+    def _family(self, shapes: tuple) -> object:
+        from ci_lint.schema import CacheFamily
+
+        return CacheFamily(
+            id="compile", via="setup-soldr:build-cache", max="1300MB",
+            per="none", evict="lru", shapes=shapes,
+        )
+
+    def test_a_shapes_family_is_evicted_against_its_shape_sum(self) -> None:
+        from ci_lint.schema import CacheShape
+
+        # shapes sum to 2900 MB, so 2400 MB of live entries FITS. The old
+        # `max x cardinality(per)` was 1300 x 1 = 1300 MB and would have
+        # evicted both.
+        ci = self._ci(self._family((CacheShape("a", "1300MB"),
+                                    CacheShape("b", "1100MB"),
+                                    CacheShape("c", "500MB"))))
+        entries = [self._entry(1, "2026-10-04T00:00:00Z", 1200),
+                   self._entry(2, "2026-10-03T00:00:00Z", 1200)]
+        self.assertEqual(_lru_evictions(ci, entries), {})
+
+    def test_an_over_budget_shapes_family_still_evicts(self) -> None:
+        from ci_lint.schema import CacheShape
+
+        ci = self._ci(self._family((CacheShape("a", "1300MB"),)))
+        entries = [self._entry(1, "2026-10-04T00:00:00Z", 1200),
+                   self._entry(2, "2026-10-03T00:00:00Z", 1200)]
+        self.assertEqual(set(_lru_evictions(ci, entries)), {2})

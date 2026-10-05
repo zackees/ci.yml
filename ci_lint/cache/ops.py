@@ -17,7 +17,7 @@ from datetime import datetime
 from ci_lint.cache.audit import ClassifiedEntry, _shape, audit_classified, classify
 from ci_lint.cache.github_cache import CacheApiError, delete_cache_by_id, delete_cache_by_key, list_caches
 from ci_lint.github_api import DeleteFn, FetchFn, GraphQLFn
-from ci_lint.rules.cache_static import cardinality, parse_size
+from ci_lint.rules.cache_static import cardinality, family_footprint, parse_size
 from ci_lint.schema import CiToml
 
 JANITOR_RULES: frozenset[str] = frozenset({"CACHE-001", "CACHE-003", "CACHE-005", "CACHE-006", "CACHE-009"})
@@ -204,10 +204,15 @@ def _lru_evictions(ci: CiToml, classified: list[ClassifiedEntry]) -> dict[int, s
     for fam_id, fam in ci.cache.family.items():
         if fam.evict != "lru":
             continue
-        max_bytes = parse_size(fam.max)
-        if max_bytes is None:
+        if parse_size(fam.max) is None:
             continue
-        budget = max_bytes * max(cardinality(ci, fam.per), 1)
+        # MUST be the same number CACHE-004 used. `max x cardinality(per)`
+        # ignores `shapes`, so a family that declares shapes -- whose
+        # CACHE-004 footprint is their SUM -- would get a SMALLER janitor
+        # budget than the one precheck just approved, and the janitor would
+        # then evict live entries that check blessed. One implementation,
+        # both paths.
+        budget = family_footprint(ci, fam)
         members = sorted(
             (c for c in classified if c.family_id == fam_id and not c.is_retired),
             key=lambda c: c.entry.last_accessed_at,
