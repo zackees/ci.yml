@@ -65,26 +65,61 @@ def _load_toml(path: Path, label: str) -> dict[str, TomlValue]:
         raise ExampleDriftError(f"cannot parse {label} ci.toml {path}: {exc}") from exc
 
 
+# A repository's WORKFLOW GRAPH is its own: the example is ONE repository
+# (template-python-rust-cmd, 2 workflows), while soldr ships 29 and
+# running-process 22. Which workflow files exist, and which events each may
+# select on, is a per-repo fact -- the same class of difference as a platform's
+# `runs-on`. Reporting it as policy drift says "you should have the template's
+# workflows", which is meaningless, and it blocks exactly the repositories that
+# most need to adopt the profile. What stays policy is the EVENT vocabulary,
+# checked separately by GEN-008 (an undeclared workflow file) and by precheck
+# group 12.
+_EXACT_REPO_SPECIFIC: frozenset[tuple[str, ...]] = frozenset({
+    ("linter",),
+    ("rust", "public"),
+    ("rust", "private"),
+    ("rust", "ship"),
+    ("rust", "tests", "binaries"),
+    ("allow", "platform-selector"),
+    ("allow", "platform-code"),
+    ("python", "cli", "name"),
+    ("python", "cli", "crate"),
+})
+
+@dataclass(frozen=True)
+class _TailRule:
+    """A path PREFIX under which one trailing key (or the whole subtree) is a
+    per-repo fact. A dataclass, not a nested tuple: PY-002 forbids
+    record-shaped tuples, and this is a record."""
+
+    prefix: tuple[str, ...]
+    # Empty means EVERY path under `prefix` (beyond the prefix itself) is a
+    # per-repo fact -- used for `allow.workflows.<file>`, where the FILE SET
+    # differs per repository. The bare table path is never exempt, so this
+    # cannot mask a whole-table diff.
+    tails: frozenset[str] = frozenset()
+
+    def matches(self, path: tuple[str, ...]) -> bool:
+        if path[: len(self.prefix)] != self.prefix:
+            return False
+        rest = path[len(self.prefix) :]
+        if not rest:
+            return False  # the bare table itself: still policy
+        return not self.tails or rest[-1] in self.tails
+
+
+_TAIL_REPO_SPECIFIC: tuple[_TailRule, ...] = (
+    _TailRule(("platforms",), frozenset({"runs-on", "wheel"})),
+    _TailRule(("suites",), frozenset({"run"})),
+    _TailRule(("cache", "family"), frozenset({"max", "min"})),
+    _TailRule(("allow", "workflows"), frozenset()),
+)
+
+
 def _is_repo_specific(path: tuple[str, ...]) -> bool:
-    if path == ("linter",):
+    if path in _EXACT_REPO_SPECIFIC or path[:1] == ("exceptions",):
         return True
-    if len(path) == 3 and path[0] == "platforms" and path[2] in ("runs-on", "wheel"):
-        return True
-    if path in (("rust", "public"), ("rust", "private"), ("rust", "ship")):
-        return True
-    if path == ("rust", "tests", "binaries"):
-        return True
-    if path in (("allow", "platform-selector"), ("allow", "platform-code")):
-        return True
-    if len(path) == 3 and path[0] == "suites" and path[2] == "run":
-        return True
-    if len(path) == 4 and path[:2] == ("cache", "family") and path[3] in ("max", "min"):
-        return True
-    if path[:1] == ("exceptions",):
-        return True
-    if path in (("python", "cli", "name"), ("python", "cli", "crate")):
-        return True
-    return False
+    return any(rule.matches(path) for rule in _TAIL_REPO_SPECIFIC)
 
 
 def _walk(example: TomlValue, repo: TomlValue, path: tuple[str, ...], out: list[DriftEntry]) -> None:
