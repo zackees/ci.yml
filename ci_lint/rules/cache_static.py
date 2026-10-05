@@ -617,6 +617,7 @@ def check_group9(ci: CiToml, repo_root: Path) -> tuple[list[Finding], str]:
     findings.extend(check_cache_029(ci))
     findings.extend(check_cache_030(ci))
     findings.extend(check_cache_031(ci))
+    findings.extend(check_cache_032(ci))
     return findings, arithmetic
 
 
@@ -690,3 +691,47 @@ def check_cache_031(ci: CiToml) -> list[Finding]:
             )
         )
     return findings
+
+
+def check_cache_032(ci: CiToml) -> list[Finding]:
+    """A promotion opt-in the pinned action cannot honour.
+
+    setup-soldr's ancestor pilot (#566) is MERGED and present in
+    `dist/main.js`, but has never been released: `git tag --contains
+    afdd8bf` is empty, and no v0.9.x tag's `action.yml` declares
+    `auto-key`. Every setup-soldr SHA a repository can legitimately pin
+    therefore predates the pilot -- soldr pins `a07bab94`, bosn `fe965fc7`,
+    neither with `auto-key` in `action.yml`.
+
+    SEC-004 requires a 40-hex SHA pin (`zackees/setup-soldr@v0` is the single
+    sanctioned float), so a repository cannot reach the feature at all. The
+    failure is silent: `cache-key: auto` or `auto-key: "true"` is accepted as
+    an ordinary input, the pilot code never runs, and every restore falls back
+    to the legacy key with no error.
+
+    RUST-014 cannot cover this. It flags a pin that predates a release marked
+    critical, and there is no release here to mark -- the feature is ahead of
+    the tags. This is the static half: it says the declared opt-in is
+    unreachable, which is a different and weaker claim than "promotion is not
+    happening" (CACHE-030/031), and it stays needs_review because a `v0`
+    float can legitimately be ahead of the pilot.
+    """
+
+    if ci.cache.promote.mode != "ancestor":
+        return []
+    return [
+        Finding(
+            rule="CACHE-032",
+            status=Status.NEEDS_REVIEW,
+            path="ci.toml",
+            message='\'cache.promote.mode = "ancestor"\' is declared, but setup-soldr\'s ancestor '
+            "pilot (#566) is merged and unreleased: no tag contains it and no released tag's "
+            "action.yml declares `auto-key`, so a SHA-pinned setup-soldr (SEC-004) cannot reach it",
+            fix="confirm the workflow's pinned setup-soldr SHA declares `auto-key` in its action.yml "
+            "before relying on this; if it does not, the opt-in is silently inert and promotion "
+            "cannot happen until the pilot ships in a release (zackees/setup-soldr#552). Pinning "
+            "the `zackees/setup-soldr@v0` float is the sanctioned exception, but it still must "
+            "carry #566",
+        )
+    ]
+
