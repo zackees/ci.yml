@@ -65,6 +65,22 @@ EXTERNAL_FAMILY_SHAPES: tuple[FamilyShape, ...] = (
         source="setup-soldr src/lib/blessed-cross-prepare.ts:89",
     ),
     FamilyShape(
+        via="setup-soldr:target-cache",
+        # The prefix is a TEMPLATE: `setup-soldr-targetcache-${buildCacheMode}-v2-`
+        # (resolve-setup.ts:965,974), where buildCacheMode is 'thin' / 'full' /
+        # 'once'. Classification matches by `startswith`, so this stem covers
+        # every mode and version rather than one spelling of each.
+        prefix="setup-soldr-targetcache-",
+        source="setup-soldr src/lib/resolve-setup.ts:965,974 -- "
+        "targetCachePrefix = `setup-soldr-targetcache-${buildCacheMode}-v2-...`; :957 is the "
+        "`-off-v1` variant, covered by the same stem.",
+        note="WITHOUT this entry those entries can never be declared: every one is reported "
+        "CACHE-001 'undeclared family' by the live audit, and the cache janitor treats an "
+        "undeclared entry as deletable. Measured 2026-10-05: 11 live entries on "
+        "zackees/mimalloc-pprof, 18 on FastLED/fbuild, plus some on zackees/reld -- together "
+        "42% of mimalloc-pprof's cache.",
+    ),
+    FamilyShape(
         via="setup-soldr:ancestor-build",
         prefix="setup-soldr-ancestor-build-v1-",
         source="setup-soldr src/lib/ancestor-cache.ts:37-40 -- ancestorKeyPrefix(identity) "
