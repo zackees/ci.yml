@@ -406,6 +406,7 @@ Every reason `reuse-check` can report. All except `verified` mean `reuse=false`,
 | `too-many-jobs` | More than 300 jobs in a proving run. | Very large matrix. |
 | `required-job-missing` | No job with that exact display name in the proving run(s). | Renamed job; different tier; pre-rename history (clud #1575 vs the sharded names). |
 | `required-job-not-success` | A required job is skipped, cancelled, neutral, failed, or not completed. | Iteration-mode run (`ci-windows`); a skipped lane. |
+| `ambiguous-required-job` | A required job display name matches more than one job in the proving run and not all succeeded. | Two jobs sharing a display name (soldr: `lint-docs` + `lint`, both `Lint`), where one skips by design. The name proves nothing; give each a distinct name. |
 | `stale-run` | A proving job completed more than `max_age_hours` before `now`. | PR validated days before merge. |
 | `run-after-decision` | A proving job completed after `now`. | Only in retroactive evaluation (`reuse-report`). |
 

@@ -576,9 +576,13 @@
     },
     "skip_do_not_adopt": {
       "zackees/soldr": {
-        "reuse_rate": 0.0,
+        "reuse_rate": 0.75,
         "runner_min_per_push": 12.9,
-        "reason": "verdict no-op: reuse never fires (merge shape defeats tree identity). 15 decisive runs, 0 reusable."
+        "dominant": "Linux x64 / x86_64-unknown-linux-gnu 10.3 of 12.9 (80%)",
+        "saves_per_day": 10.7,
+        "state": "NOT adopted -- blocked on a one-line rename, see blocker",
+        "blocker": "soldr's ci.yml has two jobs both named `Lint`: `lint-docs`, a deliberate no-op for docs-only and attested heads (soldr#3318), and the real `lint`. `reuse-check` requires every job carrying a required display name to conclude success, so the sibling that skips by design fails it closed. Measured 0% with `Lint` in the required list; 75% (9 safe skips in 12, 0 candidates, promotable) without it. Give `lint-docs` a distinct display name and it unblocks.",
+        "correction": "Earlier triage recorded soldr as 'reuse never fires -- merge shape defeats tree identity'. That was wrong: only 1 of 12 runs was tree-mismatch. The real cause was an ambiguous display name. ci_lint#320 added the `ambiguous-required-job` reason so the report says so."
       },
       "zackees/bosn": {
         "reuse_rate": 0.1,
@@ -598,7 +602,7 @@
         "reason": "no successful ci.yml main pushes in window"
       }
     },
-    "finding": "The ROI is concentrated. Four repositories carry essentially all of the measurable saving; the long tail of 30 is each worth well under a runner-minute a day or has no eligible merges at all. Adopting the tail would add review surface and skip-guarding risk for noise. Prioritise the four, and re-measure rather than adopt blindly.",
+    "finding": "The ROI is concentrated. Four repositories carry essentially all of the measurable saving; the long tail of 30 is each worth well under a runner-minute a day or has no eligible merges at all. Adopting the tail would add review surface and skip-guarding risk for noise. Prioritise the four, and re-measure rather than adopt blindly. soldr was initially mis-triaged as 'reuse never fires'; the real blocker was a duplicate job display name, and it is a one-line rename away.",
     "note_on_cache": "Per owner directive 2026-10-04: a daily catch-all run is fine for cache revalidation but is superseded by cache promotion (setup-soldr `auto`, nearest-ancestor restore, CACHE-024). Where a repository already has a scheduled full matrix (running-process, template-python-rust-cmd) or enough naturally-must-run pushes to refresh on their own (kernal-api, ~1 full run per 6 days at 89.5% reuse), no nightly is added. setup-soldr's `auto` key covers the build-cache family today; it does not yet cover `dylint`."
   }
 }
