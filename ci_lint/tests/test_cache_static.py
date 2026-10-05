@@ -15,6 +15,7 @@ from ci_lint.rules.cache_static import (
     check_cache_029,
     check_cache_030,
     check_cache_031,
+    check_cache_032,
     parse_size,
 )
 from ci_lint.schema import CachePromote, load_ci_toml
@@ -258,6 +259,23 @@ class CacheStaticFixtureTest(unittest.TestCase):
         }
         quiet = replace(promoted, cache=replace(promoted.cache, family=fams))
         self.assertEqual(check_cache_031(quiet), [])
+
+    @requires_yaml_tooling
+    def test_cache_032_opt_in_the_pinned_action_cannot_reach(self) -> None:
+        """The pilot is MERGED but UNRELEASED. `git tag --contains afdd8bf`
+        is empty and no v0.9.x action.yml declares `auto-key`, so every
+        SHA-pinned setup-soldr predates it and the opt-in is inert. Silent:
+        the input parses, the pilot never runs, restores fall back."""
+
+        ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
+        self.assertEqual(check_cache_032(ci), [])  # no promotion claim, nothing unreachable
+
+        claimed = replace(ci, cache=replace(ci.cache, promote=CachePromote(mode="ancestor")))
+        findings = check_cache_032(claimed)
+        self.assertEqual([f.rule for f in findings], ["CACHE-032"])
+        self.assertEqual(findings[0].status.value, "needs_review")
+        self.assertIn("auto-key", findings[0].message)
+        self.assertIn("#552", findings[0].fix)
 
     @requires_yaml_tooling
     def test_cache_014_no_optional_inputs_is_silent(self) -> None:

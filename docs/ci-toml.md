@@ -219,7 +219,7 @@ family that does not exist describes nothing, and is `CT-002`. `scope = "repo"`
 is only coherent for a family whose key is `lockfile = true`, since that is what
 makes every branch's entry interchangeable.
 
-**Promotion's mechanism exists; the fleet has not opted in.** `zackees/setup-soldr`
+**Promotion's mechanism exists, is unreleased, and the fleet cannot reach it.** `zackees/setup-soldr`
 shipped `src/lib/ancestor-cache.ts` in [#566](https://github.com/zackees/setup-soldr/pull/566),
 gated by `autoKeyEnabled` in `src/main.ts` and present in both built bundles. But it is an
 opt-in pilot: `auto-key` defaults to `"false"`, and `auto-key-trusted-writers` must name
@@ -227,6 +227,13 @@ reviewed immutable writer jobs
 (`owner/repo/.github/workflows/file.yml@FULL_SOURCE_SHA:RUN_ID:ATTEMPT:JOB_ID`). As of
 2026-10-05 **no fleet repository has a single live `setup-soldr-ancestor-build-v1-*`
 entry**, so promotion is available everywhere and enabled nowhere.
+**No release carries it.** `git tag --contains afdd8bf` is empty and no released tag's
+`action.yml` declares `auto-key` (`v0.9.85` predates #566 by three days). Since `SEC-004`
+requires a 40-hex SHA pin, **no fleet repository can opt in yet** — soldr pins `a07bab94`
+and bosn `fe965fc7`, neither with `auto-key`. The failure is silent: `cache-key: auto`
+parses as an ordinary input, the pilot never runs, and restores fall back to the legacy key
+with no error. `RUST-014` cannot catch it, because it flags pins predating a release marked
+*critical* and this feature is ahead of the tags. `CACHE-032` is the static half.
 [setup-soldr#552](https://github.com/zackees/setup-soldr/issues/552) tracks the rollout.
 
 `CACHE-030` therefore reports `mode = "ancestor"` as **`needs_review`** — not because
@@ -887,6 +894,7 @@ when neither PyYAML nor `yq` is available).
 | `CACHE-013` | (#23 §5, static) A cache save reachable from a PR (a workflow with `pull_request`/`workflow_call`, or a composite action) whose key input lacks a delimited `pr-<N>` component: `zackees/setup-soldr` `cache-key-suffix` (unless `save-cache: "false"`), `astral-sh/setup-uv` `cache-suffix` (unless `enable-cache: false` or `save-cache: false`), `actions/cache`/`actions/cache/save` `key`. Accepted: an expression containing `github.event.pull_request.number`, or the plan output `cache_key_pr` (`pr-<N>` on `pull_request`, empty elsewhere, from `ci-lint plan/precheck --github-output`); inside a composite action, an `inputs.*` passthrough. | Set the key input to `${{ needs.precheck.outputs.cache_key_pr }}` (or a `format('pr-{0}', github.event.pull_request.number)` expression). |
 | `CACHE-029` | (static) A `[cache.family.<id>]` declaring `max` >= 256 MB with no `evict = "lru"` -- nothing bounds how many entries the family may hold at once. `max` sizes ONE entry, not the family's footprint, so it cannot catch this. `per` is **not** accepted as an exemption: it declares the writer shape, not the entry count. | Add `evict = "lru"` to the family so `ci-lint cache janitor` keeps it at `max x cardinality`. Measure first with `ci-lint cache audit --repo .` -- CACHE-006 names the superseded entries eating the budget. Declaring `[cache.family]` is also what makes the boundary machine-checkable: kernal-api reclaimed 6.5 GiB with the janitor, while clud and running-process, which declare none, can only be inferred from the key shape. |
 | `CACHE-031` | (static, `needs_review`) `[cache.promote] mode = "ancestor"` declared while a `[cache.family.<id>]` of `max` >= 256 MB does not itself declare `promote = "ancestor"` -- its keys carry a content hash, which discards the git-DAG ancestry a nearest-ancestor search needs, so no promotion can select one. Blocked on setup-soldr#552 for setup-soldr-owned families. | Add `promote = "ancestor"` to the family and suffix its key with `ci-lint attest lineage`'s label. Sequence it: a live key-shape change invalidates that family's warm entries. |
+| `CACHE-032` | (static, `needs_review`) `[cache.promote] mode = "ancestor"` declared while setup-soldr's ancestor pilot (#566) is merged and unreleased, so a `SEC-004` SHA-pinned setup-soldr cannot reach it. | Confirm the pinned SHA's `action.yml` declares `auto-key` before relying on the opt-in. It will not: the pilot must ship in a release (#552) first. |
 | `CACHE-014` | (M2-17, ci.yml#42, static; only fires when the corresponding optional input is set) `[cache.pr].max-per-pr x expected-open-prs > [cache.pr].budget`, and/or `[cache.pr].max-per-pr < [cache.pr].measured-largest-delta`. | Lower `max-per-pr` or `expected-open-prs`, or raise `[cache.pr].budget`; and/or raise `max-per-pr` to at least the measured largest delta -- see "Sizing `[cache.pr]` for repository scale" above. |
 | `CACHE-025` | (#209, static; also `ci-lint local-gate lint` and `ci-lint fleet scan`) A workflow or composite-action step `uses: Swatinem/rust-cache@<ref>`. | Delete it. Rust build caching goes through `zackees/setup-soldr@v0` (cache on) or `soldr cargo`/`soldr cook`. There are no exceptions (maintainer decision 2026-10-02): no same-line allow comment, no `[[exceptions]]` entry, not for a soldr bootstrap job or a benchmark baseline (docs/policy-rust.md). |
 | `SEC-005` | (round-5, live, `ci-lint audit`) Any repository or `[publish].pypi.environment` environment Actions secret exists; a 403 (needs an admin token) is `needs_review`, never a pass. | This profile is OIDC-only (issue #6 §7): delete the stored secret(s). |
