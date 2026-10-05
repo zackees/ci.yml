@@ -867,6 +867,71 @@
         "writable": "yes (admin: true, not a fork)",
         "note": "147 GiB of the 278 was provably never read and is now deleted; what remains IS read, so reclaiming it needs the structural change, not a cleanup."
       }
+    },
+    "adoption_round_2026_10_05": {
+      "merged": [
+        {
+          "repo": "zackees/reld",
+          "pr": 218,
+          "commit": "ac71f0b",
+          "worst": "5.92 GiB vs 9.5 GB budget",
+          "note": "7 entries (251MB) remain undeclared -- no via exists for msys2-pkgs / llvm-ld-coff / linkers-Linux / setup-soldr-targetcache-thin-v2"
+        }
+      ],
+      "open_draft": [
+        {
+          "repo": "zackees/bosn",
+          "pr": 513,
+          "why_draft": "adding a ci.toml surfaces 461 PRE-EXISTING findings (LAYOUT-001 x208, SEC-004 x148) that were invisible with no ci.toml. Fits at 52%. Agent corrected the premise: bosn is NOT 221 distinct builds -- it is 13 live build-cache entries under 4 toolchain digests (setup-soldr#237 dropped the per-commit SHA) plus 196 tiny ci-lint attestation caches. Janitor dry-run plans 9.86 -> 2.07 GB."
+        },
+        {
+          "repo": "zackees/mimalloc-pprof",
+          "pr": 603,
+          "why_draft": "local-gate.toml exists; verified `local-gate lint` is unchanged by the new ci.toml. Fits at 8.02 GiB vs 9.5 GB for the DECLARED families, but 3.58 GiB (42%) of live cache is UNDECLARABLE -- see schema_gaps."
+        },
+        {
+          "repo": "FastLED/fbuild",
+          "pr": 1652,
+          "fits": "9.75 GB worst vs 9.5 GB budget (448 MB headroom)"
+        }
+      ],
+      "structural": [
+        {
+          "repo": "FastLED/FastLED",
+          "pr": 4703,
+          "applied": "save: 'false' on PR board jobs (real input; actions/cache -> actions/cache/restore) so PRs restore without writing",
+          "not_applied": "cache-mode: 'split' -- VERIFIED AVAILABLE (it landed on fbuild main and FastLED pins @main, a FLOATING ref) but genuinely BROKEN: the setup step runs before the compile step synthesises platformio.ini, so split-plan has nothing to resolve, and fbuild install hard-fails on apollo3_red / clone / kitchensink. Shipping it would turn board jobs RED. The agent declined rather than break the matrix.",
+          "correction_to_my_brief": "30 boards have surviving entries, not 64 (64 is the workflow count).",
+          "projection": "131.51 -> ~120 GiB. Stops the leak, does NOT reach 10 GiB -- still 12x over."
+        }
+      ],
+      "bug_found_in_my_own_334": {
+        "what": "`shapes` makes CACHE-004 sum the shape maxima, but `ci_lint.cache.ops._lru_evictions` still used `max x cardinality(per)` and ignored shapes. Where they diverge the janitor is STRICTER, so it evicts live entries precheck approved.",
+        "fixed_in": "#343 (09e1359) -- both paths now call family_footprint",
+        "found_independently_by": [
+          "the reld agent",
+          "the fbuild agent",
+          "the mimalloc-pprof agent",
+          "the assistant"
+        ],
+        "note": "Both reld and fbuild had already worked around it by sizing max to the family sum, which is safe but defeats the purpose of shapes."
+      },
+      "next_blocker_the_via_allowlist": {
+        "problem": "`ALLOWED_VIA_VALUES` has no entry for shapes setup-soldr actually emits, so those entries can never be declared and are reported as undeclared forever:",
+        "missing": [
+          "setup-soldr-targetcache-thin-v2-",
+          "setup-soldr-prepare-* WITHOUT the v3 segment (needs a legacy_prefixes entry)",
+          "setup-soldr-tarball-*",
+          "setup-soldr-cargo-registry-v2-*",
+          "cook-base-v1-*"
+        ],
+        "blocks": [
+          "mimalloc-pprof 3.58 GiB (42% of its cache)",
+          "reld 7 entries",
+          "FastLED/fbuild thin target cache 18 entries"
+        ],
+        "note": "setup-soldr's action.yml is the source to cite, same as the existing via table in docs/ci-toml.md."
+      }
     }
   }
 }
