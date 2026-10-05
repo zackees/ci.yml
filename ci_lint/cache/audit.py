@@ -241,7 +241,13 @@ def _classify_one(ci: CiToml, entry: CacheEntry) -> ClassifiedEntry:
             return ClassifiedEntry(entry=entry, family_id=None, is_delta=False, delta=None, is_retired=True)
 
     for fam_id, fam in ci.cache.family.items():
-        if any(entry.key.startswith(p) for p in resolve_prefixes(fam.via, fam_id)):
+        # A literal `prefix` is the declaring repository's own claim about a
+        # shape no `via` describes (zackees/ci.yml#347) -- a path-shaped
+        # cache like `sccache/<a>/<b>/<c>/<hash>`, or a repository's own
+        # action cache. `startswith` on the declared stem is what makes a
+        # sharded path cache classifiable at all.
+        prefixes = (fam.prefix,) if fam.prefix else resolve_prefixes(fam.via, fam_id)
+        if any(entry.key.startswith(p) for p in prefixes if p):
             return ClassifiedEntry(entry=entry, family_id=fam_id, is_delta=False, delta=None, is_retired=False)
 
     return ClassifiedEntry(entry=entry, family_id=None, is_delta=False, delta=None, is_retired=False)

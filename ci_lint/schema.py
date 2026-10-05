@@ -218,6 +218,13 @@ class CacheFamily:
     # alone. `None` (the default) means the family keys on content alone --
     # a content hash, which discards the git-DAG ancestry a promotion needs.
     promote: str | None = None
+    # An explicit literal key PREFIX, for a cache no `via` describes: a
+    # repository's own action cache, or a sharded path cache like
+    # `sccache/<a>/<b>/<c>/<hash>` (zackees/ci.yml#347). Mutually
+    # exclusive with `via` -- a shape the allowlist knows is cited against
+    # its producer's source, and a shape it does not is declared by the
+    # repository that writes it, which is where the knowledge lives.
+    prefix: str | None = None
     # Per-shape ceilings. Empty (the default) means the family is uniformly
     # sized and `max x cardinality` is the right bound. When declared, the
     # family's footprint is the sum of these instead.
@@ -656,6 +663,52 @@ def _parse_cache_shapes(root: Cursor, fsub: Cursor, fam_id: str) -> tuple[CacheS
     return tuple(shapes)
 
 
+@dataclass(frozen=True)
+class FamilyShapeClaim:
+    """A family's key-shape claim, as a record rather than a positional
+    tuple (PY-002) -- `via` and `prefix` are easy to transpose."""
+
+    via: str
+    prefix: str | None = None
+
+
+def _parse_family_shape(root: Cursor, fsub: Cursor, fam_id: str) -> FamilyShapeClaim:
+    """A family's key-shape claim: a recognized producer (`via`), the literal
+    prefix its own producer writes (`prefix`), or neither.
+
+    Exactly one is required. They are different claims about who owns the
+    shape -- a shape the allowlist knows is cited against that producer's
+    source; a shape it does not is declared by the repository that writes
+    it, which is where the knowledge lives (#347).
+    """
+
+    via = fsub.str_("via", required=False) or ""
+    literal = fsub.str_("prefix", required=False)
+    if literal is not None and not literal.strip():
+        root.findings.append(
+            Finding(
+                rule="CT-002",
+                path=root.source,
+                message=f"'cache.family.{fam_id}.prefix' is empty",
+                fix="give the literal key prefix the producer writes, e.g. 'sccache/'",
+            )
+        )
+        literal = None
+    if not via and not literal:
+        root.findings.append(
+            Finding(
+                rule="CT-002",
+                path=root.source,
+                message=f"'cache.family.{fam_id}' declares neither 'via' nor 'prefix', so nothing "
+                "identifies the key shape this family owns",
+                fix=f"set 'cache.family.{fam_id}.via' to a recognized producer (see "
+                "docs/ci-toml.md's cache-family table), or 'prefix' to the literal key prefix "
+                "this repository's own producer writes",
+            )
+        )
+    return FamilyShapeClaim(via=via, prefix=literal)
+
+
 def _parse_cache(root: Cursor) -> CacheConfig:
     raw = root.table_("cache", required=True)
     if raw is None:
@@ -696,7 +749,31 @@ def _parse_cache(root: Cursor) -> CacheConfig:
     family: dict[str, CacheFamily] = {}
     for fam_id, fam_raw in sub.raw_table_of_tables("family", required=True).items():
         fsub = Cursor(fam_raw, f"cache.family.{fam_id}", root.findings, root.source)
-        via = fsub.str_("via") or ""
+        # `via` is optional: a family may name the literal prefix its own
+        # producer writes instead (zackees/ci.yml#347).
+        claim = _parse_family_shape(root, fsub, fam_id)
+        via, literal = claim.via, claim.prefix
+        if via and literal:
+            root.findings.append(
+                Finding(
+                    rule="CT-002",
+                    path=root.source,
+                    message=f"'cache.family.{fam_id}' sets both 'via' and 'prefix'; they are two "
+                    "different claims about who owns the key shape",
+                    fix=f"keep 'via = {via!r}' if a known producer owns the shape, else drop it and "
+                    f"keep 'prefix = {literal!r}'",
+                )
+            )
+        if literal is not None and not literal.strip():
+            root.findings.append(
+                Finding(
+                    rule="CT-002",
+                    path=root.source,
+                    message=f"'cache.family.{fam_id}.prefix' is empty",
+                    fix="give the literal key prefix the producer writes, e.g. 'sccache/'",
+                )
+            )
+            literal = None
         if via and via not in ALLOWED_VIA_VALUES:
             root.findings.append(
                 Finding(
@@ -755,7 +832,7 @@ def _parse_cache(root: Cursor) -> CacheConfig:
         fsub.finish()
         family[fam_id] = CacheFamily(
             id=fam_id, via=via, max=max_, lockfile=bool(lockfile), per=per, min=min_, key=key or None,
-            evict=evict, promote=promote, shapes=tuple(shapes),
+            evict=evict, promote=promote, prefix=literal, shapes=tuple(shapes),
         )
     promote = _parse_cache_promote(root, sub)
     share = _parse_cache_share(root, sub, family)
