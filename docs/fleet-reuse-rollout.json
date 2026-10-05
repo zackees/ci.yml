@@ -543,7 +543,8 @@
     "adopted_reuse": 3,
     "reuse_draft": 1,
     "cache_policy_declared": 3,
-    "cache_space_reclaimed": "~9.4 GiB"
+    "cache_space_reclaimed": "~9.4 GiB",
+    "fleet_repos_at_or_near_cap": 9
   },
   "measured_eligibility": {
     "method": "ci-lint reuse-report --limit 10..20 --since 2026-09-20, required-job = the dominant main-push job; costs are mean runner-minutes per successful main push over 5-12 runs.",
@@ -678,9 +679,103 @@
     "why_this_matters": "The cache budget is a means of keeping pull requests warm. At 98.8% (kernal-api) and over the cap (clud), GitHub refuses new saves and PRs run cold -- the failure the budget exists to prevent, reached via the mechanism meant to help.",
     "sharing": "`[cache.share.<id>] scope = branch|repo` declares how far a family is shared. Promotion (`[cache.promote] mode = \"ancestor\"`, CACHE-024/#185) is a declaration only until setup-soldr#552 lands; per the owner's guidance a daily catch-all is fine for cache revalidation but superseded by cache promotion, so a repository with a scheduled full matrix needs no extra nightly.",
     "schema_gaps_found": [
-      "No [cache.family].via resolves to a repository's own actions/cache key prefixes (venv-*, fuzz-corpus-*, dylint-target-*): `via=\"ci-lint\"` builds `<family-id>-v1-` and every setup-soldr:* owns a fixed prefix. Affects clud (7 entries) and running-process (21).",
-      "CLOSED by ci.yml#334: `[cache.family].shapes.<scope>]` per-shape ceilings, so a family whose entries differ in size can be declared truthfully instead of as `max x cardinality`."
+      "CLOSED (ci.yml#339): no pagination on an Actions-cache read undercounted silently; CACHE-033 makes it a finding and list_caches now fails closed at its ceiling.",
+      "OPEN: no [cache.family].via resolves to a repository's own actions/cache key prefixes (venv-*, fuzz-corpus-*, dylint-target-*): `via=\"ci-lint\"` builds `<family-id>-v1-` and every setup-soldr:* owns a fixed prefix. Affects clud (7 entries) and running-process (21)."
     ],
-    "declared_all_three": true
+    "declared_all_three": true,
+    "CORRECTION": {
+      "claim_withdrawn": "Earlier entries here said GitHub 'refuses new cache saves' past the 10GB cap. That was wrong and asserted rather than measured. Measured 2026-10-05: FastLED/FastLED created ALL 157 of its entries -- 280.75 GiB -- within 48 hours, and clud created 22 in 48 hours. Saves are not refused.",
+      "what_is_true": "GitHub manages a per-repository cache target around 10GB by EVICTING, not refusing. Exceeding it does not block work; it means warm entries are evicted to make room, so pull requests keep running against a cache that was just discarded. The remedy is identical (reclaim superseded entries, bound the families) but the failure mode is thrash, not refusal.",
+      "why_it_mattered": "The urgency framing was wrong: clud sitting over the cap blocked nothing by itself. What is worth fixing is the unbounded growth that puts it there -- FastLED/FastLED's 278.8 GiB across 100 per-board fbuild-v1 entries is that, at 28x."
+    },
+    "fleet_triage_2026_10_05": {
+      "method": "GET /repos/{r}/actions/caches fully paginated. CACHE-033 (#339) exists because a single-page read silently undercounts: it made FastLED/fbuild read as 5.81 GiB / 58% when it is 10.06 GiB / 101%.",
+      "over_or_near_cap": [
+        {
+          "repo": "FastLED/FastLED",
+          "entries": 157,
+          "GiB": 280.75,
+          "pct": 2807,
+          "note": "OUTLIER. fbuild-v1 alone is 278.8 GiB across 100 PER-BOARD entries of ~2.7GB (teensy40, teensy36, esp32s3, upesy_wroom...). Cardinality in the hundreds, no ci.toml, no declared budget, no eviction."
+        },
+        {
+          "repo": "FastLED/cli",
+          "entries": 49,
+          "GiB": 10.91,
+          "pct": 109
+        },
+        {
+          "repo": "FastLED/fbuild",
+          "entries": 129,
+          "GiB": 10.06,
+          "pct": 101
+        },
+        {
+          "repo": "zackees/bosn",
+          "entries": 214,
+          "GiB": 9.92,
+          "pct": 99
+        },
+        {
+          "repo": "zackees/wild",
+          "entries": 63,
+          "GiB": 9.86,
+          "pct": 99,
+          "note": "v0-rust is 7.1 GiB and is NOT a setup-soldr/cook family, so a [cache.family] policy would not reach it"
+        },
+        {
+          "repo": "zackees/mimalloc-pprof",
+          "entries": 110,
+          "GiB": 9.66,
+          "pct": 97
+        },
+        {
+          "repo": "zackees/reld",
+          "entries": 88,
+          "GiB": 8.83,
+          "pct": 88
+        },
+        {
+          "repo": "zackees/act2",
+          "entries": 64,
+          "GiB": 8.27,
+          "pct": 83,
+          "note": "setup-go is 7.47 GiB"
+        },
+        {
+          "repo": "zackees/setup-soldr",
+          "entries": 93,
+          "GiB": 7.97,
+          "pct": 80
+        }
+      ],
+      "declare_next": [
+        {
+          "repo": "zackees/zccache",
+          "GiB": 7.67,
+          "pct": 77,
+          "entries": 246
+        },
+        {
+          "repo": "zackees/soldr",
+          "GiB": 7.21,
+          "pct": 72,
+          "entries": 152
+        },
+        {
+          "repo": "zackees/ai-tools",
+          "GiB": 5.1,
+          "pct": 51,
+          "entries": 114
+        }
+      ],
+      "leave_alone": [
+        "zackees/llvm-ld (36%)",
+        "zackees/ci.yml",
+        "zackees/template-python-rust-cmd (18%)",
+        "all zero-cache repos"
+      ],
+      "note": "None has a ci.toml except template-python-rust-cmd, so declaring a policy means authoring the file first -- what running-process required, and which needed ci.yml#334's per-shape ceilings to be truthful."
+    }
   }
 }
