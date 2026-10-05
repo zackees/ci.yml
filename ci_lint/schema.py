@@ -25,6 +25,7 @@ from ci_lint.toml_cursor import Cursor, TomlValue
 LINTER_RE = re.compile(r"^zackees/ci\.yml@([0-9a-fA-F]{40})$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 URL_RE = re.compile(r"^https?://")
+SIZE_RE = re.compile(r"^\s*\d+(\.\d+)?\s*(B|KB|MB|GB)\s*$", re.IGNORECASE)
 
 # [cache.family.<id>].per's cardinality multiplier (ci_lint.rules.cache_static
 # ._cardinality): "none" is the default (cardinality 1, matching an absent
@@ -175,6 +176,29 @@ class PrCache:
 
 
 @dataclass(frozen=True)
+class CacheShape:
+    """One named shape of a family, with its OWN ceiling.
+
+    `max` is one number for the whole family, so a family whose entries
+    differ wildly in size cannot be declared truthfully: CACHE-004
+    multiplies that one ceiling by the platform count and over-counts a
+    repository whose big shapes are few. Measured on zackees/running-process
+    (zackees/ci.yml#1321): `compile` holds two ~1.25 GiB shapes and six at
+    <=529 MB, so `max x 6 platforms` models 7.8 GB for a family that
+    actually occupies 5.0 GB -- and the only `per` values that would fit
+    under-count, which is the dangerous direction, because
+    `ci-lint cache janitor` LRU-evicts to `max x cardinality` and would
+    delete live entries.
+
+    `shapes` declares each shape and its own ceiling instead. The family's
+    steady footprint is then the SUM, which is both honest and checkable.
+    """
+
+    scope: str
+    max: str
+
+
+@dataclass(frozen=True)
 class CacheFamily:
     id: str
     via: str
@@ -194,6 +218,10 @@ class CacheFamily:
     # alone. `None` (the default) means the family keys on content alone --
     # a content hash, which discards the git-DAG ancestry a promotion needs.
     promote: str | None = None
+    # Per-shape ceilings. Empty (the default) means the family is uniformly
+    # sized and `max x cardinality` is the right bound. When declared, the
+    # family's footprint is the sum of these instead.
+    shapes: tuple[CacheShape, ...] = ()
 
 
 CACHE_FAMILY_PROMOTE_VALUES: frozenset[str] = frozenset({"ancestor"})
@@ -576,6 +604,58 @@ def _parse_tags(root: Cursor) -> dict[str, TagRule]:
     return out
 
 
+def _parse_cache_shapes(root: Cursor, fsub: Cursor, fam_id: str) -> tuple[CacheShape, ...]:
+    """`[cache.family.<id>.shapes.<scope>]` -- a per-shape ceiling, so a
+    family whose entries differ in size can be declared truthfully instead
+    of being modelled as `max x cardinality` (zackees/ci.yml#1321)."""
+
+    raw = fsub.table_("shapes", required=False)
+    if raw is None:
+        return ()
+    # Iterate `raw` directly rather than through a Cursor: the scope keys
+    # are the table's own children, consumed here, so a `finish()` over the
+    # same mapping would report every one of them as an unknown key.
+    shapes: list[CacheShape] = []
+    for scope, entry in raw.items():
+        if not isinstance(entry, dict):
+            root.findings.append(
+                Finding(
+                    rule="CT-002",
+                    path=root.source,
+                    message=f"'cache.family.{fam_id}.shapes.{scope}' must be a table with a 'max' size",
+                    fix=f"write '[cache.family.{fam_id}.shapes.{scope}]' with 'max = \"1500MB\"'",
+                )
+            )
+            continue
+        scope_cur = Cursor(entry, f"cache.family.{fam_id}.shapes.{scope}", root.findings, root.source)
+        shape_max = scope_cur.str_("max")
+        scope_cur.finish()
+        if shape_max and SIZE_RE.fullmatch(shape_max) is None:
+            root.findings.append(
+                Finding(
+                    rule="CT-002",
+                    path=root.source,
+                    message=f"'cache.family.{fam_id}.shapes.{scope}.max' is not a size "
+                    f"({shape_max!r}); a shape with an unusable ceiling would be silently "
+                    "dropped from the family's footprint and understate CACHE-004",
+                    fix=f"write 'max = \"1500MB\"' (a number and one of B/KB/MB/GB)",
+                )
+            )
+        elif shape_max:
+            shapes.append(CacheShape(scope=scope, max=shape_max))
+    if not shapes:
+        root.findings.append(
+            Finding(
+                rule="CT-002",
+                path=root.source,
+                message=f"'cache.family.{fam_id}.shapes' declares no shape with a 'max'",
+                fix=f"give at least one '[cache.family.{fam_id}.shapes.<scope>]' a 'max' size, or "
+                "drop the 'shapes' table and declare 'max' alone",
+            )
+        )
+    return tuple(shapes)
+
+
 def _parse_cache(root: Cursor) -> CacheConfig:
     raw = root.table_("cache", required=True)
     if raw is None:
@@ -671,10 +751,11 @@ def _parse_cache(root: Cursor) -> CacheConfig:
                     "LRU-trims to its budget) or omit it (keep the newest entry per key prefix)",
                 )
             )
+        shapes = _parse_cache_shapes(root, fsub, fam_id)
         fsub.finish()
         family[fam_id] = CacheFamily(
             id=fam_id, via=via, max=max_, lockfile=bool(lockfile), per=per, min=min_, key=key or None,
-            evict=evict, promote=promote,
+            evict=evict, promote=promote, shapes=tuple(shapes),
         )
     promote = _parse_cache_promote(root, sub)
     share = _parse_cache_share(root, sub, family)

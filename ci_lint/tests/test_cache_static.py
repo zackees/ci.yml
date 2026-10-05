@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pathlib
+
 import unittest
 from dataclasses import replace
 
@@ -283,6 +285,60 @@ class CacheStaticFixtureTest(unittest.TestCase):
         self.assertIn("trails main by 33 commits", findings[0].message)
         self.assertNotIn("sanctioned exception", findings[0].fix)
 
+    def test_per_shape_max_is_the_family_footprint_not_max_times_cardinality(self) -> None:
+        """A family whose entries differ in size cannot be declared with one
+        ceiling. zackees/running-process#1321: `compile` holds two ~1.25 GiB
+        shapes and six at <=529 MB, so `max x platforms` models 7.8 GB for a
+        family that occupies 5.0 GB -- and the only `per` values that would
+        fit UNDER-count, which is the dangerous direction, because
+        `ci-lint cache janitor` LRU-evicts to `max x cardinality` and would
+        delete live entries.
+
+        `shapes` declares each shape's own ceiling, so the footprint is the
+        SUM and the cardinality is the shape count."""
+
+        import re as _re
+
+        from ci_lint.rules.cache_static import cardinality, family_footprint
+
+        base = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "examples" / "rust-pypi-app" / "ci.toml"
+        ).read_text(encoding="utf-8").replace(
+            "zackees/ci.yml@<40-hex-sha>", "zackees/ci.yml@" + "a" * 40
+        )
+        row = _re.search(r"^compile\s*=.*$", base, _re.M).group(0)
+        shapes = '{ "macos-arm-shared" = { max = "1300MB" }, "linux" = { max = "1100MB" } }'
+        ci, findings = load_ci_toml_text(base.replace(row, row[:-2] + f", shapes = {shapes} }}"))
+        self.assertEqual([f.rule for f in findings], [])
+        fam = ci.cache.family["compile"]
+        self.assertEqual([(s.scope, s.max) for s in fam.shapes],
+                         [("macos-arm-shared", "1300MB"), ("linux", "1100MB")])
+        self.assertEqual(cardinality(ci, fam.per, len(fam.shapes)), 2)
+        self.assertEqual(family_footprint(ci, fam), 2400 * 1024**2)
+        # Without shapes the same family models max x cardinality instead.
+        plain, _ = load_ci_toml_text(base)
+        self.assertNotEqual(family_footprint(ci, plain.cache.family["compile"]), family_footprint(ci, fam))
+
+    def test_a_shape_ceiling_that_is_not_a_size_is_rejected(self) -> None:
+        """A shape dropped for an unusable ceiling would be missing from the
+        footprint and silently UNDERSTATE CACHE-004 -- the direction that
+        lets a repository overflow the cap."""
+
+        import re as _re
+
+        base = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "examples" / "rust-pypi-app" / "ci.toml"
+        ).read_text(encoding="utf-8").replace(
+            "zackees/ci.yml@<40-hex-sha>", "zackees/ci.yml@" + "a" * 40
+        )
+        row = _re.search(r"^compile\s*=.*$", base, _re.M).group(0)
+        _, findings = load_ci_toml_text(
+            base.replace(row, row[:-2] + ', shapes = { "broken" = { max = "notasize" } } }')
+        )
+        self.assertIn("CT-002", [f.rule for f in findings])
+
     @requires_yaml_tooling
     def test_cache_014_no_optional_inputs_is_silent(self) -> None:
         ci, _ = load_ci_toml(fixture("CACHE-004", "green"))
@@ -328,3 +384,14 @@ class SizeParsingUnitTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def load_ci_toml_text(text: str):
+    """Load a ci.toml from a string, for cases that need an inline edit."""
+    import tempfile
+
+    from ci_lint.schema import load_ci_toml
+
+    d = pathlib.Path(tempfile.mkdtemp())
+    (d / "ci.toml").write_text(text, encoding="utf-8")
+    return load_ci_toml(d)
