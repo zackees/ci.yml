@@ -14,6 +14,8 @@ from dataclasses import dataclass, replace
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.workflow_replay import ReplayExpectation, ReplayInput, ReplayJob, prove_replay
 from ci_lint.workflow_replay_identity import identity_part
+from ci_lint.workflow_replay_checks import derive_checks
+from ci_lint.workflow_replay_expansion import ExpandedJob
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,33 @@ class WorkflowReplayTest(unittest.TestCase):
                               "conclusion": "success", "first_seq": 10, "last_seq": 20}],
             }]}]},
         }
+
+    def test_public_proof_requires_every_source_excluded_job(self) -> None:
+        executed = replace(self.expected.required_jobs[0], identity=(identity_part("tests"),))
+        excluded = derive_checks(ExpandedJob(
+            "ci.yml:writer", "Writer", self.expected.workflow, {},
+            {"if": "github.event_name == 'push'", "steps": [{"run": "write-cache"}]},
+            identity=(identity_part("writer"),)), mode="minimal", event="pull_request")
+        expected = replace(self.expected, required_jobs=(executed, excluded))
+        jobs = self.raw["tree"]["groups"][0]["jobs"]
+        jobs[0].update(job_id="tests", matrix=None, identity=[{"jobID": "tests", "matrix": None}])
+        jobs.append({"key": "Writer", "job_id": "writer", "matrix": None,
+                     "identity": [{"jobID": "writer", "matrix": None}],
+                     "status": "completed", "conclusion": "skipped", "sections": []})
+        self.assertEqual(prove_replay(self.raw, expected).jobs, (executed.key, excluded.key))
+        for change in (MetadataChange("conclusion", "success"), MetadataChange("status", "pending"),
+                       MetadataChange("sections", [{"stage": "Main", "conclusion": "success"}])):
+            altered = copy.deepcopy(self.raw)
+            altered["tree"]["groups"][0]["jobs"][1][change.field] = change.value
+            with self.assertRaises(ValueError):
+                prove_replay(altered, expected)
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, replace(expected, required_jobs=(excluded,)))
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, replace(expected, required_jobs=(executed, replace(excluded, steps=("Fake",)))))
+        jobs.pop()
+        with self.assertRaisesRegex(ValueError, "required job is missing"):
+            prove_replay(self.raw, expected)
 
     def test_valid_evidence_names_required_jobs(self) -> None:
         proof = prove_replay(self.raw, self.expected)

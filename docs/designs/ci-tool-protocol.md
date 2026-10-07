@@ -141,10 +141,12 @@ engine/pin/runner tests and Clippy passed. A compatible release is pending.
 Act2's exact merged release candidate is
 `0c9947b7d75a61edb6bcde3087614c00321a23a1`;
 [full release qualification run 37571846804](https://github.com/zackees/act2/actions/runs/37571846804)
-is still running. The clean default-branch checkout matches this SHA; the
-prospective tag is `v0.2.89-act2.11`, checked absent before qualification.
-Do not tag until the whole run succeeds, and recheck candidate/tag/release
-state immediately before publishing through the existing release workflow.
+passed all five checks; Codespell run 37571823387 also passed on this SHA.
+The clean default-branch checkout and live master matched before publishing;
+the tag and release were both absent. Tag `v0.2.89-act2.11` now names this
+qualified candidate. The existing
+[release workflow run 37572787591](https://github.com/zackees/act2/actions/runs/37572787591)
+is packaging it; artifact verification and Bosn pin adoption remain pending.
 Verify archive and extracted executable hashes plus the actual capability
 response before changing Bosn's pins.
 
@@ -202,7 +204,13 @@ source audit resolves the `fast` and `dylint` prerequisite closures, including
 the reusable ci-pre jobs and cache maintenance. It exposed two additional
 contracts to implement before claiming portability: event-excluded prerequisite
 jobs need source-proved explicit skipped-job evidence (never a missing-job
-waiver), and `ci-ok` depends on planner-driven dynamic platform matrices which
+waiver). The shared verifier now derives these exclusions with the existing
+bounded condition evaluator: only a source-bound false event/input guard
+qualifies, the actual job must be completed/skipped with an empty section
+list and matching qualified identity, and an entirely excluded selection
+cannot prove a lane. Unknown or constant-only guards still require execution.
+Fixture tests cover the decision; producer event qualification remains
+pending. Also, `ci-ok` depends on planner-driven dynamic platform matrices which
 the current bounded resolver refuses. `reuse-decision` also has an unnamed
 checkout step. Preserve the original checks and dynamic native/full lanes;
 do not bypass the aggregator or silently narrow the selected graph to make

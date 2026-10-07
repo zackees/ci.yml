@@ -42,10 +42,13 @@ def _required(files: tuple[ParsedYamlFile, ...], config: ReplayConfig,
         raise ValueError("qualified replay has duplicate source-job declarations")
     if set(declarations) != {job.source_job for job in expanded.jobs}:
         raise ValueError("qualified replay declaration differs from the complete selected graph")
-    return tuple(derive_checks(job, mode=config.mode, event=selection.event)
+    proofs = tuple(derive_checks(job, mode=config.mode, event=selection.event)
                  if declarations[job.source_job].derive_checks else
                  replace(declarations[job.source_job].proof, key=job.key, identity=job.identity)
                  for job in expanded.jobs)
+    if all(proof.excluded for proof in proofs):
+        raise ValueError("qualified replay selection has no required executed job")
+    return proofs
 
 
 def _full(config: ReplayConfig, files: tuple[ParsedYamlFile, ...]) -> ReplayPlan:

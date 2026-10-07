@@ -56,3 +56,9 @@ class FullReplayPlanTest(unittest.TestCase):
             self.plan(lane="missing")
         with self.assertRaises(ValueError):
             self.plan(replace(self.config, selections=self.config.selections[:1]))
+
+    def test_all_event_excluded_selection_cannot_prove_a_lane(self):
+        for job in self.file.document["jobs"].values():
+            job["if"] = "github.event_name == 'push'"
+        with self.assertRaisesRegex(ValueError, "no required executed job"):
+            self.plan(lane="tests")

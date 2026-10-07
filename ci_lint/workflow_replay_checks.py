@@ -1,6 +1,7 @@
 """One source-derived check contract shared by static and execution proof."""
 
 from ci_lint.workflow_replay import ReplayJob
+from ci_lint.workflow_replay_conditions import condition_excludes
 from ci_lint.workflow_replay_cache_save import approved_cache_save, approved_pr_cache_save
 from ci_lint.workflow_replay_expansion import ExpandedJob
 from ci_lint.workflow_replay_input_skips import excluded_input_steps
@@ -26,6 +27,8 @@ def derive_checks(expanded: ExpandedJob, *, mode: str, event: str) -> ReplayJob:
     Every exclusion still requires exactly one explicit skipped Main section;
     every other step requires successful execution. Names must be unique.
     """
+    if condition_excludes(as_dict(expanded.job).get("if"), expanded.inputs, set(), event=event):
+        return ReplayJob(expanded.key, (), identity=expanded.identity, excluded=True)
     job = _named_job(expanded)
     names = tuple(str(step["name"]) for step in steps_of(job))
     if not names or len(set(names)) != len(names):

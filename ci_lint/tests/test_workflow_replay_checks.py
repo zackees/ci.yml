@@ -9,7 +9,7 @@ from ci_lint.workflow_replay_checks import derive_checks
 from ci_lint.workflow_replay_expansion import ExpandedJob
 from ci_lint.workflow_replay_identity import identity_part
 from ci_lint.workflow_replay_inputs import BoundInput
-from ci_lint.workflow_replay import ReplayJob
+from ci_lint.workflow_replay import ReplayJob, _prove_job
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig
 from ci_lint.workflow_replay_static import check_replay_static
 from ci_lint.tests.test_workflow_replay_expansion import workflow
@@ -58,3 +58,26 @@ class DerivedChecksTest(unittest.TestCase):
             self.assertEqual(check_replay_static(config, Path("/unused")), [])
             document.document["jobs"]["build"]["steps"][0].pop("name")
             self.assertTrue(check_replay_static(config, Path("/unused")))
+
+    def test_event_excluded_job_requires_explicit_empty_skip(self):
+        self.job["if"] = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+        proof = derive_checks(self.expanded, mode="minimal", event="pull_request")
+        self.assertTrue(proof.excluded)
+        self.assertEqual(proof.steps, ())
+        raw = {"job_id": "build", "matrix": None, "status": "completed",
+               "conclusion": "skipped", "sections": []}
+        _prove_job(raw, proof)
+        for altered in ({**raw, "conclusion": "success"}, {**raw, "status": "pending"},
+                        {**raw, "sections": [{"stage": "Main", "conclusion": "success"}]},
+                        {**raw, "job_id": "other"}):
+            with self.assertRaises(ValueError):
+                _prove_job(altered, proof)
+
+    def test_unknown_or_unbound_job_guard_never_waives_execution(self):
+        for guard in ("false", "github.ref == 'refs/heads/main'", "failure()"):
+            self.job["if"] = guard
+            proof = derive_checks(self.expanded, mode="minimal", event="pull_request")
+            self.assertFalse(proof.excluded)
+            self.assertTrue(proof.steps)
+        self.job["if"] = "github.event_name == 'pull_request'"
+        self.assertFalse(derive_checks(self.expanded, mode="minimal", event="pull_request").excluded)
