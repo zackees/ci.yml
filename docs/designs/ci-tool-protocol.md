@@ -1213,8 +1213,20 @@ exact head `c9d8b751111a37976b49ff8ccb3c6da4d327ce03`, tree, parent, message and
 seven attestations. Hosted run `37653335444` passed. This changes a gate surface,
 so hosted Rust and Linux jobs appropriately ran rather than being skipped.
 The merged candidate is `391c8e35f8b16afccfe73c79276dbb0c645cf3c7`.
-Exact-main full CI was requested; pretag dry run, publication, four public wheel
-checks, and execution of the new provider remain pending.
+[Exact-main full CI](https://github.com/zackees/bosn/actions/runs/37654111930)
+passed. The [pretag dry run](https://github.com/zackees/bosn/actions/runs/37655449938)
+failed because Windows and ARM-mac jobs repeatedly could not acquire runners;
+both had zero executed steps. Dispatch/rerun retries returned HTTP 500, and
+subsequent reads still showed the same terminal attempt and no replacement run.
+The Linux wheel completed build, smoke test and upload. A downloaded copy was
+installed as a private pilot candidate, with version and archive/native hashes
+verified against that artifact. This is not a public release or rollout.
+The owned daemon was confirmed idle before the graceful switch to the private
+0.1.18 candidate. Live CLI queries confirm the actual daemon version and act2.15
+binary digest above. Managed-task admission is one runner at four CPUs, CI
+admission is also one runner, and the outer engine has a four-CPU quota. These
+are owned-pilot limits, not aggregate admission across independent state roots.
+Publication and four public wheel checks remain pending.
 
 Payload integrity has a separate narrow correction in
 [setup-soldr PR #572](https://github.com/zackees/setup-soldr/pull/572), head
@@ -1236,30 +1248,51 @@ cache acceptance requirements remain unchanged.
 
 ## Backend-owned compiler snapshot API (unpublished draft)
 
-Zccache's artifact crate owns the new snapshot API; Bosn, act2 and `ci-lint`
-do not parse its compiler index or staged layout. The draft is committed locally
-as `1005fd31` on `feat/362-compiler-snapshot`; it has not been pushed or qualified
-by the full repository gate. Its RED test compiled and failed on unimplemented
-export inside the isolated Bosn gate stack. Seven snapshot tests now pass,
-along with all 123 artifact tests (one ignored) and warnings-denied artifact
-Clippy in the same isolated stack.
+Zccache's artifact crate owns the snapshot API; Bosn, act2 and `ci-lint` do not
+parse its index or layout. The current draft is committed locally as `985e522f`
+on `feat/362-compiler-snapshot`. It remains unpublished; full repository
+qualification is pending. The sole primary review returned clean after its
+correction below.
 
-Export uses the live authoritative index and existing staged resolver/read
-guard. It retains output names, modes, streams and Rust verdicts; copies the
-captured generation independently without re-reading its mutable pointer;
-preserves payload timestamps; verifies copied bytes; and publishes a completed
-temporary sibling using the canonical native generation rename. Import checks
-schema, an opaque caller-provided compatibility identity, index digest and all
-payloads before installing a fresh private store. Both operations share the
-same validation/copy path. These cache snapshots are separate from test evidence.
+Export retains the authoritative index, including output names, sizes, modes,
+diagnostic streams and Rust verdicts. Existing staged validation and legacy
+pack/flat resolution supply the payloads; legacy objects normalize into staged
+transport generations. The copier preserves payload timestamps, verifies copied
+bytes, syncs files/directories and publishes a temporary sibling using the
+canonical native generation rename. Import checks schema, caller-provided
+compatibility identity, index digest and strict index decoding before installing
+a new private store. Shared validation/copy logic avoids a second cache parser.
 
-Tests cover multi-output metadata/verdicts, wrong compatibility, modified index,
-corrupt payload import, corrupt export preserving a usable prior snapshot,
-missing payload refusal, empty stores, and read-only payload/timestamp retention.
-The current API handles staged-v2 only and fails on unsupported legacy payloads.
+Offline export acquires the daemon's canonical exclusive cache-root writer
+lease and refuses active writers. The existing root lease now lives in
+`zccache-core`, shared by daemon and backend; native ownership remains in
+kernal-api. Embedded export still requires a quiesced authoritative index.
+Import happens before private daemon startup and does not merge a live store.
+The thin existing `zccache cache export/import` CLI exposes explicit root,
+snapshot and compatibility inputs and emits a schema-1 JSON receipt.
+
+Actual isolated RED controls preceded mixed-layout normalization, immutable
+import, strict index decoding, writer exclusion and CLI implementation. The
+source-hashed corrected run passed 128 artifact tests (one ignored), six canonical
+writer-lease tests, one CLI round-trip/wrong-context test, and warnings-denied
+Clippy for artifact, core and CLI. This proves the tested backend/CLI contracts;
+it does not prove fresh-engine compiler hits.
+
+The sole primary review found an immutable-import gap: a corrupt
+snapshot missing its staged pointer can enter the legacy fallback, which writes
+a diagnostic event into its source when legacy path validation is enabled.
+A focused RED reproduced that source mutation. Import now requires staged
+generations through the same shared copier, while export retains legacy
+normalization. The regression covers absent and healthy flat fallback payloads;
+it passes with legacy path validation enabled. The same primary reviewer
+confirmed the correction and returned clean. The earlier full gate passed lint
+and CI-script tests before its owned MSRV replay was deliberately cancelled for
+this source change. A new complete gate runs against the corrected commit; no
+full pass is claimed yet.
+
 Caller-controlled parents and immutable source snapshots are required; hostile
-filesystem races and exclusive reservation of empty destinations are not proved.
-Legacy pack/flat support, CLI/daemon integration, transport hooks, pre-cook base
+filesystem races and portable exclusive reservation of empty destinations are
+not proved. Managed-daemon shutdown coordination, transport hooks, pre-cook base
 capture, exact-hit new-object publication, and actual fresh-engine compiler hits
-are still required. No cache warmth, reduced misses, or complete durability
-acceptance is claimed from these crate tests.
+remain required. Cache snapshots are separate from test evidence. No cache
+warmth or complete durability acceptance is claimed from crate tests.
