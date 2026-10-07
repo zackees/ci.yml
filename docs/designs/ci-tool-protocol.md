@@ -60,8 +60,9 @@ No consumer needs a script solely to copy stdout into the report file.
 Qualified job identity is the ordered reusable-caller path plus each caller's
 matrix values and the leaf's matrix values. Display names are diagnostic text,
 not identity. Direct jobs, nested calls, repeated leaf names and caller/leaf
-matrix expansion must all remain distinguishable. The act2 PR #30 implementation
-is the candidate to qualify; its existence does not establish deployment.
+matrix expansion must all remain distinguishable. The act2 PR #30 implementation is merged into master alongside capability
+PR #52. Release qualification and Bosn artifact pin adoption still precede
+real adopter proof; merged source does not establish deployment.
 
 `[gate.replay] qualified = true` enables source-derived identities. A declaration
 names each `source-job` once; `key` is optional in this mode. Omitting `steps`
@@ -123,7 +124,7 @@ Provider compatibility and the actual adopter run still need qualification
 before replacing the private script.
 
 The act2 candidate ([act2 PR #52](https://github.com/zackees/act2/pull/52),
-stacked on PR #30) adds `act --ci-capabilities`, a query that starts no
+merged after PR #30) adds `act --ci-capabilities`, a query that starts no
 workflow/container/cache server and fetches no version notices. Its schema-1
 JSON contains `producer = "act2"`, the compiled `version`, and capability names
 `qualified-job-identity-v1` and `step-stage-result-v1`. The first describes the
@@ -132,7 +133,27 @@ step IDs and terminal outcomes. Bosn must request structured verbose events,
 validate this query from the same digest-verified binary it will execute, and
 refuse missing/incompatible contracts before building. The query establishes
 no source proof or passing result. The compiled candidate query and focused
-CLI/identity tests pass; Bosn consumption and a compatible release are pending.
+CLI/identity tests and all five PR checks pass. Bosn consumption is committed
+in its adoption worktree (`128de149`): bootstrap and offline readiness share
+a typed, bounded validator of the same digest-verified binary. Isolated
+engine/pin/runner tests and Clippy passed. A compatible release is pending.
+
+Act2's exact merged release candidate is
+`0c9947b7d75a61edb6bcde3087614c00321a23a1`;
+[full release qualification run 37571846804](https://github.com/zackees/act2/actions/runs/37571846804)
+is still running. The clean default-branch checkout matches this SHA; the
+prospective tag is `v0.2.89-act2.11`, checked absent before qualification.
+Do not tag until the whole run succeeds, and recheck candidate/tag/release
+state immediately before publishing through the existing release workflow.
+Verify archive and extracted executable hashes plus the actual capability
+response before changing Bosn's pins.
+
+Clud's adoption candidate (`060373a7`) now declares the generic replay
+mappings and invokes Bosn directly. Its source-derived full union is eight
+concrete jobs and 96 checks; each individual lane also resolves its complete
+prerequisite closure. No clud executable or private receipt parser is in
+the gate path. Existing legacy parser tests remain during qualification.
+No actual adopter run or hosted skip is established by these source checks.
 
 The existing trailer stamp is a content checksum, not a digital signature.
 Writer trust, trusted base policy and audit runs remain necessary. Merely
@@ -162,7 +183,7 @@ transfer of compiler payloads between environments.
 | --- | --- | --- |
 | Local unchanged invocation skips | Real generic invocation twice; same graph executed once, unchanged HEAD and original evidence age | Focused lane regression tests pass; Bosn pilot pending |
 | Invalidated evidence reruns | Expired receipt, changed tools/inputs, explicit rerun, tampering and omitted/failed checks | Expiry, tool change and `--no-cache` regression tests pass; remaining cases pending |
-| Qualified execution identities | Direct/nested/same-name and caller/leaf matrix conformance, incomplete receipt rejected | Shared resolver/verifier fixture tests pass; act2 PR #30 open; deployed qualification pending |
+| Qualified execution identities | Direct/nested/same-name and caller/leaf matrix conformance, incomplete receipt rejected | Shared resolver/verifier fixture tests pass; act2 PR #30/#52 merged; release/provider qualification pending |
 | Persistent local compiler objects | Two fresh engines, restored prior objects and retained new publications; classified residual misses | Pending |
 | Hosted PR skip | Actual stamped PR head, verifier outputs, precisely skipped covered jobs, successful aggregator | Pending |
 | Hosted rejection and full runs | Wrong tree/parents, stale evidence, untrusted writer/fork, changed surfaces, audit and release | Pilot evidence pending |
