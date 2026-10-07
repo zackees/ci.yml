@@ -323,3 +323,30 @@ unsupported schemas and malformed digests refuse proof. Existing contracts
 retain their original keys when this opt-in is absent. This enrollment must be
 added to the real adopters after the current immutable candidate run finishes;
 synthetic provider-change controls do not establish a deployed skip.
+
+### Real cold run: successful checks, rejected receipt
+
+Run `ec5d2819-92d8-4039-8dae-9f87e642c3b3` finished successfully with all
+21 reported jobs completed and zero failures. Build, lint, Dylint, all three
+unit-test matrix legs and CI OK passed. Engine cleanup completed; producer
+total time was 2765.5 seconds, and the shared front door took 2781 seconds.
+The verifier refused the report because twelve skipped jobs had no qualified
+identity. It wrote no lane pass or commit stamp, and Clud remained at `d8155f2`.
+This is successful workflow execution, not successful attestation qualification.
+
+The twelve entries are the excluded native build/test callers and the harness
+and integration callers, with empty sections and no matrix or identity. Bosn
+settles unobserved declared placeholders to skipped after a normal provider
+exit. In act2.11, the actual `jobResult = skipped` event in
+`RunContext.isEnabled` is debug-only, while Bosn invokes normal `--json` logging.
+A focused producer test reproduced the missing JSON at normal log level for
+both direct and nested caller identities. Fixing that event emission is the
+next provider qualification step; the original receipt remains retained and
+the validator has not been relaxed to infer execution identity from placeholders.
+
+The consumer binding was published as
+`ec71fbc7e1839372165521f0e41a0d99fc1eea32`, after all 1160 selftests and the
+mandatory stamped gate passed. Bosn provider candidate `fdbcde7` built in its
+isolated test stack; its separate executable hashes to
+`2a15e2e851cf944736a9cf27cc78611e6d7fa1dbea832c38b183dc88b2abb887`.
+It has not replaced the immutable binary that produced this cold-run evidence.
