@@ -362,6 +362,8 @@ def _verify_default_branch_reuse(
     payload = job_payload if isinstance(job_payload, dict) else {}
     if payload.get("conclusion") != "success":
         return ReuseVerdict(status="fail", run_id=reuse.run_id)
+    if payload.get("name") != job.name:
+        return ReuseVerdict(status="fail", run_id=reuse.run_id)
     # The proving job must be the one that ran on the PR head the decision
     # was made about -- a document replayed against a different head proves
     # a different tree.
