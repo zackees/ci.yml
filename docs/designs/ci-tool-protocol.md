@@ -54,6 +54,33 @@ duplicate and invalid records refuse publication. This check does not run a
 build or query an execution provider. A local hook can be bypassed, so hosted
 base-policy verification and a mechanically required aggregator remain necessary.
 
+`ci-lint local-gate push --sha <full-stamped-sha> [--remote origin]` is the
+shared publication operation. It executes no checks and creates no stamp. It
+requires committed qualified replay enrollment, validates the full outgoing
+proof through the existing pre-push checker, and holds the same clone lock
+through transport. The expected SHA must still be the clean checked-out
+branch head. Tree, parents and branch are checked again after validation.
+Git transports that immutable SHA with an explicit remote-tip lease, allowing
+an attestation message amend while refusing competing remote updates. An
+unrelated remote history is refused before transport. The tool freezes exactly
+one effective push URL and uses it for preflight, transport and confirmation;
+a separate fetch URL is not the destination. Multiple push URLs refuse before
+any remote mutation. An existing PR follows
+its branch update; creating a PR or editing its metadata stays outside this
+operation.
+
+The publisher checks both remote identity and local state after transport.
+An external edit observed before transport refuses the push. If an external
+editor changes local source during the network operation, the command returns
+failure and identifies the qualified SHA already published; it never claims
+that no remote write occurred or publishes the newer unverified head. The
+clone lock coordinates shared-tool invocations, not arbitrary editors. Git's
+lease protects the remote branch independently. A transport failure or timeout
+reports the expected SHA and an unconfirmed publication outcome; failed
+confirmation after successful transport retains that SHA as well. Real
+bare-Git fixtures cover
+these boundaries; actual pilot PR publication remains to be qualified.
+
 ## Execution and portable evidence
 
 1. Load the consumer's gate declaration and validate coverage before scheduling.

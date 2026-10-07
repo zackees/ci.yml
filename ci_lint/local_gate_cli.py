@@ -37,6 +37,7 @@ from ci_lint.gate_trust import TrustDecision, TrustInput
 from ci_lint.gate_trust import decide as decide_trust
 from ci_lint.lane_cache import ToolVersions, lane_key, lookup, run_audit, simulate, tree_entries
 from ci_lint.workflow_replay_runtime import query_execution_pins
+from ci_lint.gate_publish import publish
 from ci_lint.local_gate import (
     GateConfig,
     VerifyOutcome,
@@ -81,6 +82,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if config is None:
         return 2
     outcome = run_gate(repo, config, stamp=not args.no_stamp, force=args.force, use_cache=not args.no_cache)
+    print(outcome.message, file=sys.stderr if outcome.exit_code else sys.stdout)
+    return outcome.exit_code
+
+
+def _cmd_push(args: argparse.Namespace) -> int:
+    outcome = publish(Path(args.repo).resolve(), sha=args.sha, remote=args.remote)
     print(outcome.message, file=sys.stderr if outcome.exit_code else sys.stdout)
     return outcome.exit_code
 
@@ -303,6 +310,12 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     run.add_argument("--force", action="store_true", help="run even when HEAD is already attested")
     run.add_argument("--no-cache", action="store_true", help="GATE-007: run every lane, ignoring cached passes")
     run.set_defaults(func=_cmd_run)
+
+    push = lg.add_parser("push", help="validate and publish an exact stamped head; updates its existing PR")
+    push.add_argument("--repo", default=".")
+    push.add_argument("--sha", required=True, help="full commit id returned by local-gate run")
+    push.add_argument("--remote", default="origin", help="configured Git remote (default: origin)")
+    push.set_defaults(func=_cmd_push)
 
     ver = lg.add_parser("verify", help="CI side (GATE-003): fail when the PR head is not attested")
     ver.add_argument("--repo", default=".")

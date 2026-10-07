@@ -72,6 +72,16 @@ The age policy comes from the outgoing commit for this local check. Hosted
 authorization independently uses the PR base's policy. Hooks are bypassable;
 the hosted verifier and required aggregator remain the merge boundary.
 
+After `local-gate run`, use `ci-lint local-gate push --sha <full-stamped-sha>`
+to publish the exact result to the current branch's configured `origin` remote
+and update its existing PR. This command reuses the full outgoing-proof
+checker, requires a clean unchanged qualified head, and protects the remote
+update with an explicit lease. It does not run tests or amend the commit.
+`--remote <name>` selects another configured remote. Observed source changes
+refuse publication before transport; a change detected after transport returns
+failure and names the qualified commit already published. See the
+[protocol's publication boundaries](designs/ci-tool-protocol.md#ownership-and-invocation).
+
 ## In CI
 
 1. **Verify job:** `ci-lint local-gate verify --trust --github-output`, with full history. Don't leave ci_lint inside the tree while repository checks run: a `.ci-lint/` directory trips repository-local static checks (zackees/clud's banned-imports check flagged ci_lint's subprocess use). `actions/checkout` refuses a `path` outside `GITHUB_WORKSPACE`, so either (a) check it out at `.ci-lint`, run the verify step, then remove it in an `if: always()` step (`rm -rf .ci-lint`; clud's `Drop ci_lint checkout`), or (b) skip `actions/checkout` and fetch the pinned SHA with `git` into `$RUNNER_TEMP/ci-lint`, invoking `PYTHONPATH=$RUNNER_TEMP/ci-lint`.
@@ -221,6 +231,7 @@ Measured results of rolling the local gate and attestations out beyond soldr. Si
 | Command | Use |
 | --- | --- |
 | `ci-lint local-gate run` | runs the lanes and stamps `Local-Gate:` plus one `Ci-Attestation:` per gate of each passed lane |
+| `ci-lint local-gate push --sha <full-stamped-sha>` | checks outgoing proof and pushes the exact qualified branch head with a remote-tip lease |
 | `ci-lint attest verify [--commit X] [--base REV]` | the host or CI checks a commit's trailers: valid, missing (not run), or why not |
 | `ci-lint attest lineage [--commit X] [--pr N]` | prints the commit's label |
 | `ci-lint attest keys --pr N --out-dir D --github-output` | side files and cache keys for the valid gates (`key_<i>`, and `stem_<i>` for `${{ env.PR_CACHE_TAG }}`) |
