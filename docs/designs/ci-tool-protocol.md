@@ -113,7 +113,8 @@ starts no command, and an omitted required job caches/stamps nothing.
 Provider compatibility and the actual adopter run still need qualification
 before replacing the private script.
 
-The act2 candidate adds `act --ci-capabilities`, a query that starts no
+The act2 candidate ([act2 PR #52](https://github.com/zackees/act2/pull/52),
+stacked on PR #30) adds `act --ci-capabilities`, a query that starts no
 workflow/container/cache server and fetches no version notices. Its schema-1
 JSON contains `producer = "act2"`, the compiled `version`, and capability names
 `qualified-job-identity-v1` and `step-stage-result-v1`. The first describes the
