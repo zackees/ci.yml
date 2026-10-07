@@ -230,3 +230,31 @@ its per-engine CPU ceiling is sized separately. The clone-wide front-door
 lock does not prove aggregate admission across independent state roots or
 spares. Machine-wide CPU admission remains a required producer implementation
 and pilot measurement, including the previously observed oversubscription.
+
+## Private provider qualification in progress
+
+Bosn source candidate `674013b` was built with Soldr in its existing isolated
+test stack. Formatting, Clippy, two capability-boundary tests, 39 engine tests,
+four pin tests and four Python runner-tool tests passed; ten pre-existing
+live-Docker tests remain ignored. The internal service binary reports `0.1.0`;
+this is a source candidate, not a released Bosn package. Its executable SHA-256
+is `9ce186604c18ebaed1dd55e93b114539383f8f196b5092ac53318e8203022b4e`.
+
+A fresh state root correctly refused to mint a registry on the shared Docker
+host while existing Bosn-labelled objects were present. They were preserved.
+The pilot instead uses a separate Docker daemon, capped at four CPUs and
+16 GiB, with one CI slot and no spare engines. Its first Clud attempt
+`8d7072ed-de44-4821-80a7-eb4cdc905bc0` failed during engine creation because the
+initial Docker launch omitted the image's cgroup initialization. Zero workflow
+jobs ran, the engine was removed, and the shared gate stamped no evidence.
+Restoring the publisher's normal Docker entrypoint made a container with CPU
+and memory limits run successfully; no application checks were substituted.
+
+The actual full-plan qualification run
+`ec5d2819-92d8-4039-8dae-9f87e642c3b3` uses Clud head
+`d8155f2283c091cebeeaa71193b9507ee998d2af` and published ci-lint
+`329bc01af81a4685a8fd66f8248a11526554144c`. Engine preparation passed; a direct
+read-only query inside that engine independently confirmed the installed act
+binary digest above and both act2.11 execution capabilities. Qualified static
+job events are now present. Full coverage, valid stamping, unchanged-repeat
+reuse, fresh-engine compiler warmth and hosted skips are still unproven.
