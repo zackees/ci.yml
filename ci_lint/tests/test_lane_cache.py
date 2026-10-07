@@ -10,7 +10,9 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from ci_lint.attestations import parse_trailers
 from ci_lint.finding import Status
 from ci_lint.full_run_receipt import load_receipt
 from ci_lint.lane_cache import (
@@ -147,6 +149,45 @@ class OptionalLaneTest(LanedRepo):
 
 
 class LaneRunTest(LanedRepo):
+    def test_reusing_pass_preserves_execution_time_in_trailer(self) -> None:
+        self.write("ci-attestations.yml", "version: 1\ngates:\n  general/all/static: {lane: lint}\njobs: {}\n")
+        self.commit("define attestation")
+        self.gate()
+        original = parse_trailers(_git(self.repo, "log", "-1", "--format=%B"))[0].attestation
+        assert original is not None
+        self.write("docs/readme.md", "another docs change\n")
+        self.commit("docs")
+        with patch("ci_lint.attestations.time.time", return_value=time.time() + 600):
+            self.gate()
+        reused = parse_trailers(_git(self.repo, "log", "-1", "--format=%B"))[0].attestation
+        assert reused is not None
+        self.assertEqual(reused.via, "reused")
+        self.assertEqual(reused.at, original.at)
+
+    def test_stamped_head_revalidates_expired_passes(self) -> None:
+        self.gate()
+        with patch("ci_lint.lane_cache.time.time", return_value=time.time() + 25 * 3600):
+            self.assertEqual(self.gate(), "lint:run,tests:run")
+        self.assertEqual(self.runs(), ["lint", "tests"])
+
+    def test_no_cache_reruns_stamped_head_without_force(self) -> None:
+        self.gate()
+        self.assertEqual(self.gate(use_cache=False), "lint:run,tests:run")
+        self.assertEqual(self.runs(), ["lint", "tests"])
+
+    def test_stamped_head_revalidates_tool_versions(self) -> None:
+        self.gate()
+        with patch.object(ToolVersions, "get", return_value=ToolVersion("git", "changed")):
+            self.assertEqual(self.gate(), "lint:run,tests:run")
+        self.assertEqual(self.runs(), ["lint", "tests"])
+
+    def test_repeat_keeps_head_and_does_not_execute(self) -> None:
+        self.gate()
+        head = _git(self.repo, "rev-parse", "HEAD")
+        self.gate()
+        self.assertEqual(self.runs(), [])
+        self.assertEqual(_git(self.repo, "rev-parse", "HEAD"), head)
+
     def test_first_run_runs_every_lane_and_records_provenance(self) -> None:
         self.assertEqual(self.gate(), "lint:run,tests:run")
         self.assertEqual(self.runs(), ["lint", "tests"])

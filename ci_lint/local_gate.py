@@ -456,9 +456,14 @@ def gate_attestation_trailers(repo: Path, config: GateConfig, head: str, tree: s
     parents = tuple(_git(repo, "log", "-1", "--format=%P", head).split())
     out: list[str] = []
     for lane in passed:
+        lane_config = next(item for item in config.lanes if item.id == lane.lane)
+        evidence = lookup(repo, lane_config, lane.key)
+        if lane.via == "reused" and evidence is None:
+            continue  # Evidence expired or disappeared: never renew it by stamping.
         for gate in loaded.definition.gates_of_lane(lane.lane):
             att = make_attestation(gate.path, tree=tree, parents=parents, lane=lane.lane, key=lane.key,
-                                   via=lane.via, secs=lane.secs)
+                                   via=lane.via, secs=lane.secs,
+                                   at=int(evidence.passed_at) if evidence is not None else None)
             out.append(att.trailer())
     return tuple(out)
 
@@ -756,7 +761,8 @@ def run_gate(  # noqa: C901
     replay_problem = _replay_coverage_problem(config, repo)
     if replay_problem:
         return RunOutcome(1, replay_problem)
-    if not force and check_commit(repo, head).state == "attested":
+    already_attested = check_commit(repo, head).state == "attested"
+    if not config.lanes and not force and use_cache and already_attested:
         return RunOutcome(0, f"local-gate run: HEAD {head[:12]} is already attested for its tree", head)
     tree = tree_of(repo, head)
     if config.lanes:
@@ -766,6 +772,8 @@ def run_gate(  # noqa: C901
         lanes_field = ",".join(lane_run.provenance)
         if lane_run.exit_code != 0:
             return RunOutcome(lane_run.exit_code, f"local-gate run: FAILED after {secs}s ({lanes_field or 'no lane passed'})")
+        if already_attested and not force and all(item.via == "reused" for item in lane_run.passed):
+            return RunOutcome(0, f"local-gate run: HEAD {head[:12]} is already attested; lane evidence revalidated", head)
         if not stamp:
             return RunOutcome(0, f"local-gate run: passed in {secs}s [{lanes_field}] (not stamped)", head)
         trailers = gate_attestation_trailers(repo, config, head, tree, lane_run.passed)

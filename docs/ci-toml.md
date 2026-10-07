@@ -669,6 +669,20 @@ a real local act `--cache-server-path` directory.
 
 ### `[local.gate]` (GATE-001..005, 007; zackees/ci.yml#166, #168, #177)
 
+For direct runner integration, `[gate.replay]` (or `[local.gate.replay]`)
+accepts `report-source = "stdout"`. The declared command must output exactly
+one terminal JSON document, as `bosn ci run ... --wait --json` does. Ci-lint
+captures and verifies that document directly; stderr remains diagnostic output.
+The default, `report-source = "file"`, retains the existing
+`CI_LINT_GATE_REPLAY_REPORT` file contract. Both use the same strict verifier;
+zero exit status alone never proves execution. See the evolving
+[CI tool protocol design](designs/ci-tool-protocol.md) for the rollout proof plan.
+
+For gates with lanes, every invocation validates current input/tool keys and
+cached-pass freshness, including an already stamped HEAD. An unchanged fresh
+repeat skips execution and keeps HEAD unchanged. `--no-cache` reruns the lanes.
+Per-gate trailers emitted from reused passes retain the original execution time.
+
 The one local command the remote quick gate must be a subset of. A
 repository without `ci.toml` declares the identical table as `[gate]` in a
 repo-root `local-gate.toml`; declaring both is `GATE-001`. Parsed strictly

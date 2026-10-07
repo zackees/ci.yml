@@ -27,6 +27,21 @@ class ReplayRuntimeTest(WorkflowReplayTest):
         self.assertEqual(outcome.returncode, 1)
         self.assertIn("proof rejected", outcome.error or "")
 
+    def test_direct_runner_stdout_uses_the_same_verifier(self) -> None:
+        fixture = self.workspace / "fixture.json"
+        fixture.write_text(json.dumps(self.raw), encoding="utf-8")
+        command = self.command(f"print(pathlib.Path({str(fixture)!r}).read_text())\n")
+        config = replace(self.config(), report_source="stdout")
+        outcome = run_checked_command(self.workspace, command, config,
+                                      head=self.expected.sha, tree=self.expected.git_tree)
+        self.assertEqual(outcome.returncode, 0, outcome.error)
+        self.raw["conclusion"] = "incomplete"
+        fixture.write_text(json.dumps(self.raw), encoding="utf-8")
+        rejected = run_checked_command(self.workspace, command, config,
+                                       head=self.expected.sha, tree=self.expected.git_tree)
+        self.assertEqual(rejected.returncode, 1)
+        self.assertIn("conclusion", rejected.error or "")
+
     def test_successful_child_report_is_validated(self) -> None:
         fixture = self.workspace / "fixture.json"
         fixture.write_text(json.dumps(self.raw), encoding="utf-8")

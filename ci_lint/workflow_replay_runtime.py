@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -43,6 +44,23 @@ def _read_report(path: Path) -> JsonValue:
     return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object)
 
 
+def _execute(repo: Path, argv: tuple[str, ...], report: Path, *, report_source: str,
+             env: dict[str, str], stdout: BinaryIO | None) -> int:
+    if report_source == "file":
+        return subprocess.run(list(argv), cwd=repo, env=env, stdin=subprocess.DEVNULL,
+                              stdout=stdout, stderr=subprocess.STDOUT if stdout is not None else None,
+                              check=False).returncode
+    if report_source != "stdout":
+        raise ValueError("unknown replay report source")
+    with report.open("wb") as receipt:
+        process = subprocess.run(list(argv), cwd=repo, env=env, stdin=subprocess.DEVNULL,
+                                 stdout=receipt, stderr=stdout, check=False)
+    if stdout is not None:
+        with report.open("rb") as receipt:
+            shutil.copyfileobj(receipt, stdout)
+    return process.returncode
+
+
 def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig, *,
                         head: str, tree: str, lane: str | None = None,
                         env: dict[str, str] | None = None, stdout: BinaryIO | None = None) -> CheckedCommand:
@@ -66,11 +84,10 @@ def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig,
         child_env = dict(env) if env is not None else os.environ.copy()
         child_env[REPORT_ENV] = str(report)
         try:
-            process = subprocess.run(list(argv), cwd=repo, env=child_env, stdin=subprocess.DEVNULL,
-                                     stdout=stdout, stderr=subprocess.STDOUT if stdout is not None else None,
-                                     check=False)
-            if process.returncode != 0:
-                return CheckedCommand(process.returncode)
+            returncode = _execute(repo, argv, report, report_source=config.report_source,
+                                  env=child_env, stdout=stdout)
+            if returncode != 0:
+                return CheckedCommand(returncode)
             prove_replay(_read_report(report), expectation)
         except (OSError, UnicodeError, ValueError) as exc:
             return CheckedCommand(1, f"workflow replay proof rejected: {exc}")

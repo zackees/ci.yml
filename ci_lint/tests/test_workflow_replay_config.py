@@ -21,6 +21,17 @@ lanes = ["tests"]
 
 
 class ReplayDeclarationTest(unittest.TestCase):
+    def test_report_source_is_explicit_and_strict(self) -> None:
+        for value, valid in (("file", True), ("stdout", True), ("unknown", False), ("", False)):
+            with self.subTest(value=value):
+                findings: list[Finding] = []
+                document = DECLARATION.replace('mode = "minimal"', f'mode = "minimal"\nreport-source = "{value}"')
+                config = parse_replay(tomllib.loads(document), source="local-gate.toml",
+                                      path="gate.replay", findings=findings)
+                self.assertEqual(config is not None, valid)
+                if config is not None:
+                    self.assertEqual(config.report_source, value)
+
     def test_strict_declaration_keeps_coverage_and_execution_names(self) -> None:
         findings: list[Finding] = []
         config = parse_replay(tomllib.loads(DECLARATION), source="local-gate.toml",

@@ -36,6 +36,7 @@ class ReplayConfig:
     mode: str
     jobs: tuple[DeclaredReplayJob, ...]
     selections: tuple[ReplaySelection, ...] = ()
+    report_source: str = "file"
 
 
 def _bad(findings: list[Finding], source: str, path: str, message: str) -> None:
@@ -135,6 +136,7 @@ def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
     repository = cursor.str_("repository")
     workflow = cursor.str_("workflow")
     mode = cursor.str_("mode")
+    report_source = cursor.str_("report-source", required=False, default="file")
     raw_jobs = cursor.array_of_tables("jobs")
     selections = _selections(cursor, source, path, findings)
     cursor.finish()
@@ -144,6 +146,8 @@ def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
         _bad(findings, source, path, "workflow must be a workflow basename")
     if mode not in ("minimal", "full"):
         _bad(findings, source, path, "mode must be minimal or full")
+    if report_source not in ("file", "stdout"):
+        _bad(findings, source, path, "report-source must be file or stdout")
     jobs: list[DeclaredReplayJob] = []
     for index, item in enumerate(raw_jobs):
         job = _job(item, source=source, path=f"{path}.jobs[{index}]", findings=findings)
@@ -154,6 +158,6 @@ def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
         _bad(findings, source, path, "selections must name distinct replay-covered lanes")
     if not jobs or len({job.proof.key for job in jobs}) != len(jobs):
         _bad(findings, source, path, "declare one or more distinct execution job keys")
-    if len(findings) != start or repository is None or workflow is None or mode is None:
+    if len(findings) != start or repository is None or workflow is None or mode is None or report_source is None:
         return None
-    return ReplayConfig(repository, f".github/workflows/{workflow}", mode, tuple(jobs), tuple(selections))
+    return ReplayConfig(repository, f".github/workflows/{workflow}", mode, tuple(jobs), tuple(selections), report_source)

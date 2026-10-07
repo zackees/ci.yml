@@ -262,8 +262,9 @@ def host_label() -> str:
 
 
 def make(gate: str, *, tree: str, parents: tuple[str, ...], lane: str, key: str, via: str,
-         secs: int | None) -> GateAttestation:
-    return GateAttestation(gate, tree, parents, lane, key, via, secs, host_label(), int(time.time())).stamped()
+         secs: int | None, at: int | None = None) -> GateAttestation:
+    return GateAttestation(gate, tree, parents, lane, key, via, secs, host_label(),
+                           int(time.time()) if at is None else at).stamped()
 
 
 @dataclass(frozen=True)
