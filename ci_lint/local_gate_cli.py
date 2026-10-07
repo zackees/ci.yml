@@ -22,6 +22,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ci_lint.workflow_scan import load_workflows_at
+from ci_lint.workflow_replay_maintenance import non_attestable_jobs
 from ci_lint.attestations import JobDecision, decide_jobs
 from ci_lint.attestations import load_definition as load_attestation_definition
 from ci_lint.attestations import output_name as attestation_output_name
@@ -164,7 +166,15 @@ def _job_decisions(repo: Path, inp: TrustInput, head_trusted: bool) -> tuple[Job
     definition = loaded.definition if loaded is not None else None
     ages = {lane.id: lane.max_age_hours for lane in base.lanes}
     commit = verify_attestations(repo, inp.head_sha, definition, max_age_hours=ages) if definition is not None else None
-    return decide_jobs(definition, base.trust.skip, head_trusted=head_trusted, commit=commit)
+    decisions = decide_jobs(definition, base.trust.skip, head_trusted=head_trusted, commit=commit)
+    if not any(item.skip for item in decisions):
+        return decisions
+    try:
+        remote = non_attestable_jobs(load_workflows_at(repo, inp.base_sha))
+    except (OSError, ValueError):
+        return tuple(JobDecision(item.job, False, "base workflow provenance unavailable") for item in decisions)
+    return tuple(JobDecision(item.job, False, "remote-only work remains required on GitHub")
+                 if item.job in remote else item for item in decisions)
 
 
 def _trust_input(args: argparse.Namespace, payload: dict[str, JsonValue], event: str, sha: str) -> TrustInput:

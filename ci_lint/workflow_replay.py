@@ -14,6 +14,7 @@ from ci_lint.cargo_messages import JsonValue
 from ci_lint.execution_pins import ExecutionPins, parse_execution_pins
 from ci_lint.workflow_replay_identity import JobIdentity, matrix_json, parse_identity
 from ci_lint.workflow_replay_outputs import ReplayOutput, proved_outputs, require_output_producer
+from ci_lint.workflow_replay_maintenance import prove_maintenance
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class ReplayJob:
     input_skip_steps: tuple[str, ...] = ()
     identity: tuple[JobIdentity, ...] = ()
     excluded: bool = False
+    remote_maintenance: bool = False
 
 
 @dataclass(frozen=True)
@@ -153,6 +155,9 @@ def _prove_job(raw: dict[str, JsonValue], expected: ReplayJob) -> None:
                 or raw.get("sections") != []):
             raise ValueError(f"workflow replay excluded job has no explicit empty skip: {expected.key}")
         return
+    if expected.remote_maintenance:
+        prove_maintenance(raw, expected.key)
+        return
     if raw.get("status") != "completed" or raw.get("conclusion") != "success":
         raise ValueError(f"workflow replay job did not pass: {expected.key}")
     if (len(set(expected.cache_save_steps)) != len(expected.cache_save_steps)
@@ -212,6 +217,9 @@ def _valid_checks(job: ReplayJob) -> bool:
     if job.excluded:
         return bool(job.identity) and not (job.steps or job.cache_save_steps or job.minimal_skip_steps
                                           or job.minimal_mode_step or job.pr_cache_save_steps or job.input_skip_steps)
+    if job.remote_maintenance and (not job.identity or job.cache_save_steps or job.minimal_skip_steps
+                                   or job.minimal_mode_step or job.pr_cache_save_steps or job.input_skip_steps):
+        return False
     return bool(job.steps) and len(set(job.steps)) == len(job.steps)
 
 
@@ -226,7 +234,7 @@ def prove_replay(raw: JsonValue, expected: ReplayExpectation) -> ReplayProof:
     _minimal_skips(expected)
     _pr_cache_saves(expected)
     _input_skips(expected)
-    if (all(job.excluded for job in expected.required_jobs)
+    if (all(job.excluded or job.remote_maintenance for job in expected.required_jobs)
             or any(not job.key or not _valid_checks(job) for job in expected.required_jobs)):
         raise ValueError("workflow replay requires distinct executed checks in each job")
     if re.fullmatch(r"[0-9a-f]{40}", expected.sha) is None or re.fullmatch(r"[0-9a-f]{40}", expected.git_tree) is None:
@@ -246,5 +254,5 @@ def prove_replay(raw: JsonValue, expected: ReplayExpectation) -> ReplayProof:
         if actual is None:
             raise ValueError(f"workflow replay required job is missing: {job.key}")
         _prove_job(actual.raw, job)
-        outputs.extend(proved_outputs(actual.raw, job.identity, excluded=job.excluded))
-    return ReplayProof(tuple(job.key for job in expected.required_jobs), tuple(outputs))
+        outputs.extend(proved_outputs(actual.raw, job.identity, excluded=job.excluded or job.remote_maintenance))
+    return ReplayProof(tuple(job.key for job in expected.required_jobs if not job.remote_maintenance), tuple(outputs))

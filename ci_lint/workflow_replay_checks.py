@@ -9,6 +9,7 @@ from ci_lint.workflow_replay_input_skips import excluded_input_steps
 from ci_lint.workflow_replay_inputs import bound_name
 from ci_lint.workflow_replay_minimal_skip import classify_minimal_skip
 from ci_lint.workflow_scan import as_dict, steps_of
+from ci_lint.workflow_replay_maintenance import source_maintenance
 from ci_lint.yaml_io import YamlValue
 
 
@@ -28,14 +29,18 @@ def derive_checks(expanded: ExpandedJob, *, mode: str, event: str) -> ReplayJob:
     Every exclusion still requires exactly one explicit skipped Main section;
     every other step requires successful execution. Names must be unique.
     """
+    maintenance = source_maintenance(as_dict(expanded.job), as_dict(expanded.document))
     if condition_excludes(as_dict(expanded.job).get("if"), expanded.inputs, set(), event=event,
                           outputs=expanded.outputs, dependencies=_needs(as_dict(expanded.job)),
                           scope=expanded.identity[:-1]):
-        return ReplayJob(expanded.key, (), identity=expanded.identity, excluded=True)
+        return ReplayJob(expanded.key, (), identity=expanded.identity, excluded=True,
+                         remote_maintenance=maintenance)
     job = _named_job(expanded)
     names = tuple(str(step["name"]) for step in steps_of(job))
     if not names or len(set(names)) != len(names):
         raise ValueError("source-derived replay requires distinct named executable steps")
+    if maintenance:
+        return ReplayJob(expanded.key, names, identity=expanded.identity, remote_maintenance=True)
     inputs = excluded_input_steps(job, expanded.inputs, successful=True, event=event,
                                   outputs=expanded.outputs, scope=expanded.identity[:-1])
     minimal = tuple(skip for name in names

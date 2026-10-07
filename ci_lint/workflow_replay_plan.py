@@ -92,7 +92,7 @@ def _required(files: tuple[ParsedYamlFile, ...], config: ReplayConfig,
         raise ValueError("qualified replay declaration differs from the complete selected graph")
     proofs = tuple(declared_check(declarations[job.source_job], job, mode=config.mode, event=selection.event)
                    for job in expanded.jobs)
-    if all(proof.excluded for proof in proofs):
+    if all(proof.excluded or proof.remote_maintenance for proof in proofs):
         raise ValueError("qualified replay selection has no required executed job")
     return ReplayRequirements(proofs, pending=pending_guards)
 
