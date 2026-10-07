@@ -113,6 +113,17 @@ starts no command, and an omitted required job caches/stamps nothing.
 Provider compatibility and the actual adopter run still need qualification
 before replacing the private script.
 
+The act2 candidate adds `act --ci-capabilities`, a query that starts no
+workflow/container/cache server and fetches no version notices. Its schema-1
+JSON contains `producer = "act2"`, the compiled `version`, and capability names
+`qualified-job-identity-v1` and `step-stage-result-v1`. The first describes the
+ordered `jobIdentity` event components; the second describes Main/Pre/Post
+step IDs and terminal outcomes. Bosn must request structured verbose events,
+validate this query from the same digest-verified binary it will execute, and
+refuse missing/incompatible contracts before building. The query establishes
+no source proof or passing result. The compiled candidate query and focused
+CLI/identity tests pass; Bosn consumption and a compatible release are pending.
+
 The existing trailer stamp is a content checksum, not a digital signature.
 Writer trust, trusted base policy and audit runs remain necessary. Merely
 copying a trailer or receiving process exit zero is insufficient evidence.
