@@ -4,6 +4,66 @@ Working specification for [issue #362](https://github.com/zackees/ci.yml/issues/
 This is a design, not an adopted policy or a claim that the pilot is complete.
 The existing format is specified in [ci-attestations.md](../ci-attestations.md).
 
+## Current qualification state
+
+The sections below retain the investigation chronology; an earlier pending
+statement records that stage, rather than overriding this current summary.
+
+- Clud completed local execution, unchanged-result reuse, exact publication
+  and hosted per-job skips with required `CI OK` in
+  [PR #1886](https://github.com/zackees/clud/pull/1886).
+- Template independently completed the same local execution, reuse and exact
+  publication protocol through public Bosn 0.1.17 / act2.14, without a Clud
+  installation. [Enrollment PR #68](https://github.com/zackees/template-python-rust-cmd/pull/68)
+  merged after [hosted run 37640303822](https://github.com/zackees/template-python-rust-cmd/actions/runs/37640303822)
+  passed. Its verifier correctly reported `not-opted-in` from the original
+  immutable base and ran the fast/Dylint jobs normally. Hosted skips under
+  the newly enrolled base still require a source-only successor PR.
+- Compiler-object durability, cache failure/cancellation controls, aggregate
+  CPU admission across independent state roots, and final binding policy
+  promotion remain incomplete. Successful attestation is not compiler warmth.
+
+### Template's original frontend and independent cache evidence
+
+Run `4058a213-697a-4e5e-81f2-417868f4f54f` completed all 21 original workflow
+jobs with no failures and removed its private engine. The original command,
+`python3 ci/local.py act`, completed in 289.191 seconds; shared qualification
+proved all three lanes and stamped four gate records. The source tree was
+`66adf081ddad86c70e78b38b3e919b6e75137987`; the exact publisher transported
+head `f3860ada4ce68c728d2b07d1a3ec22ed33f846a7`. GitHub's commit API confirmed
+the same tree, parents, message and four trailers. The unchanged command then
+completed in 5.225 seconds including precheck, reusing all three lanes while
+preserving the head, tree, parents, message and original evidence timestamps.
+
+Two fresh private runs, `718b45e6-b8c3-4c86-9848-9b351058e5fe` and
+`4058a213-697a-4e5e-81f2-417868f4f54f`, used unchanged compiler source and
+content-schema-2 pristine base manifests containing 244 entries each. Thirteen
+daemon/session metadata paths changed: maintenance timestamp, daemon index,
+compile journals/lifecycle log, staging lock generation and session
+history/statistics. Those changes moved the digest from
+`413c153f2f8aa19078b3d909260c5e07d0f7c206ed6511a254627603b3385a67` to
+`a2d29a28c91bb1493bb047ca06122d206215bdb04063dcf7c7952de0eeec0f14`.
+The second run restored the previous PR delta and rejected it as a stale base,
+then packed and saved 93 files again. Dylint reported 0 hits / 152 misses and
+0/3 saved cache layers. No new compiler-object durability is established.
+
+The generic content-hash algorithm must continue detecting same-size payload
+changes. The backend owns the reusable payload boundary; hashing a live daemon
+root as an immutable base is not that boundary. A repair must exclude transient
+state through a declared/exported payload contract and prove the actual saved
+objects restore into a fresh engine. Ignoring every digest mismatch, accepting
+only a key string, or inferring warmth from a successful archive restore would
+not establish that proof. The local mirror must also have a real writer for
+every required compiler-cache family; a remote base cannot bootstrap it.
+
+Retained frontend, terminal receipts, unchanged-repeat and exact publication
+proofs use the `template-362-maintenance-*` filenames under the investigation
+evidence directory. The two pristine manifests and their 13-path comparison
+are `template-362-public-17-pristine-base-manifest.json`,
+`template-362-maintenance-pristine-base-manifest.json` and
+`template-362-pristine-base-comparison.json`. These measurements are wall time
+and cache evidence; they do not measure complete workflow CPU time.
+
 ## Ownership and invocation
 
 `ci-lint`, distributed from `zackees/ci.yml`, owns policy interpretation,
