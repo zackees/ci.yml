@@ -25,6 +25,48 @@ class MetadataChange:
 
 
 class WorkflowReplayTest(unittest.TestCase):
+    def test_outputs_are_available_only_after_the_qualified_job_is_proved(self) -> None:
+        expected = replace(self.expected, required_jobs=(replace(self.expected.required_jobs[0],
+                           identity=(identity_part("tests"),)),))
+        job = self.raw["tree"]["groups"][0]["jobs"][0]
+        job.update(job_id="tests", matrix=None, identity=[{"jobID": "tests", "matrix": None}],
+                   output_evidence={"schema_version": 1, "seq": 21,
+                                    "values": {"matrix": "[]"}, "error": None})
+        proof = prove_replay(self.raw, expected)
+        self.assertEqual(len(proof.outputs), 1)
+        self.assertEqual(proof.outputs[0].identity, expected.required_jobs[0].identity)
+        self.assertEqual(proof.outputs[0].name, "matrix")
+        self.assertEqual(proof.outputs[0].value, "[]")
+        job["sections"][0]["conclusion"] = "skipped"
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, expected)
+
+    def test_output_evidence_refuses_invalid_shape_and_unproved_sequence(self) -> None:
+        expected = replace(self.expected, required_jobs=(replace(self.expected.required_jobs[0],
+                           identity=(identity_part("tests"),)),))
+        job = self.raw["tree"]["groups"][0]["jobs"][0]
+        job.update(job_id="tests", matrix=None, identity=[{"jobID": "tests", "matrix": None}])
+        for change in (
+            MetadataChange("schema_version", True), MetadataChange("schema_version", 2),
+            MetadataChange("seq", True), MetadataChange("seq", 20),
+            MetadataChange("error", "duplicate-event"), MetadataChange("values", {}),
+            MetadataChange("values", {"matrix": True}), MetadataChange("values", {"1matrix": "[]"}),
+            MetadataChange("values", {"matrix": "x" * 65537}), MetadataChange("extra", "unknown"),
+        ):
+            evidence = {"schema_version": 1, "seq": 21, "values": {"matrix": "[]"}, "error": None}
+            evidence[change.field] = change.value
+            job["output_evidence"] = evidence
+            with self.subTest(field=change.field, value=str(change.value)[:80]):
+                with self.assertRaises(ValueError):
+                    prove_replay(self.raw, expected)
+
+    def test_unqualified_output_evidence_cannot_be_exposed(self) -> None:
+        job = self.raw["tree"]["groups"][0]["jobs"][0]
+        job["output_evidence"] = {"schema_version": 1, "seq": 21,
+                                  "values": {"matrix": "[]"}, "error": None}
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, self.expected)
+
     def test_qualified_identity_never_matches_display_name_alone(self) -> None:
         expected = replace(self.expected, required_jobs=(ReplayJob("diagnostic", ("Run tests",), identity=(
             identity_part("caller", {"target": "linux"}), identity_part("tests", {"shard": 1}))),))

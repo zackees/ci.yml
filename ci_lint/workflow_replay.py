@@ -13,6 +13,7 @@ from pathlib import Path
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.execution_pins import ExecutionPins, parse_execution_pins
 from ci_lint.workflow_replay_identity import JobIdentity, matrix_json, parse_identity
+from ci_lint.workflow_replay_outputs import ReplayOutput, proved_outputs
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ class ReplayExpectation:
 @dataclass(frozen=True)
 class ReplayProof:
     jobs: tuple[str, ...]
+    outputs: tuple[ReplayOutput, ...] = ()
 
 
 def _inputs(raw: dict[str, JsonValue], expected: ReplayExpectation) -> None:
@@ -236,9 +238,11 @@ def prove_replay(raw: JsonValue, expected: ReplayExpectation) -> ReplayProof:
     jobs = _jobs(raw.get("tree"), qualified=qualified)
     by_identity = {item.identity: item for item in jobs}
     by_key = {item.key: item for item in jobs}
+    outputs: list[ReplayOutput] = []
     for job in expected.required_jobs:
         actual = by_identity.get(job.identity) if qualified else by_key.get(job.key)
         if actual is None:
             raise ValueError(f"workflow replay required job is missing: {job.key}")
         _prove_job(actual.raw, job)
-    return ReplayProof(tuple(job.key for job in expected.required_jobs))
+        outputs.extend(proved_outputs(actual.raw, job.identity, excluded=job.excluded))
+    return ReplayProof(tuple(job.key for job in expected.required_jobs), tuple(outputs))

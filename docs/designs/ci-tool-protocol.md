@@ -497,3 +497,52 @@ objects following an exact-hit restore, selected-lint writer sharing,
 concurrent publication, outage recovery or complete classification of residual
 non-cacheable compiles/materialization failures. Those controls and two real
 code edits remain required; this evidence does not complete the cache pilot.
+
+
+## Selected outputs for dependency-driven graphs (candidate)
+
+Act2 PR #54 adds `selected-job-outputs-v1`. The consumer requests only the
+non-secret outputs needed by the selected source graph, using repeated
+`--ci-output <qualified/job/path>:<output>` arguments. Every path component and
+output name is a workflow identifier; matrix legs share a selector but emit
+separate concrete identities. Bosn includes these requests in run identity and
+requires the capability before workflow execution. Its published `.12` pin
+cannot supply this contract and must refuse requests until a qualified release
+is adopted.
+
+A successful producer emits one event per requested concrete job with
+`msg = "CI output evidence"`, `ciOutputSchema = 1`, the existing `jobIdentity`,
+and either `jobOutputs` (distinct string names to string values) or a value-free
+`jobOutputsError`. Emission occurs after ordinary job-output interpolation and
+requires successful, uncancelled real execution. Configured secrets, tokens,
+and runtime masks forbid publishing matching values. Requests are limited to
+256 selectors and 1024 bytes each; each emitted JSON value object is limited to
+64 KiB. Missing outputs refuse the complete requested payload. This event
+contract conveys execution data and cannot itself authorize an attestation.
+
+Bosn retains schema, sequence, values and refusal reason on the same concrete
+job. Missing/null payloads, conflicting fields, malformed values, unsupported
+schema, unqualified identities, and duplicate events cannot preserve usable
+values. A second evidence event invalidates the first, even if its fields are
+null or omitted. Output observation never changes job success or completion.
+Old receipts remain readable but supply no output evidence.
+
+The shared verifier must resolve a dynamic graph in dependency order. It first
+binds terminal receipt metadata to the submitted source, event, inputs and
+queried provider. It then proves each output-producing job's source-derived
+checks before admitting its outputs. A reusable workflow's public output must
+follow its checked `workflow_call.outputs` mapping to the qualified executed
+leaf. Only these proved values may resolve bounded `needs` expressions,
+`fromJSON` matrices, call inputs and conditions. The existing graph expansion,
+check derivation and execution proof remain the single implementations of
+those responsibilities; adapters must not replicate them or inject a private
+planner result as trusted policy.
+
+Resolution must retain every selected dependency, required concrete matrix
+leg and original native/full/release lane. Cycles, ambiguous matrix output
+aggregation, unsupported expressions, duplicate JSON keys, oversized expansion
+and missing or refused evidence reject proof. A producer-provided empty matrix
+cannot remove coverage without proving the source policy that permits it.
+Current shared expansion rejects dynamic matrices before execution; this
+section specifies the next verifier change and does not claim implementation
+or end-to-end hosted qualification.
