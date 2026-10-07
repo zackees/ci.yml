@@ -89,8 +89,8 @@ def _receipt_prover(raw: JsonValue, config: ReplayConfig, expectation: ReplayExp
         if len(declarations) != 1:
             raise ValueError("dynamic replay producer lacks an unambiguous source declaration")
         check = declared_check(declarations[0], expanded, mode=config.mode, event=expectation.event)
-        if check.excluded:
-            return ()  # The final complete proof still validates the explicit skip.
+        if check.excluded or check.remote_maintenance:
+            return ()  # The final complete proof validates skips and maintenance stubs.
         return prove_replay(raw, replace(expectation, required_jobs=(check,))).outputs
     return prove
 

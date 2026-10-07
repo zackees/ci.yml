@@ -7,9 +7,12 @@ YAML-fallback-order concern (`ci_lint.yaml_io`) lives in exactly one place.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
+import tempfile
 from pathlib import Path
 
 from ci_lint.yaml_io import LoadStatus, YamlValue, load_yaml_file
+from ci_lint.proc import run_captured
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,34 @@ def load(repo_root: Path, path: Path) -> ParsedYamlFile:
 
 def load_workflows(repo_root: Path) -> list[ParsedYamlFile]:
     return [load(repo_root, p) for p in discover_workflow_files(repo_root)]
+
+
+def load_workflows_at(repo_root: Path, rev: str) -> tuple[ParsedYamlFile, ...]:
+    """Read immutable base workflows through the existing YAML loader.
+
+    Refuse unavailable or unparseable source; never substitute the checkout.
+    """
+    if re.fullmatch(r"[0-9a-f]{40}", rev) is None:
+        raise ValueError("workflow policy requires an exact Git commit")
+    listed = run_captured(["git", "ls-tree", "-r", "-z", "--name-only", rev, "--", ".github/workflows"], cwd=repo_root)
+    if not listed.ok:
+        raise ValueError("base workflows unavailable")
+    files: list[ParsedYamlFile] = []
+    with tempfile.TemporaryDirectory(prefix="ci-base-workflows-") as scratch:
+        staged = Path(scratch) / "workflow.yml"
+        for name in listed.stdout.split("\0"):
+            path = Path(name)
+            if path.parent.as_posix() != ".github/workflows" or path.suffix not in (".yml", ".yaml"):
+                continue
+            source = run_captured(["git", "show", f"{rev}:{name}"], cwd=repo_root)
+            if not source.ok:
+                raise ValueError("base workflow unavailable")
+            staged.write_text(source.stdout, encoding="utf-8")
+            loaded = load_yaml_file(staged)
+            if loaded.status != LoadStatus.OK or not isinstance(loaded.document, dict):
+                raise ValueError("base workflow policy cannot be parsed")
+            files.append(ParsedYamlFile(name, loaded.document, loaded.status, loaded.reason))
+    return tuple(files)
 
 
 def load_composite_actions(repo_root: Path) -> list[ParsedYamlFile]:

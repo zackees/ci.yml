@@ -12,6 +12,7 @@ from ci_lint.workflow_replay_expansion import ExpandedJob, expand_selection
 from ci_lint.workflow_replay_inputs import BoundInput
 from ci_lint.workflow_replay_input_skips import excluded_input_steps
 from ci_lint.workflow_replay_checks import derive_checks
+from ci_lint.workflow_replay_maintenance import check_maintenance_attestations
 from ci_lint.workflow_scan import ParsedYamlFile, as_dict, jobs_of, load_workflows, steps_of
 from ci_lint.yaml_io import YamlValue
 
@@ -172,7 +173,7 @@ def _check_declared_checks(config: ReplayConfig, declared: DeclaredReplayJob, jo
 def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
     files = tuple(load_workflows(repo))
     workflows = {item.path: item for item in files}
-    findings: list[Finding] = []
+    findings = check_maintenance_attestations(repo, files)
     entry = workflows.get(config.workflow)
     document = as_dict(entry.document) if entry is not None else {}
     findings.extend(check_selection_dependencies(config, document, files))

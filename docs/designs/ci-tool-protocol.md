@@ -688,25 +688,45 @@ original gate log is `bosn-362-qualified-full-gate.log` in the same directory.
 This proves local execution and result reuse on the migration candidate.
 Public Bosn deployment and hosted skip enforcement remain pending.
 
-### Second-consumer boundary still requiring implementation
+### Remote maintenance dependencies
 
-A source inventory of template-python-rust-cmd confirms that ordinary fast
-and Dylint selections also traverse the reusable precheck's cache-budget
-and cache-janitor jobs. Those jobs declare `CI_REMOTE_ONLY`; Bosn replaces
-only their steps with a diagnostic and reports `remote_only`. The shared
-verifier currently requires their original successful checks, so this
-consumer cannot yet qualify. A diagnostic cannot prove a remote audit.
+The template's ordinary fast and Dylint selections traverse reusable
+precheck cache-budget and cache-janitor jobs. They declare `CI_REMOTE_ONLY`;
+Bosn confines their steps and reports `remote_only`. The shared replay
+candidate now keeps these qualified dependencies in its required graph,
+without treating their diagnostic stubs as original successful checks.
+Actual second-consumer enrollment and execution remain pending.
 
-The protocol must distinguish required execution evidence from remote
-maintenance dependencies. Any future representation must retain qualified
-identity and source binding, prevent remote maintenance from producing gate
-attestations or planner outputs, and preserve hosted execution of those
-jobs. It must keep ordinary build, unit, installed-wheel smoke and Dylint
-checks mandatory. A reason-string waiver or treating the diagnostic as the
-original successful job does not satisfy this boundary. The inventory is
-retained in `template-362-qualification-inventory.json` under the same
-local evidence directory. No second-consumer or hosted qualification is
-claimed from that inventory.
+Only source-marked live cache maintenance commands (`ci-lint cache budget`,
+`trim`, `janitor`, `preprune`) qualify for this role. They must invoke the
+module from an unconditional, SHA-pinned `zackees/ci.yml` checkout with a
+literal tool directory and `persist-credentials: false`. The Python command
+uses `-P -m ci_lint`, and its effective `PYTHONPATH` must name that checkout;
+`-P` prevents the repository working directory from shadowing the shared
+module. Arbitrary interpreter environment, custom shells/working directories,
+workflow defaults, additional commands and source-provided outputs refuse
+this classification. A marker on an ordinary test cannot waive execution.
+
+The terminal receipt must contain the same qualified job identity and its
+single completed Main diagnostic step; a missing, failed, ambiguous or
+incompatible stub refuses the graph. The accepted dependency contributes no
+executed test proof or planner output. A selection consisting only of remote
+maintenance or excluded jobs cannot qualify. Ordinary build, unit,
+installed-wheel smoke and Dylint checks remain mandatory.
+
+Every explicitly remote-only job and any reusable caller containing it is
+non-attestable. Static definition checks reject such job mappings; hosted
+per-job decisions independently apply the same exclusion to immutable
+PR-base workflows, even when local checks or hooks were bypassed. Missing
+or unparseable base source fails closed to remote execution. Hosted cache
+maintenance therefore keeps running under its original workflow policy.
+This is a source-bound dependency role, not a reason-string success waiver
+or a repository-specific branch.
+
+The retained source inventory is
+`/tmp/ci-cpu-investigation/template-362-qualification-inventory.json`.
+Fixture tests establish the verifier boundary only; they do not establish
+actual template qualification or public producer deployment.
 
 
 ## Clud publication qualification
