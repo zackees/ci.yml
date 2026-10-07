@@ -156,7 +156,7 @@ def _prove_job(raw: dict[str, JsonValue], expected: ReplayJob) -> None:
             raise ValueError(f"workflow replay excluded job has no explicit empty skip: {expected.key}")
         return
     if expected.remote_maintenance:
-        prove_maintenance(raw, expected.key)
+        prove_maintenance(raw, expected.key, expected.steps)
         return
     if raw.get("status") != "completed" or raw.get("conclusion") != "success":
         raise ValueError(f"workflow replay job did not pass: {expected.key}")

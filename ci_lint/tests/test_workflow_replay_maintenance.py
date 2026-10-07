@@ -17,7 +17,7 @@ from ci_lint.gate_trust import TrustInput
 from ci_lint.workflow_replay import prove_replay
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig
 from ci_lint.workflow_replay_static import check_replay_static
-from ci_lint.workflow_replay_maintenance import non_attestable_jobs
+from ci_lint.workflow_replay_maintenance import non_attestable_jobs, prove_maintenance
 from ci_lint.tests.test_workflow_replay_expansion import workflow
 from ci_lint.workflow_replay_checks import derive_checks
 from ci_lint.workflow_replay_expansion import ExpandedJob
@@ -102,6 +102,41 @@ class MaintenanceDependencyTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 1, "final proof must validate maintenance")
 
     def test_source_bound_maintenance_is_not_returned_as_test_proof(self):
+        proof = prove_replay(self.raw, self.expected)
+        self.assertEqual(proof.jobs, (self.expected.required_jobs[0].key,))
+        self.assertEqual(proof.outputs, ())
+
+    def test_published_provider_retains_unexecuted_original_steps(self):
+        path = Path(__file__).parent / "fixtures/replay-remote-maintenance-sections.json"
+        fixture = json.loads(path.read_text())
+        prove_maintenance(fixture["job"], "precheck/ci-pre.yml/cache-budget",
+                          tuple(fixture["source_steps"]))
+
+    def test_original_step_skip_requires_source_and_no_execution_evidence(self):
+        path = Path(__file__).parent / "fixtures/replay-remote-maintenance-sections.json"
+        fixture = json.loads(path.read_text())
+        with self.assertRaises(ValueError):
+            prove_maintenance(fixture["job"], "budget")
+        for field, value in (("name", "Unrelated test"), ("id", "0"),
+                             ("status", "running"), ("conclusion", "success"),
+                             ("first_seq", 100), ("last_seq", 101), ("exit_code", 0),
+                             ("started_at", "2026-10-07T14:31:01Z"), ("duration_ms", 1)):
+            with self.subTest(field=field):
+                job = copy.deepcopy(fixture["job"])
+                job["sections"][2][field] = value
+                with self.assertRaises(ValueError):
+                    prove_maintenance(job, "budget", tuple(fixture["source_steps"]))
+        for field in ("id", "name"):
+            job = copy.deepcopy(fixture["job"])
+            job["sections"][3][field] = job["sections"][2][field]
+            with self.subTest(duplicate=field), self.assertRaises(ValueError):
+                prove_maintenance(job, "budget", tuple(fixture["source_steps"]))
+
+    def test_original_skips_do_not_supply_test_or_output_credit(self):
+        job = copy.deepcopy(self.maintenance)
+        job["sections"].append({"id": "1", "name": self.expected.required_jobs[1].steps[1],
+                                "stage": "Main", "status": "completed", "conclusion": "skipped"})
+        self.raw["tree"]["groups"][0]["jobs"][1] = job
         proof = prove_replay(self.raw, self.expected)
         self.assertEqual(proof.jobs, (self.expected.required_jobs[0].key,))
         self.assertEqual(proof.outputs, ())

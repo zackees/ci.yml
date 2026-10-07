@@ -714,6 +714,22 @@ executed test proof or planner output. A selection consisting only of remote
 maintenance or excluded jobs cannot qualify. Ordinary build, unit,
 installed-wheel smoke and Dylint checks remain mandatory.
 
+The producer may retain original step placeholders alongside that diagnostic
+step. Each additional Main record must name a source step after the replaced
+first step, have a distinct nonzero ID and name, and be completed/skipped with
+no sequence, exit code, timing or execution evidence. Executed extras and
+outputs refuse; accepting a placeholder never adds test credit.
+
+Template run `718b45e6-b8c3-4c86-9848-9b351058e5fe` through public Bosn 0.1.17
+and act2.14 completed all 21 jobs successfully and removed its private engine.
+The prior verifier refused its two maintenance jobs because their skipped
+placeholders made the Main list longer than one; no attestation was issued.
+The retained production fixture reproduces that refusal. With the scoped
+placeholder validation, offline proof of the unchanged receipt resolves all
+eight required jobs and six captured outputs, excluding both maintenance jobs
+from executed proof. This is candidate checker conformance; a published-tool
+replay, stamp and hosted qualification remain required.
+
 Every explicitly remote-only job and any reusable caller containing it is
 non-attestable. Static definition checks reject such job mappings; hosted
 per-job decisions independently apply the same exclusion to immutable
@@ -981,8 +997,21 @@ The ordinary [PR run 37633213256](https://github.com/zackees/bosn/actions/runs/3
 passed, and the PR merged normally at
 `3da3ecc76d6a006fdaa1ac1b5659d83dd7010c1e`. Exact-main full release
 [qualification 37634017015](https://github.com/zackees/bosn/actions/runs/37634017015)
-is in progress. The pretag dry run, public Bosn release, public wheel
-verification and original Template frontend replay remain pending.
+passed all ten required cells and the coverage aggregator. The pretag
+[dry run 37635535578](https://github.com/zackees/bosn/actions/runs/37635535578)
+and [publication 37636184621](https://github.com/zackees/bosn/actions/runs/37636184621)
+also passed. [Bosn 0.1.17](https://github.com/zackees/bosn/releases/tag/v0.1.17)
+names that exact commit. All four downloaded wheel hashes match both GitHub
+and PyPI, with version 0.1.17 and cp310-abi3 metadata. The separately installed
+public Linux CLI and extension both report 0.1.17.
+
+Only the idle owned daemon was restarted for this public provider. Its status
+reports the act2.14 pin and verified executable digest. Complete cache
+accounting preserved all components and 12,806,733,794 logical bytes across
+restart. This inventory comparison does not prove compiler hits or newly
+produced object durability. Template's original frontend executed the graph
+on this provider; the maintenance receipt compatibility gap above prevented
+qualification and remains under checker repair.
 
 Bosn's queue is per daemon/state. The owned pilot has one slot, four CPUs and
 no spares; its CLI reports queue, provider pins and cache accounting with the
