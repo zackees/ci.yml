@@ -56,6 +56,7 @@ from typing import BinaryIO
 from ci_lint.attestations import load_definition as load_attestation_definition
 from ci_lint.attestations import make as make_attestation
 from ci_lint.attestations import strip_trailers as strip_attestation_trailers
+from ci_lint.attestations import MISSING, VALID, verify_commit as verify_gate_attestations
 from ci_lint.finding import Finding, Status
 from ci_lint.gate_run_lock import hold as hold_gate_run_lock
 from ci_lint.workflow_replay_config import ReplayConfig, parse_replay
@@ -853,6 +854,26 @@ class PushCheck:
     problems: list[str]
 
 
+def _publication_problems(repo: Path, sha: str, config: GateConfig) -> tuple[str, ...]:
+    """Enrolled consumers publish fresh gate proof from the outgoing tree."""
+    if config.replay is None or not config.replay.qualified or not config.replay.provider_query:
+        return ()
+    if not config.lanes:
+        return ("enrolled publication requires declared gate lanes",)
+    definition = load_attestation_definition(repo, rev=sha, lanes=tuple(lane.id for lane in config.lanes))
+    if definition is None or definition.definition is None:
+        return ("enrolled publication requires ci-attestations.yml in the outgoing commit",)
+    if definition.findings:
+        return tuple(f"outgoing attestation definition: {finding.message}" for finding in definition.findings)
+    required_lanes = {lane.id for lane in config.lanes if not lane.optional}
+    required = {gate.path for gate in definition.definition.gates if gate.lane in required_lanes}
+    commit = verify_gate_attestations(repo, sha, definition.definition,
+                                     max_age_hours={lane.id: lane.max_age_hours for lane in config.lanes})
+    problems = tuple(f"malformed gate attestation: {message}" for message in commit.malformed)
+    return problems + tuple(f"{status.gate}: {status.state}: {status.detail}" for status in commit.statuses
+                            if status.state != VALID and (status.gate in required or status.state != MISSING))
+
+
 def check_push(repo: Path, stdin_text: str) -> PushCheck:
     """git's pre-push stdin: `<local ref> <local sha> <remote ref> <remote sha>`
     per line. Every pushed branch head must be attested; tags and deletes
@@ -866,9 +887,19 @@ def check_push(repo: Path, stdin_text: str) -> PushCheck:
         local_ref, local_sha, remote_ref, _remote_sha = parts
         if local_sha == ZERO_SHA or remote_ref.startswith("refs/tags/"):
             continue
+        loaded = load_gate_config_at(repo, local_sha)
+        if loaded.findings:
+            problems.extend(f"{local_ref} -> {remote_ref}: outgoing gate policy: {finding.message}"
+                            for finding in loaded.findings)
+            continue
+        if loaded.config is None:
+            continue
         result = check_commit(repo, local_sha)
         if not result.ok:
             problems.append(f"{local_ref} -> {remote_ref}: {result.detail}")
+        else:
+            problems.extend(f"{local_ref} -> {remote_ref}: {problem}"
+                            for problem in _publication_problems(repo, local_sha, loaded.config))
     return PushCheck(exit_code=1 if problems else 0, problems=problems)
 
 

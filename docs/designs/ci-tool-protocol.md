@@ -45,6 +45,15 @@ be replay-covered before the shared verifier
 can replace the repository's isolation proof; an unmapped host command cannot
 inherit the exemption from another lane.
 
+Qualified replay enrollment with `provider-query` also activates complete
+portable-proof checks in the shared pre-push hook. For each exact outgoing
+branch SHA, the checker reads its committed policy and definition, verifies
+freshness and integrity through the existing attestation verifier, and requires
+every gate in a non-optional lane. Optional omissions remain explicit; malformed,
+duplicate and invalid records refuse publication. This check does not run a
+build or query an execution provider. A local hook can be bypassed, so hosted
+base-policy verification and a mechanically required aggregator remain necessary.
+
 ## Execution and portable evidence
 
 1. Load the consumer's gate declaration and validate coverage before scheduling.

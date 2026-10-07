@@ -54,6 +54,24 @@ Ci-Attestation: {"at":1790917000,"gate":"rust/x86_64-unknown-linux-gnu/test","ho
 - **Size:** about 330 bytes per gate. Five gates add under 2 KiB to the commit message.
 - **Freshness for hosted skips:** the verifier uses each lane's `max-age-hours` from the PR base (default 24 hours). Expired evidence or timestamps more than 60 seconds in the future cannot authorize a skip. Reuse preserves the original execution timestamp. `attest verify` without an age policy checks integrity only.
 
+## Before publishing an enrolled head
+
+Install the shared hook with `ci-lint local-gate install-hook`, using a durable
+launcher from the pinned shared tool. `local-gate check-push` reads the exact
+outgoing SHA from Git's pre-push input, not the worktree's current files.
+For qualified replay with `provider-query`, it also requires the committed
+gate definition and valid, fresh `Ci-Attestation:` records for every gate
+assigned to a non-optional lane. A `Local-Gate:` trailer alone cannot publish
+an enrolled head. Enrolled publication requires declared gate lanes; a legacy
+single-command run with no lanes does not produce the required per-gate proof.
+Missing optional-lane evidence is allowed; malformed,
+duplicate or invalid records refuse publication. Tags and deletions retain
+their existing behavior. Unenrolled consumers retain their existing check.
+
+The age policy comes from the outgoing commit for this local check. Hosted
+authorization independently uses the PR base's policy. Hooks are bypassable;
+the hosted verifier and required aggregator remain the merge boundary.
+
 ## In CI
 
 1. **Verify job:** `ci-lint local-gate verify --trust --github-output`, with full history. Don't leave ci_lint inside the tree while repository checks run: a `.ci-lint/` directory trips repository-local static checks (zackees/clud's banned-imports check flagged ci_lint's subprocess use). `actions/checkout` refuses a `path` outside `GITHUB_WORKSPACE`, so either (a) check it out at `.ci-lint`, run the verify step, then remove it in an `if: always()` step (`rm -rf .ci-lint`; clud's `Drop ci_lint checkout`), or (b) skip `actions/checkout` and fetch the pinned SHA with `git` into `$RUNNER_TEMP/ci-lint`, invoking `PYTHONPATH=$RUNNER_TEMP/ci-lint`.

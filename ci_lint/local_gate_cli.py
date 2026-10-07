@@ -238,16 +238,13 @@ def _show_lane_cache(repo: Path, config: GateConfig) -> int:
 
 def _cmd_check_push(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
-    config = load_gate_config(repo).config
-    if config is None:
-        return 0
     push = check_push(repo, sys.stdin.read())
     code, problems = push.exit_code, push.problems
     if code:
         print("ci-lint local-gate: push refused -- these heads have not passed the local gate (GATE-003):", file=sys.stderr)
         for problem in problems:
             print(f"  {problem}", file=sys.stderr)
-        print(f"  fix: ci-lint local-gate run   (runs {config.command} and stamps HEAD), then push again", file=sys.stderr)
+        print("  fix: check out the refused head and run ci-lint local-gate run, then push again", file=sys.stderr)
     return code
 
 
