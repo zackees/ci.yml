@@ -634,19 +634,21 @@ Pure filesystem (stdlib `tarfile`/`hashlib`/`json`), no network, no
 `ci.toml` -- the PR-delta packing/unpacking mechanics behind issue #6 §6's
 "PR caches: a small delta, never a base".
 
-- `cache delta manifest --dir D --out M` -- a sorted `(relpath, size)` list
-  of every file under `D`, plus a sha256 digest of that list (a size-based
-  integrity check, not a full content hash -- cheap even over a large
-  restored cache directory).
+- `cache delta manifest --dir D --out M` -- a schema-2 sorted list of
+  `(relpath, size, sha256)` content identities plus a digest of that list.
+  The command streams each file to hash its contents. Same-size metadata
+  and generation-pointer updates are significant; file size alone is not
+  an identity. Legacy size-only manifests must be regenerated.
 - `cache delta pack --dir D --base-manifest M --out T --family F --platform
   P --pr N` -- packs only the files under `D` absent from `M` or present
-  with a different size into `T` (`.tar.gz`), whose first member is a small
+  with different contents into `T` (`.tar.gz`), whose first member is a small
   JSON header (`base_digest`, `family`, `platform`, `pr`).
 - `cache delta apply --dir D --delta T --base-manifest M` -- verifies the
   header's `base_digest` equals `M`'s digest; on a mismatch, refuses with
-  **exit 3** ("stale base, treat as miss" -- issue #6 §6's self-heal, the
-  same property `cache key`'s `b<base8>` wrapper gives the key string
-  itself). On a match, extracts every non-header member into `D`, overlaying
+  **exit 3** ("stale base, treat as miss" -- issue #6 §6's self-heal).
+  The digest includes the manifest schema, so old size-only delta headers
+  also miss, including for an empty base. On a match, extracts every
+  non-header member into `D`, overlaying
   whatever base restore is already there. Exit 2 on any other bad input
   (missing dir/manifest/delta file, malformed header).
 
