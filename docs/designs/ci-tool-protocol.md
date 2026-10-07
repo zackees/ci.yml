@@ -24,15 +24,45 @@ statement records that stage, rather than overriding this current summary.
   [run 37699605308](https://github.com/zackees/clud/actions/runs/37699605308)
   proved the new aggregator's independent default-branch reuse: Static checks,
   Clippy and unit were accepted from seven proving PR jobs; Build and Dylint
-  still executed as cache writers. Ordinary PR attestation skips through this
-  new consumer still require the prepared unchanged-surface successor.
+  still executed as cache writers.
+- The ordinary documentation-only [Clud PR #1890](https://github.com/zackees/clud/pull/1890)
+  then proved attested skips through that shared consumer. Full local run
+  `6ade9947-a053-4a7e-b214-7c87c725cb2d` passed in 794.639 seconds
+  (1635.098 owned outer CPU seconds), removed its engine, and stamped exact
+  head `8af052982397277b99fbce6ae9647f399b4f3535`. An unchanged invocation
+  reused all five lanes in 1.360 seconds with the complete commit object and
+  seven original gate trailers preserved byte-for-byte. Generic publication
+  took 3.999 seconds; GitHub confirmed the same tree, parents and message.
+  [Hosted run 37703394043](https://github.com/zackees/clud/actions/runs/37703394043)
+  accepted all five proved job groups as skipped, and shared `CI OK` reported
+  each as `verified local attestation` before succeeding. PR #1890 merged
+  normally as `83fdbb52e6e3be6e1533ebfacb786373042becfc`. This proves the
+  ordinary local-to-hosted path, not compiler cache warmth.
 - Template independently completed the same local execution, reuse and exact
   publication protocol through public Bosn 0.1.17 / act2.14, without a Clud
   installation. [Enrollment PR #68](https://github.com/zackees/template-python-rust-cmd/pull/68)
   merged after [hosted run 37640303822](https://github.com/zackees/template-python-rust-cmd/actions/runs/37640303822)
   passed. Its verifier correctly reported `not-opted-in` from the original
-  immutable base and ran the fast/Dylint jobs normally. Hosted skips under
-  the newly enrolled base still require a source-only successor PR.
+  immutable base and ran the fast/Dylint jobs normally. PR #69's exact
+  message-only transport and independently sampled hosted audit both passed;
+  PR #70's repaired main-push command passed its tree-mismatch control.
+- The ordinary source-only [Template PR #71](https://github.com/zackees/template-python-rust-cmd/pull/71)
+  completed the independent hosted skip proof. Full Bosn/act2 run
+  `2fbf30b0-b68f-4bff-b8e7-c4f037dca091` passed in 228.569 seconds
+  (313.028 owned outer CPU seconds), removed its engine, and stamped
+  `4ffd88e11163c273b21b9bf1fef7c63e0bd20998`. The unchanged invocation
+  reused all three lanes in 0.761 seconds with the complete commit object
+  and four original gate trailers preserved. Generic publication took
+  3.096 seconds; GitHub confirmed tree, parents and message. Actual hosted
+  [run 37703816042](https://github.com/zackees/template-python-rust-cmd/actions/runs/37703816042)
+  skipped fast and Dylint, and shared `CI OK` verified each local attestation
+  before succeeding. PR #71 merged normally as
+  `e270cad67ebb92bd095f3101c1aa90d592357b7e`. This uses the same generic
+  protocol without a Clud installation; compiler-store durability remains
+  a separate unresolved requirement.
+- The backend's corrected full gate passed all six lanes on source `a6bc0686`
+  in 1491.809 seconds (1479.672 owned outer CPU seconds). That qualifies its
+  freshness and native-journal collector, not the failed archive-restore matrix.
 - Compiler-object durability, cache failure/cancellation controls, aggregate
   CPU admission across independent state roots, and final binding policy
   promotion remain incomplete. Successful attestation is not compiler warmth.
@@ -97,11 +127,12 @@ is claimed. A later message-only amend published exact head
 unchanged tree, parents and all five original trailers, including original
 execution timestamps. New
 [run 37700504725](https://github.com/zackees/template-python-rust-cmd/actions/runs/37700504725)
-started; its completed verifier accepted the tree-bound local attestation and
-selected the configured independent 1-in-10 audit. Fast and Dylint therefore
-run remotely. This proves transport and the audit control, not hosted skips or
-a complete hosted run; the full result remains pending. Do not change a message
-or disable sampling to evade the audit.
+completed successfully on that exact published head. Its verifier accepted
+the tree-bound local attestation and selected the configured independent
+1-in-10 audit. Fast and Dylint both executed successfully, and shared `CI OK`
+passed. This proves transport and the completed audit control, not hosted
+skips. PR #69 merged as `488399d6d2a799e6b04afc4a9c4dbd752b0410f6`.
+Do not change a message or disable sampling to evade the audit.
 
 [Template PR #70](https://github.com/zackees/template-python-rust-cmd/pull/70)
 repairs the pre-existing default-branch reuse job's missing consumer checkout
@@ -109,7 +140,14 @@ and Python import path. Its
 [hosted run 37642588191](https://github.com/zackees/template-python-rust-cmd/actions/runs/37642588191)
 succeeded and explicitly reported `surface-changed`, `skip_fast=false` and
 `skip_dylint=false`; both remote jobs executed. This proves the definition-change
-fallback. The push-only repaired command still requires actual main-push proof.
+fallback. PR #70 merged as `28dc641d7544eb5ffd378c6a6d428760549f5c10`.
+Its actual main-push
+[run 37700989838](https://github.com/zackees/template-python-rust-cmd/actions/runs/37700989838)
+completed successfully, including the repaired shared `reuse-check` command.
+That decision correctly refused reuse with `tree-mismatch`: the merged tree
+includes PR #69's test, absent from PR #70's qualified head. Fast and Dylint
+therefore executed, and shared `CI OK` passed. This proves command execution
+and the mismatch control, not valid default-branch reuse or ordinary PR skips.
 
 ### Compiler payload lifecycle: repair contract, not implemented
 
@@ -396,13 +434,13 @@ transfer of compiler payloads between environments.
 
 | Requirement | Evidence required | Current pilot status |
 | --- | --- | --- |
-| Local unchanged invocation skips | Real generic invocation twice; same graph executed once, unchanged HEAD and original evidence age | Proven for Clud published head `96733a2f`: full run 827.631s, unchanged repeat 1.444s, all five lanes reused and original trailers preserved; also proved independently for Template |
+| Local unchanged invocation skips | Real generic invocation twice; same graph executed once, unchanged HEAD and original evidence age | Proven for Clud published head `8af05298`: full run 794.639s, unchanged repeat 1.360s, all five lanes reused and complete commit object/original trailers preserved; also proved independently for Template |
 | Invalidated evidence reruns | Expired receipt, changed tools/inputs, explicit rerun, tampering and omitted/failed checks | Expiry, tool change and `--no-cache` regression tests pass; remaining cases pending |
 | Qualified execution identities | Direct/nested/same-name and caller/leaf matrix conformance, incomplete receipt rejected | Released act2.12; Clud receipt has 26 terminal jobs with zero unqualified entries; full adversarial/provider qualification remains pending |
 | Persistent local compiler objects | Two fresh engines, restored prior objects and retained new publications; classified residual misses | Cold build archive save and two fresh-engine restores proven; exact-hit delta publication, lint-only sharing and residual classification pending |
-| Hosted PR skip | Actual stamped PR head, verifier outputs, precisely skipped covered jobs, successful aggregator | Clud ordinary PR #1888 proved five skips and successful aggregation; ordinary PR skips through the new shared consumer remain pending. Main run37699605308 proved the separate default-branch reuse consumer |
-| Hosted rejection and full runs | Wrong tree/parents, stale evidence, untrusted writer/fork, changed surfaces, audit and release | Actual CI-surface full execution proved in Clud run37699034850 and Template run37642588191; Template verifier job113062553498 accepted message-only transport and selected its independent audit. Remaining complete negative-control coverage is pending |
-| Independent consumer | Same generic tool runs template-python-rust-cmd without clud code | Actual local execution, unchanged reuse, exact publication and hosted enrollment proved; message-only generic publication accepted by hosted verifier. Hosted skips under enrolled base remain pending |
+| Hosted PR skip | Actual stamped PR head, verifier outputs, precisely skipped covered jobs, successful aggregator | Clud PR #1890/run37703394043 proved all five covered groups skipped through shared `ci-lint gate`, with each independently accepted as verified local attestation and successful `CI OK`. Main run37699605308 proved the separate default-branch reuse consumer |
+| Hosted rejection and full runs | Wrong tree/parents, stale evidence, untrusted writer/fork, changed surfaces, audit and release | Actual CI-surface full execution proved in Clud run37699034850 and Template run37642588191; Template run37700504725 completed its independent sampled audit successfully after accepting message-only transport; run37700989838 executed the repaired main command and correctly refused tree-mismatched reuse. Remaining complete negative-control coverage is pending |
+| Independent consumer | Same generic tool runs template-python-rust-cmd without clud code | Template PR #71/run37703816042 proves actual local execution, unchanged three-lane reuse, exact publication and hosted fast/Dylint skips with successful shared aggregation, without Clud installation or repository-specific implementation |
 | Interruption and concurrency | Cancellation, server outage, restart, simultaneous ordinary calls and old generations | Pending |
 | Cost and diagnostics | Cold/warm/reuse timings, two real edits, original coverage, aggregate state roots and bounded CLI visibility | Pending |
 
@@ -1630,5 +1668,18 @@ collector retain native `compile_journal.jsonl` alongside daemon startup
 logs, preserving relative paths. Six regression cases reproduced the omission
 before the correction; all 85 harness tests passed afterward. The completed
 eight-cell matrix tested the earlier source and does not qualify this change.
-Backend publication remains held until changed-source full qualification and
-actual fresh-engine object reuse satisfy the pilot contract.
+Two older structural guards initially failed the full gate on that source;
+updating only their collector-path assertions produced source
+`a6bc06860047e7ad075147258e1f1617fc831570`. Its full original six-lane gate
+passed, stamping `9cdcc63876818c9140c68e7f49e1169a8ca03d13`, with
+1491.809 seconds wall time and 1479.672 owned outer CPU seconds. Integration
+run `2960d211-ac4d-41a0-9376-55634c73189d` passed 3558 nextest tests with
+290 selected skips; MSRV and Dylint also passed. Host Python/formatting work
+is outside that CPU scope. This qualifies the freshness and native-journal
+retention changes; the four failed archive-restore rows remain unresolved.
+
+The helper retains detailed Python logs only on failure, so the old 7df
+failure log still present in the checkout is historical evidence, not an a6
+failure. Current Python evidence is the successful full gate's lane verdict
+and subprocess exit. Backend publication remains held until actual
+fresh-engine object reuse satisfies the pilot contract.
