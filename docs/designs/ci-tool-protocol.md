@@ -9,9 +9,23 @@ The existing format is specified in [ci-attestations.md](../ci-attestations.md).
 The sections below retain the investigation chronology; an earlier pending
 statement records that stage, rather than overriding this current summary.
 
-- Clud completed local execution, unchanged-result reuse, exact publication
-  and hosted per-job skips with required `CI OK` in
-  [PR #1886](https://github.com/zackees/clud/pull/1886).
+- Clud's ordinary [PR #1888](https://github.com/zackees/clud/pull/1888)
+  proved generic local execution, unchanged-result reuse, exact publication,
+  and five hosted job skips with required `CI OK`. Its enrolled base requires
+  local attestation for ordinary developer publication.
+- [Clud PR #1889](https://github.com/zackees/clud/pull/1889) migrated final
+  aggregation to shared `ci-lint gate`. Actual local execution passed in
+  827.631 seconds (1737.614 owned outer CPU seconds); an unchanged invocation
+  reused all five lanes in 1.444 seconds with identical HEAD and original
+  trailers. Exact publication preserved all seven gate records. Hosted
+  [run 37699034850](https://github.com/zackees/clud/actions/runs/37699034850)
+  correctly executed the selected jobs because this PR changed CI surfaces.
+  The merged main-push
+  [run 37699605308](https://github.com/zackees/clud/actions/runs/37699605308)
+  proved the new aggregator's independent default-branch reuse: Static checks,
+  Clippy and unit were accepted from seven proving PR jobs; Build and Dylint
+  still executed as cache writers. Ordinary PR attestation skips through this
+  new consumer still require the prepared unchanged-surface successor.
 - Template independently completed the same local execution, reuse and exact
   publication protocol through public Bosn 0.1.17 / act2.14, without a Clud
   installation. [Enrollment PR #68](https://github.com/zackees/template-python-rust-cmd/pull/68)
@@ -76,7 +90,18 @@ invocation reused all three lanes in 5.712 seconds and preserved the original
 four trailers and their execution timestamps. The exact published head is
 `0ad05efa99755e307ab6ab3290170bfb904bffc7`.
 [Hosted run 37642365563](https://github.com/zackees/template-python-rust-cmd/actions/runs/37642365563)
-is queued with no jobs at this observation; hosted skips remain unproven.
+remains queued with no jobs; neither a terminal state nor successful recovery
+is claimed. A later message-only amend published exact head
+`ea642dd54050f7be9d94c215f959239e0054c4be` through the generic publisher in
+3.604 seconds, without requesting execution. GitHub's commit object confirms
+unchanged tree, parents and all five original trailers, including original
+execution timestamps. New
+[run 37700504725](https://github.com/zackees/template-python-rust-cmd/actions/runs/37700504725)
+started; its completed verifier accepted the tree-bound local attestation and
+selected the configured independent 1-in-10 audit. Fast and Dylint therefore
+run remotely. This proves transport and the audit control, not hosted skips or
+a complete hosted run; the full result remains pending. Do not change a message
+or disable sampling to evade the audit.
 
 [Template PR #70](https://github.com/zackees/template-python-rust-cmd/pull/70)
 repairs the pre-existing default-branch reuse job's missing consumer checkout
@@ -371,13 +396,13 @@ transfer of compiler payloads between environments.
 
 | Requirement | Evidence required | Current pilot status |
 | --- | --- | --- |
-| Local unchanged invocation skips | Real generic invocation twice; same graph executed once, unchanged HEAD and original evidence age | Proven for Clud head `100ec0fc`: full run 682s, unchanged repeat 0.924s, no new run/engine and original timestamp preserved |
+| Local unchanged invocation skips | Real generic invocation twice; same graph executed once, unchanged HEAD and original evidence age | Proven for Clud published head `96733a2f`: full run 827.631s, unchanged repeat 1.444s, all five lanes reused and original trailers preserved; also proved independently for Template |
 | Invalidated evidence reruns | Expired receipt, changed tools/inputs, explicit rerun, tampering and omitted/failed checks | Expiry, tool change and `--no-cache` regression tests pass; remaining cases pending |
 | Qualified execution identities | Direct/nested/same-name and caller/leaf matrix conformance, incomplete receipt rejected | Released act2.12; Clud receipt has 26 terminal jobs with zero unqualified entries; full adversarial/provider qualification remains pending |
 | Persistent local compiler objects | Two fresh engines, restored prior objects and retained new publications; classified residual misses | Cold build archive save and two fresh-engine restores proven; exact-hit delta publication, lint-only sharing and residual classification pending |
-| Hosted PR skip | Actual stamped PR head, verifier outputs, precisely skipped covered jobs, successful aggregator | Pending |
-| Hosted rejection and full runs | Wrong tree/parents, stale evidence, untrusted writer/fork, changed surfaces, audit and release | Pilot evidence pending |
-| Independent consumer | Same generic tool runs template-python-rust-cmd without clud code | Pending |
+| Hosted PR skip | Actual stamped PR head, verifier outputs, precisely skipped covered jobs, successful aggregator | Clud ordinary PR #1888 proved five skips and successful aggregation; ordinary PR skips through the new shared consumer remain pending. Main run37699605308 proved the separate default-branch reuse consumer |
+| Hosted rejection and full runs | Wrong tree/parents, stale evidence, untrusted writer/fork, changed surfaces, audit and release | Actual CI-surface full execution proved in Clud run37699034850 and Template run37642588191; Template verifier job113062553498 accepted message-only transport and selected its independent audit. Remaining complete negative-control coverage is pending |
+| Independent consumer | Same generic tool runs template-python-rust-cmd without clud code | Actual local execution, unchanged reuse, exact publication and hosted enrollment proved; message-only generic publication accepted by hosted verifier. Hosted skips under enrolled base remain pending |
 | Interruption and concurrency | Cancellation, server outage, restart, simultaneous ordinary calls and old generations | Pending |
 | Cost and diagnostics | Cold/warm/reuse timings, two real edits, original coverage, aggregate state roots and bounded CLI visibility | Pending |
 
