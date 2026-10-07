@@ -1075,6 +1075,16 @@ def _cmd_cache_budget(args: argparse.Namespace) -> int:
 
 
 def _cmd_cache_heal(args: argparse.Namespace) -> int:
+    if os.environ.get("ACT", "").lower() in ("true", "1"):
+        from ci_lint.cache.local_heal import LocalHealError, heal_local
+
+        try:
+            local = heal_local(os.environ.get("ACTIONS_CACHE_URL", ""), args.key, ref=args.ref, dry_run=args.dry_run)
+        except LocalHealError as exc:
+            print(f"ci-lint cache heal: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(local.to_json_dict(), indent=2) if args.json else local.render())
+        return 0
     creds = _cache_write_creds("heal")
     if creds is None:
         return 1

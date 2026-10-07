@@ -586,7 +586,7 @@ names). Exit 1 if any finding, 2 if a `--log` file is unreadable, 0 clean.
 
 ### `ci-lint cache trim` / `janitor` / `heal` / `preprune` (live, read-write)
 
-All four need `actions: write`; `--dry-run` (or omitting a delete
+On GitHub, all four need `actions: write`; `--dry-run` (or omitting a delete
 function) never calls `DELETE` -- it only prints the plan.
 
 | Command | Deletes | Extra output |
@@ -595,6 +595,20 @@ function) never calls `DELETE` -- it only prints the plan.
 | `cache janitor [--dry-run] [--max-deletes N] [--stale-days D=5]` | (#23 §4) every entry of a closed/merged PR (by `pr-<N>` key component or `refs/pull/<N>/merge` ref; a failed PR lookup keeps them -- fail safe); `CACHE-001/003/005/006/009` entries (`CACHE-006` keeps the newest entry per key prefix); an `evict = "lru"` family's overflow beyond its footprint; anything not accessed in >= `D` days. **Safety:** never an entry created within `JANITOR_GRACE_SECONDS` (10 minutes), and never the newest base entry of a family/key shape that a required job restores (unless it is poisoned, `CACHE-005`, or retired, `CACHE-009`). | a before/after table (count, bytes per family label) |
 | `cache heal --key K [--ref R] [--dry-run]` | exactly `key` (`DELETE .../actions/caches?key=<key>`, no id lookup) -- a writer flow's self-heal after an unusable restore | -- |
 | `cache preprune --lockfile-changed [--max-deletes N] [--dry-run]` | the superseded (`CACHE-006`) entries of `lockfile = true` families, but only when the forecast is over budget | the forecast (same steady + lockfile-peak + PR-budget arithmetic as `CACHE-004`, but using each family's live max observed size where one exists, else its declared `max`) |
+
+Under act2 (`ACT=true`), the same `cache heal --key K` command instead uses
+the local `ACTIONS_CACHE_URL` namespace's `cache-exact-delete-v1` API. It
+deletes completed versions of the exact key and reports actual entry count
+and reclaimed archive bytes; other keys and in-flight reservations remain.
+It uses no GitHub credential, rejects `--ref` (the local namespace has no
+GitHub ref filter), and never falls back to GitHub. `--dry-run` sends no
+delete. Missing support, an unavailable service or ambiguous accounting
+fails explicitly, with no claimed deletion. The endpoint must be a local
+literal IP with the cache server's token path; redirects are refused.
+
+This shared client and act2 server extension were each tested against the
+same wire contract for issue #362. Public provider release and Template's actual
+cleanup qualification remain pending; this is not yet pilot completion.
 
 ### `ci-lint cache budget` (live, read-only verdict)
 
