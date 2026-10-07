@@ -94,3 +94,9 @@ def _account_lanes(passes: tuple[ReceiptPass, ...], absent: JsonValue,
     if len(accounted) != len(expected_lanes) or set(accounted) != set(expected_lanes):
         return ReceiptLoad(None, "receipt must account for each declared lane exactly once")
     return ReceiptLoad(FullRunEvidence(passes, unavailable), None)
+
+
+def validate_evidence(evidence: FullRunEvidence, *, expected_lanes: tuple[str, ...],
+                      optional_lanes: tuple[str, ...] = ()) -> ReceiptLoad:
+    """Apply the same lane accounting to proof already validated in-process."""
+    return _account_lanes(evidence.passes, list(evidence.not_applicable), expected_lanes, optional_lanes)

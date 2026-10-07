@@ -271,6 +271,32 @@ class DecideTest(TrustCase):
 class AttestedJobsTest(TrustCase):
     """GATE-010: per-job skip from the base's ci-attestations.yml and the head's trailers."""
 
+    def test_hosted_skip_obeys_base_lane_freshness(self) -> None:
+        from unittest.mock import patch
+        from ci_lint.attestations import make
+        from ci_lint.local_gate_cli import _job_decisions
+
+        definition = "version: 1\ngates:\n  rust/all/lint: {lane: lint}\njobs:\n  ci.yml:lint: [rust/all/lint]\n"
+        gate = _gate(TRUST, lanes=True).replace(
+            "[gate.lanes.lint]\n", "[gate.lanes.lint]\nmax-age-hours = 2\n")
+        base = self.commit("base freshness policy", {
+            "local-gate.toml": gate, "ci-attestations.yml": definition,
+        }, lanes=None)
+        self.commit("feature", {"src.txt": "two\n"})
+        tree = _git(self.repo, "rev-parse", "HEAD^{tree}")
+        now = 1800000000
+        for age, expected in ((7199, True), (7200, True), (7201, False), (-60, True), (-61, False),
+                              (now - 10**400, False)):
+            with self.subTest(age=age):
+                trailer = make("rust/all/lint", tree=tree, parents=(base,), lane="lint",
+                               key="k", via="run", secs=1, at=now - age).trailer()
+                _git(self.repo, "commit", "-q", "--amend", "-m", "feature\n\n" + trailer)
+                head = _git(self.repo, "rev-parse", "HEAD")
+                inp = TrustInput("pull_request", head, base, "OWNER", "o/r", "o/r", ())
+                with patch("ci_lint.attestations.time.time", return_value=now):
+                    jobs = {j.job: j.skip for j in _job_decisions(self.repo, inp, True)}
+                self.assertEqual(jobs["ci.yml:lint"], expected)
+
     def test_job_skips_only_when_all_its_gates_are_attested(self) -> None:
         from ci_lint.attestations import make
         from ci_lint.local_gate_cli import _job_decisions

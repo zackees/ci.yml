@@ -42,11 +42,13 @@ import json
 import platform
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.finding import Finding
+from ci_lint.freshness import DEFAULT_MAX_AGE_HOURS, fresh
 from ci_lint.mini_yaml import MiniYamlError, parse
 from ci_lint.proc import run_captured
 
@@ -262,8 +264,9 @@ def host_label() -> str:
 
 
 def make(gate: str, *, tree: str, parents: tuple[str, ...], lane: str, key: str, via: str,
-         secs: int | None) -> GateAttestation:
-    return GateAttestation(gate, tree, parents, lane, key, via, secs, host_label(), int(time.time())).stamped()
+         secs: int | None, at: int | None = None) -> GateAttestation:
+    return GateAttestation(gate, tree, parents, lane, key, via, secs, host_label(),
+                           int(time.time()) if at is None else at).stamped()
 
 
 @dataclass(frozen=True)
@@ -277,9 +280,10 @@ def _record(raw: dict[str, JsonValue]) -> GateAttestation:
     secs = raw.get("secs")
     fields = (raw.get("gate"), raw.get("tree"), raw.get("lane"), raw.get("key"), raw.get("via"), raw.get("host"),
               raw.get("stamp"))
-    if raw.get("v") != VERSION or not all(isinstance(f, str) for f in fields) or not isinstance(parents, list) \
-            or not all(isinstance(p, str) for p in parents) or not isinstance(raw.get("at"), int) \
-            or not (secs is None or isinstance(secs, int)):
+    if type(raw.get("v")) is not int or raw.get("v") != VERSION \
+            or not all(isinstance(f, str) for f in fields) or not isinstance(parents, list) \
+            or not all(isinstance(p, str) for p in parents) or type(raw.get("at")) is not int \
+            or not (secs is None or type(secs) is int):
         raise ValueError("missing or mistyped field")
     gate, tree, lane, key, via, host, stamp = (str(f) for f in fields)
     at = raw.get("at")
@@ -314,7 +318,7 @@ MISSING = "missing"  # omitted: not run locally, so CI runs it
 @dataclass(frozen=True)
 class GateStatus:
     gate: str
-    state: str  # valid | missing | undeclared | bad-stamp | wrong-tree | wrong-parents | lane-mismatch | duplicate
+    state: str  # valid | missing | undeclared | bad-stamp | wrong-tree | wrong-parents | lane-mismatch | duplicate | stale
     detail: str
 
 
@@ -335,7 +339,11 @@ class CommitAttestations:
         return tuple(s for s in self.statuses if s.state not in (VALID, MISSING))
 
 
-def verify_commit(repo: Path, sha: str, definition: Definition) -> CommitAttestations:  # noqa: C901
+def verify_commit(repo: Path, sha: str, definition: Definition, *,  # noqa: C901
+                  max_age_hours: Mapping[str, float] | None = None,
+                  now: float | None = None) -> CommitAttestations:
+    """Validate integrity, and optionally the consumer's lane freshness policy."""
+    current = time.time() if now is None else now
     message = _git(repo, "log", "-1", "--format=%B", sha) or ""
     tree = (_git(repo, "rev-parse", f"{sha}^{{tree}}") or "").strip()
     parents = tuple((_git(repo, "log", "-1", "--format=%P", sha) or "").split())
@@ -360,6 +368,9 @@ def verify_commit(repo: Path, sha: str, definition: Definition) -> CommitAttesta
             statuses.append(GateStatus(att.gate, "wrong-parents", "attested on other parents (rebased or cherry-picked)"))
         elif att.lane != declared.lane:
             statuses.append(GateStatus(att.gate, "lane-mismatch", f"proved by lane '{att.lane}', definition says '{declared.lane}'"))
+        elif max_age_hours is not None and not fresh(
+                att.at, current, max_age_hours.get(declared.lane, DEFAULT_MAX_AGE_HOURS) * 3600):
+            statuses.append(GateStatus(att.gate, "stale", "execution timestamp is expired or outside the clock-skew bound"))
         else:
             statuses.append(GateStatus(att.gate, VALID, f"{att.via} by lane {att.lane} on {att.host}"))
     attested = {s.gate for s in statuses}

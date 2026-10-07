@@ -15,6 +15,7 @@ from ci_lint.cargo_messages import JsonValue
 from ci_lint.attestations import CommitAttestations, Definition, GateAttestation, VALID, load_definition, parse_trailers, verify_commit
 from ci_lint.gate_trust import TRUSTED_ASSOCIATIONS, TrustInput, decide as decide_trust
 from ci_lint.github_api import FetchFn, GitHubApiError
+from ci_lint.freshness import fresh
 from ci_lint.proc import run_captured
 
 
@@ -112,7 +113,8 @@ def _rebound_records(repo: Path, source: str, tree: str, parents: tuple[str, ...
     records = tuple(p.attestation for p in parse_trailers(_git(repo, "log", "-1", "--format=%B", source))
                     if p.attestation is not None)
     return tuple(replace(a, tree=tree, parents=parents).stamped() for a in records
-                 if verified.state(a.gate) == VALID and 0 <= inp.now - a.at <= inp.max_age_seconds)
+                 if verified.state(a.gate) == VALID
+                 and fresh(a.at, inp.now, inp.max_age_seconds, clock_skew_seconds=0))
 
 
 def _unchanged_definition(repo: Path, base: str, commit: str) -> Definition | None:

@@ -21,6 +21,59 @@ lanes = ["tests"]
 
 
 class ReplayDeclarationTest(unittest.TestCase):
+    def test_provider_query_is_a_qualified_nonempty_argv(self):
+        for value, qualified, valid in (('["bosn", "ci", "runners", "list", "--json"]', True, True),
+                                        ('[]', True, False), ('[""]', True, False),
+                                        ('["bosn"]', False, False), ('"bosn"', True, False)):
+            document = DECLARATION.replace('mode = "minimal"',
+                        f'mode = "minimal"\nqualified = {str(qualified).lower()}\nprovider-query = {value}')
+            findings: list[Finding] = []
+            config = parse_replay(tomllib.loads(document), source="local-gate.toml",
+                                  path="gate.replay", findings=findings)
+            self.assertEqual(config is not None, valid, findings)
+
+    def test_qualified_omitted_steps_derive_checks_from_source(self) -> None:
+        document = DECLARATION.replace('mode = "minimal"', 'mode = "minimal"\nqualified = true')
+        document = document.replace('steps = ["Run tests"]\n', '')
+        findings: list[Finding] = []
+        config = parse_replay(tomllib.loads(document), source="local-gate.toml", path="gate.replay", findings=findings)
+        self.assertEqual(findings, [])
+        assert config is not None
+        self.assertTrue(config.jobs[0].derive_checks)
+        for addition in ('steps = []\n', 'input-skip-steps = ["Run tests"]\n'):
+            findings = []
+            self.assertIsNone(parse_replay(tomllib.loads(document + addition), source="local-gate.toml",
+                                          path="gate.replay", findings=findings))
+
+    def test_qualified_declarations_do_not_repeat_display_names(self) -> None:
+        document = DECLARATION.replace('mode = "minimal"', 'mode = "minimal"\nqualified = true')
+        document = document.replace('key = "CI/Tests"\n', '')
+        findings: list[Finding] = []
+        config = parse_replay(tomllib.loads(document), source="local-gate.toml", path="gate.replay", findings=findings)
+        self.assertEqual(findings, [])
+        assert config is not None
+        self.assertTrue(config.qualified)
+        self.assertEqual(config.jobs[0].proof.key, "ci.yml:tests")
+
+    def test_qualified_source_cannot_be_duplicated_under_another_label(self) -> None:
+        document = DECLARATION.replace('mode = "minimal"', 'mode = "minimal"\nqualified = true')
+        document += '\n[[jobs]]\nsource-job="ci.yml:tests"\nkey="Another label"\nsteps=["Other check"]\nlanes=["tests"]\n'
+        findings: list[Finding] = []
+        self.assertIsNone(parse_replay(tomllib.loads(document), source="local-gate.toml",
+                                      path="gate.replay", findings=findings))
+        self.assertTrue(findings)
+
+    def test_report_source_is_explicit_and_strict(self) -> None:
+        for value, valid in (("file", True), ("stdout", True), ("unknown", False), ("", False)):
+            with self.subTest(value=value):
+                findings: list[Finding] = []
+                document = DECLARATION.replace('mode = "minimal"', f'mode = "minimal"\nreport-source = "{value}"')
+                config = parse_replay(tomllib.loads(document), source="local-gate.toml",
+                                      path="gate.replay", findings=findings)
+                self.assertEqual(config is not None, valid)
+                if config is not None:
+                    self.assertEqual(config.report_source, value)
+
     def test_strict_declaration_keeps_coverage_and_execution_names(self) -> None:
         findings: list[Finding] = []
         config = parse_replay(tomllib.loads(DECLARATION), source="local-gate.toml",

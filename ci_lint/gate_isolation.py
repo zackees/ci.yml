@@ -38,8 +38,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
+from ci_lint.lane_cache import LaneConfig
 from ci_lint.proc import run_captured
 from ci_lint.toml_cursor import Cursor, TomlValue
+from ci_lint.workflow_replay_config import ReplayConfig
 
 SELF_HOSTED_TOOL_REPOS: frozenset[str] = frozenset(
     {"zackees/soldr", "zackees/zccache", "zackees/clud", "zackees/bosn"}
@@ -162,7 +164,23 @@ def _repo_mount_destination(doc: dict[str, TomlValue], stack_name: TomlValue) ->
     return "/repo"
 
 
-def check_isolation(isolation: IsolationConfig | None, gate_run: tuple[str, ...], repo_root: Path, source: str) -> list[Finding]:
+def _shared_replay(iso: IsolationConfig, gate_run: tuple[str, ...], replay: ReplayConfig | None,
+                   lanes: tuple[LaneConfig, ...]) -> bool:
+    """The shared runtime validates the original receipt for a direct runner.
+
+    Its source and provider checks replace a repository's private receipt
+    parser. An exit code alone, a file-forwarding wrapper or legacy replay
+    cannot supply this proof.
+    """
+    return bool(_is_bosn_ci(iso.runner) and gate_run[:len(iso.runner)] == iso.runner
+                and replay is not None and replay.qualified and replay.provider_query
+                and replay.report_source == "stdout"
+                and {lane.id for lane in lanes}.issubset({lane for job in replay.jobs for lane in job.lanes})
+                and all(lane.run[:len(iso.runner)] == iso.runner for lane in lanes))
+
+
+def check_isolation(isolation: IsolationConfig | None, gate_run: tuple[str, ...], repo_root: Path, source: str,
+                    *, replay: ReplayConfig | None = None, lanes: tuple[LaneConfig, ...] = ()) -> list[Finding]:
     if isolation is None:
         slug = origin_slug(repo_root)
         if slug in SELF_HOSTED_TOOL_REPOS:
@@ -200,8 +218,10 @@ def check_isolation(isolation: IsolationConfig | None, gate_run: tuple[str, ...]
     elif iso.runner[0] == "bosn":
         findings.extend(_bosn_marker_findings(iso, repo_root, source))
     scripts = [repo_root / token for token in gate_run if (repo_root / token).is_file()]
-    findings.extend(_tree_proof_findings(iso, scripts, repo_root, source))
-    if not any(_invokes(s.read_text(encoding="utf-8", errors="replace"), iso.runner) for s in scripts):
+    shared = _shared_replay(iso, gate_run, replay, lanes)
+    if not (shared and iso.proves_tree):
+        findings.extend(_tree_proof_findings(iso, scripts, repo_root, source))
+    if not shared and not any(_invokes(s.read_text(encoding="utf-8", errors="replace"), iso.runner) for s in scripts):
         findings.append(
             Finding(
                 rule="GATE-005",

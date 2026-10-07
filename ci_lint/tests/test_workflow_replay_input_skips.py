@@ -28,6 +28,17 @@ class InputSkipSourceTest(unittest.TestCase):
         self.assertEqual(excluded_input_steps(self.job, (BoundInput("artifact", "payload"),)), ())
         self.assertEqual(excluded_input_steps(self.job, ()), ())
 
+    def test_negated_success_guard_keeps_unknown_and_fallback_checks_required(self):
+        self.job["steps"][0]["if"] = "!cancelled() && !failure() && !inputs.build"
+        inputs = (BoundInput("build", True),)
+        self.assertEqual(excluded_input_steps(self.job, inputs, successful=True), ("Download", "Verify"))
+        self.assertEqual(excluded_input_steps(self.job, inputs), ("Download", "Verify"))
+        self.assertEqual(excluded_input_steps(self.job, (), successful=True), ())
+        self.assertEqual(excluded_input_steps(self.job, (BoundInput("build", False),), successful=True), ())
+        self.job["steps"][0]["if"] = "!success() || !inputs.build"
+        self.assertEqual(excluded_input_steps(self.job, inputs), ())
+        self.assertEqual(excluded_input_steps(self.job, inputs, successful=True), ("Download", "Verify"))
+
     def test_unknown_or_literal_false_conditions_are_not_waivers(self):
         for guard in ("false", "inputs.artifact == ''", "inputs.artifact != '' || true",
                       "inputs.other != ''", "steps.missing.outcome == 'success'"):

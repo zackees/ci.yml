@@ -49,18 +49,20 @@ import time
 import tomllib
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO
 
 from ci_lint.attestations import load_definition as load_attestation_definition
 from ci_lint.attestations import make as make_attestation
 from ci_lint.attestations import strip_trailers as strip_attestation_trailers
+from ci_lint.attestations import MISSING, VALID, verify_commit as verify_gate_attestations
 from ci_lint.finding import Finding, Status
+from ci_lint.gate_run_lock import hold as hold_gate_run_lock
 from ci_lint.workflow_replay_config import ReplayConfig, parse_replay
-from ci_lint.workflow_replay_runtime import CheckedCommand, run_checked_command
+from ci_lint.workflow_replay_runtime import CheckedCommand, bind_execution_pins, run_checked_command
 from ci_lint.workflow_replay_static import check_replay_static
-from ci_lint.full_run_receipt import FullRunConfig, load_receipt, parse_full_run
+from ci_lint.full_run_receipt import FullRunConfig, load_receipt, parse_full_run, validate_evidence
 from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
 from ci_lint.gate_trust import TrustConfig, WorkflowFacts, WorkflowJob, check_trust_static, parse_trust
 from ci_lint.lane_cache import (
@@ -68,6 +70,7 @@ from ci_lint.lane_cache import (
     LaneConfig,
     ToolVersions,
     check_lanes_static,
+    cache_dir,
     lane_key,
     lane_log_dir,
     lookup,
@@ -456,9 +459,14 @@ def gate_attestation_trailers(repo: Path, config: GateConfig, head: str, tree: s
     parents = tuple(_git(repo, "log", "-1", "--format=%P", head).split())
     out: list[str] = []
     for lane in passed:
+        lane_config = next(item for item in config.lanes if item.id == lane.lane)
+        evidence = lookup(repo, lane_config, lane.key)
+        if lane.via == "reused" and evidence is None:
+            continue  # Evidence expired or disappeared: never renew it by stamping.
         for gate in loaded.definition.gates_of_lane(lane.lane):
             att = make_attestation(gate.path, tree=tree, parents=parents, lane=lane.lane, key=lane.key,
-                                   via=lane.via, secs=lane.secs)
+                                   via=lane.via, secs=lane.secs,
+                                   at=int(evidence.passed_at) if evidence is not None else None)
             out.append(att.trailer())
     return tuple(out)
 
@@ -604,6 +612,15 @@ def _run_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, reused
         return _execute_full_lanes(repo, config, head, tree, reused, pending, log_dir, Path(scratch) / "receipt.json")
 
 
+def _execution_changed(repo: Path, head: str, config: GateConfig) -> str | None:
+    if config.replay is not None:
+        try:
+            bind_execution_pins(repo, config.replay)
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            return f"execution provider refused: {exc}"
+    return _changed(repo, head)
+
+
 def _execute_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, reused: dict[str, str],
                         pending: list[_Pending], log_dir: Path, receipt_path: Path) -> LaneRun:
     log = log_dir / "full-run.log"
@@ -626,12 +643,15 @@ def _execute_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, re
         print(f"local-gate: full run FAILED after {secs}s (exit {proc.returncode}); full log: {log}", file=sys.stderr)
         print("\n".join(lines[-150:]), file=sys.stderr, flush=True)
         return LaneRun(proc.returncode or 1, [], secs)
-    loaded = load_receipt(receipt_path, tree=tree, expected_lanes=tuple(lane.id for lane in config.lanes),
-                          optional_lanes=tuple(lane.id for lane in config.lanes if lane.optional))
+    expected_lanes = tuple(lane.id for lane in config.lanes)
+    optional_lanes = tuple(lane.id for lane in config.lanes if lane.optional)
+    loaded = (validate_evidence(proc.full_run, expected_lanes=expected_lanes, optional_lanes=optional_lanes)
+              if proc.full_run is not None else
+              load_receipt(receipt_path, tree=tree, expected_lanes=expected_lanes, optional_lanes=optional_lanes))
     if loaded.evidence is None:
         print(f"local-gate: full run has no usable lane proof: {loaded.error}; full log: {log}", file=sys.stderr)
         return LaneRun(1, [], secs)
-    problem = _changed(repo, head)
+    problem = _execution_changed(repo, head, config)
     if problem is not None:
         print(f"local-gate: {problem}", file=sys.stderr)
         return LaneRun(1, [], secs)
@@ -665,12 +685,16 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
 
     entries = tree_entries(repo, tree)
     versions = ToolVersions()
+    replay = bind_execution_pins(repo, config.replay) if config.replay is not None else None
+    config = replace(config, replay=replay)
     log_dir = lane_log_dir(repo)
     log_dir.mkdir(parents=True, exist_ok=True)
     reused: dict[str, str] = {}
     pending: list[_Pending] = []
     for lane in config.lanes:
-        key = lane_key(entries, lane, gate_run=config.run, gate_source=config.source, versions=versions)
+        key = lane_key(entries, lane, gate_run=(*config.run, *(replay.provider_query if replay else ())),
+                       gate_source=config.source, versions=versions,
+                       provider=replay.execution_pins if replay else None)
         hit = lookup(repo, lane, key.key) if use_cache else None
         if hit is not None:
             print(
@@ -699,7 +723,7 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
             outcomes.append(outcome)
         if chain is not None:
             outcomes.extend(chain.result())
-    problem = _changed(repo, head)
+    problem = _execution_changed(repo, head, config)
     if problem is not None:
         print(f"local-gate: {problem}", file=sys.stderr)
     else:
@@ -739,7 +763,17 @@ def _replay_coverage_problem(config: GateConfig, repo: Path) -> str | None:
     return "local-gate run: replay coverage is unproven:\n  " + "\n  ".join(item.message for item in findings)
 
 
-def run_gate(  # noqa: C901
+def run_gate(
+    repo: Path, config: GateConfig, *, stamp: bool = True, force: bool = False, use_cache: bool = True
+) -> RunOutcome:
+    try:
+        with hold_gate_run_lock(cache_dir(repo).parent / "run.lock"):
+            return _run_gate(repo, config, stamp=stamp, force=force, use_cache=use_cache)
+    except (OSError, GitError, ValueError, subprocess.SubprocessError) as error:
+        return RunOutcome(2, f"local-gate run: {error}")
+
+
+def _run_gate(  # noqa: C901
     repo: Path, config: GateConfig, *, stamp: bool = True, force: bool = False, use_cache: bool = True
 ) -> RunOutcome:
     try:
@@ -756,7 +790,11 @@ def run_gate(  # noqa: C901
     replay_problem = _replay_coverage_problem(config, repo)
     if replay_problem:
         return RunOutcome(1, replay_problem)
-    if not force and check_commit(repo, head).state == "attested":
+    if config.replay is not None:
+        config = replace(config, replay=bind_execution_pins(repo, config.replay))
+    already_attested = check_commit(repo, head).state == "attested"
+    if (not config.lanes and not force and use_cache and already_attested
+            and not (config.replay and config.replay.provider_query)):
         return RunOutcome(0, f"local-gate run: HEAD {head[:12]} is already attested for its tree", head)
     tree = tree_of(repo, head)
     if config.lanes:
@@ -766,6 +804,8 @@ def run_gate(  # noqa: C901
         lanes_field = ",".join(lane_run.provenance)
         if lane_run.exit_code != 0:
             return RunOutcome(lane_run.exit_code, f"local-gate run: FAILED after {secs}s ({lanes_field or 'no lane passed'})")
+        if already_attested and not force and all(item.via == "reused" for item in lane_run.passed):
+            return RunOutcome(0, f"local-gate run: HEAD {head[:12]} is already attested; lane evidence revalidated", head)
         if not stamp:
             return RunOutcome(0, f"local-gate run: passed in {secs}s [{lanes_field}] (not stamped)", head)
         trailers = gate_attestation_trailers(repo, config, head, tree, lane_run.passed)
@@ -793,6 +833,9 @@ def run_gate(  # noqa: C901
             "local-gate run: the gate passed but changed the repository (a formatter rewrote files, or HEAD "
             "moved); review and commit the result, then run the gate again:\n  " + "\n  ".join(after[:20]),
         )
+    provider_problem = _execution_changed(repo, head, config)
+    if provider_problem is not None:
+        return RunOutcome(1, f"local-gate run: {provider_problem}")
     if not stamp:
         return RunOutcome(0, f"local-gate run: passed in {secs}s (not stamped)", head)
     new_head = stamp_head(repo, Attestation(tree=tree, secs=secs))
@@ -811,6 +854,26 @@ class PushCheck:
     problems: list[str]
 
 
+def _publication_problems(repo: Path, sha: str, config: GateConfig) -> tuple[str, ...]:
+    """Enrolled consumers publish fresh gate proof from the outgoing tree."""
+    if config.replay is None or not config.replay.qualified or not config.replay.provider_query:
+        return ()
+    if not config.lanes:
+        return ("enrolled publication requires declared gate lanes",)
+    definition = load_attestation_definition(repo, rev=sha, lanes=tuple(lane.id for lane in config.lanes))
+    if definition is None or definition.definition is None:
+        return ("enrolled publication requires ci-attestations.yml in the outgoing commit",)
+    if definition.findings:
+        return tuple(f"outgoing attestation definition: {finding.message}" for finding in definition.findings)
+    required_lanes = {lane.id for lane in config.lanes if not lane.optional}
+    required = {gate.path for gate in definition.definition.gates if gate.lane in required_lanes}
+    commit = verify_gate_attestations(repo, sha, definition.definition,
+                                     max_age_hours={lane.id: lane.max_age_hours for lane in config.lanes})
+    problems = tuple(f"malformed gate attestation: {message}" for message in commit.malformed)
+    return problems + tuple(f"{status.gate}: {status.state}: {status.detail}" for status in commit.statuses
+                            if status.state != VALID and (status.gate in required or status.state != MISSING))
+
+
 def check_push(repo: Path, stdin_text: str) -> PushCheck:
     """git's pre-push stdin: `<local ref> <local sha> <remote ref> <remote sha>`
     per line. Every pushed branch head must be attested; tags and deletes
@@ -824,9 +887,19 @@ def check_push(repo: Path, stdin_text: str) -> PushCheck:
         local_ref, local_sha, remote_ref, _remote_sha = parts
         if local_sha == ZERO_SHA or remote_ref.startswith("refs/tags/"):
             continue
+        loaded = load_gate_config_at(repo, local_sha)
+        if loaded.findings:
+            problems.extend(f"{local_ref} -> {remote_ref}: outgoing gate policy: {finding.message}"
+                            for finding in loaded.findings)
+            continue
+        if loaded.config is None:
+            continue
         result = check_commit(repo, local_sha)
         if not result.ok:
             problems.append(f"{local_ref} -> {remote_ref}: {result.detail}")
+        else:
+            problems.extend(f"{local_ref} -> {remote_ref}: {problem}"
+                            for problem in _publication_problems(repo, local_sha, loaded.config))
     return PushCheck(exit_code=1 if problems else 0, problems=problems)
 
 
@@ -988,7 +1061,8 @@ def _load_workflows(repo_root: Path) -> _Workflows:
 def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:  # noqa: C901
     from ci_lint.workflow_scan import jobs_of, steps_of  # noqa: PLC0415
 
-    findings: list[Finding] = check_isolation(config.isolation, config.run, repo_root, config.source)
+    findings: list[Finding] = check_isolation(config.isolation, config.run, repo_root, config.source,
+                                           replay=config.replay, lanes=config.lanes)
     if config.replay is not None:
         findings.extend(check_replay_static(config.replay, repo_root))
     findings.extend(_check_attestation_definition(config, repo_root))

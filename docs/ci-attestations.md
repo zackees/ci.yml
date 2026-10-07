@@ -52,6 +52,35 @@ Ci-Attestation: {"at":1790917000,"gate":"rust/x86_64-unknown-linux-gnu/test","ho
 - **Omission means not run.** A declared gate with no trailer runs remotely. There is no "skipped" entry.
 - **Stamp:** `sha256(tree \n parents \n canonical-json-without-stamp)`, truncated to 32 hex digits. A commit's hash covers its own message, so the stamp binds the tree and the parents instead. Editing the JSON, changing content, or rebasing invalidates it (`bad-stamp`, `wrong-tree`, `wrong-parents`). The stamp is tamper-evident; it is not a signature.
 - **Size:** about 330 bytes per gate. Five gates add under 2 KiB to the commit message.
+- **Freshness for hosted skips:** the verifier uses each lane's `max-age-hours` from the PR base (default 24 hours). Expired evidence or timestamps more than 60 seconds in the future cannot authorize a skip. Reuse preserves the original execution timestamp. `attest verify` without an age policy checks integrity only.
+
+## Before publishing an enrolled head
+
+Install the shared hook with `ci-lint local-gate install-hook`, using a durable
+launcher from the pinned shared tool. `local-gate check-push` reads the exact
+outgoing SHA from Git's pre-push input, not the worktree's current files.
+For qualified replay with `provider-query`, it also requires the committed
+gate definition and valid, fresh `Ci-Attestation:` records for every gate
+assigned to a non-optional lane. A `Local-Gate:` trailer alone cannot publish
+an enrolled head. Enrolled publication requires declared gate lanes; a legacy
+single-command run with no lanes does not produce the required per-gate proof.
+Missing optional-lane evidence is allowed; malformed,
+duplicate or invalid records refuse publication. Tags and deletions retain
+their existing behavior. Unenrolled consumers retain their existing check.
+
+The age policy comes from the outgoing commit for this local check. Hosted
+authorization independently uses the PR base's policy. Hooks are bypassable;
+the hosted verifier and required aggregator remain the merge boundary.
+
+After `local-gate run`, use `ci-lint local-gate push --sha <full-stamped-sha>`
+to publish the exact result to the current branch's configured `origin` remote
+and update its existing PR. This command reuses the full outgoing-proof
+checker, requires a clean unchanged qualified head, and protects the remote
+update with an explicit lease. It does not run tests or amend the commit.
+`--remote <name>` selects another configured remote. Observed source changes
+refuse publication before transport; a change detected after transport returns
+failure and names the qualified commit already published. See the
+[protocol's publication boundaries](designs/ci-tool-protocol.md#ownership-and-invocation).
 
 ## In CI
 
@@ -202,6 +231,7 @@ Measured results of rolling the local gate and attestations out beyond soldr. Si
 | Command | Use |
 | --- | --- |
 | `ci-lint local-gate run` | runs the lanes and stamps `Local-Gate:` plus one `Ci-Attestation:` per gate of each passed lane |
+| `ci-lint local-gate push --sha <full-stamped-sha>` | checks outgoing proof and pushes the exact qualified branch head with a remote-tip lease |
 | `ci-lint attest verify [--commit X] [--base REV]` | the host or CI checks a commit's trailers: valid, missing (not run), or why not |
 | `ci-lint attest lineage [--commit X] [--pr N]` | prints the commit's label |
 | `ci-lint attest keys --pr N --out-dir D --github-output` | side files and cache keys for the valid gates (`key_<i>`, and `stem_<i>` for `${{ env.PR_CACHE_TAG }}`) |

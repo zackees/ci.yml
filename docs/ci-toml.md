@@ -669,6 +669,38 @@ a real local act `--cache-server-path` directory.
 
 ### `[local.gate]` (GATE-001..005, 007; zackees/ci.yml#166, #168, #177)
 
+For direct runner integration, `[gate.replay]` (or `[local.gate.replay]`)
+accepts `report-source = "stdout"`. The declared command must output exactly
+one terminal JSON document, as `bosn ci run ... --wait --json` does. Ci-lint
+captures and verifies that document directly; stderr remains diagnostic output.
+The default, `report-source = "file"`, retains the existing
+`CI_LINT_GATE_REPLAY_REPORT` file contract. Both use the same strict verifier;
+zero exit status alone never proves execution. See the evolving
+[CI tool protocol design](designs/ci-tool-protocol.md) for the rollout proof plan.
+
+For gates with lanes, every invocation validates current input/tool keys and
+cached-pass freshness, including an already stamped HEAD. An unchanged fresh
+repeat skips execution and keeps HEAD unchanged. `--no-cache` reruns the lanes.
+Per-gate trailers emitted from reused passes retain the original execution time.
+
+`[gate.replay] qualified = true` derives execution identities from the selected
+workflow graph: caller IDs and every literal caller/leaf matrix leg. In this
+mode `key` is optional and diagnostic; each `source-job` is declared once.
+Omitting `steps` derives every executable step and its name from the source
+for each bound caller profile; explicitly empty `steps` is invalid. Explicit
+step lists keep their existing checked contract. Derived declarations cannot
+supply manual skip lists. Input interpolation may resolve a step name; every
+resulting name must be unique and nonempty. The same finite source condition
+proof is used by static validation and runtime. Unknown guards leave checks
+mandatory. Derived proof additionally binds the declared receipt event and
+excludes failure/cancellation diagnostics only while requiring all validation
+steps to succeed. Excluded steps still need explicit completed, skipped Main
+evidence. The runner must supply matching structured
+`identity` components and consistent leaf `job_id`/`matrix` fields. Dynamic,
+duplicate or unbounded matrices and missing/duplicate execution identities
+reject. This opt-in verifier is implemented; deployed runner qualification and
+the adopter pilots remain pending under issue #362.
+
 The one local command the remote quick gate must be a subset of. A
 repository without `ci.toml` declares the identical table as `[gate]` in a
 repo-root `local-gate.toml`; declaring both is `GATE-001`. Parsed strictly
@@ -695,7 +727,7 @@ repo-root `local-gate.toml`; declaring both is `GATE-001`. Parsed strictly
 | `lanes.<id>.max-age-hours` | int (default 24) | `GATE-007`: a cached pass older than this is ignored. |
 | `lanes.<id>.weight` | `"heavy"` (default) or `"light"` | `GATE-007`: `light` lanes (linters, Python tests) run concurrently with each other and alongside the heavy chain; `heavy` lanes (compilers, test suites) run one at a time in declared order. Each lane's output goes to a log under the worktree's git dir (`ci-lint/lane-logs/`), shown on completion -- in full on failure. |
 | `lanes.<id>.optional` | bool (default false) | `GATE-007`/`GATE-010`: a lane that cannot run on every host (a local VM or emulator, zackees/ci.yml#202). It may exit **75** (EX_TEMPFAIL) to mean "not applicable here". It is then recorded as `<id>:n/a` in the trailer, never cached, never attested (its gates are omitted, so CI runs them), and the gate still passes. GATE-008 accepts `n/a` only for lanes the PR base declares optional. A required lane exiting 75 is a failure. |
-| `full-run.receipt` | `"lane-passes-v1"` | `GATE-007`: opt into seeding distinct required lane passes from one successful full gate command. The command must write the exact tree-bound receipt described below. |
+| `full-run.receipt` | `"lane-passes-v1"` | `GATE-007`: opt into seeding distinct required lane passes from one successful full gate command. The command writes the exact tree-bound receipt below, or qualified workflow replay derives it from validated execution evidence. |
 | `full-run.min-misses` | int (default 2; minimum 2) | Run the full gate command when at least this many lanes miss their caches. With fewer misses, run the individual missing lanes. |
 | `trust.mode` | `"never"` (default), `"shadow"`, `"enforce"` | `GATE-008`: whether an attested PR head may stand in for the remote quick-gate jobs. Read from the PR's **base** commit, never the head. `shadow` reports `would_trust` and changes nothing. |
 | `trust.skip` | array of `<workflow>:<job>` | `GATE-008`: the remote jobs a trusted head skips. Each needs a job-level `if:` consuming `needs.<verify job>.outputs.trusted`, and its workflow must also trigger on default-branch pushes (the post-merge run). |
@@ -714,11 +746,31 @@ the whole enforcement (this repository's own `local-gate.toml`).
 
 For a PR replay in either mode, `pr-cache-save-steps` names a disjoint subset of `steps` excluded by a non-PR writer guard. Static binding accepts only an official `actions/cache/save` action with nonempty `path` and `key`, no `run`, and exactly `github.event_name != 'pull_request'` or `github.ref == 'refs/heads/main'`, optionally followed by ` && steps.<id>.outputs.cache-hit != 'true'`. Expression wrappers are allowed; other guards are unknown. Each declared save must have exactly one completed, skipped Main section; successful execution, absence, failure, cancellation and Post-only evidence reject. Dispatch selections cannot declare these exclusions. Unlike an exact-hit save, exclusion follows from the PR event rather than a restored cache, so this concession requires no matching restore and establishes no cache-payload or writer compliance. Validation commands, restores, install steps and general conditional actions remain mandatory.
 
-For explicit local reusable selections, `input-skip-steps` declares a disjoint subset of `steps` excluded by the caller’s statically bound string inputs. Static binding recognizes exactly `inputs.<id> != ''` with a known empty value, and `steps.<id>.outcome == 'success'` when the unique earlier producer is itself proven excluded. Expression wrappers are allowed; literal `if: false`, unknown inputs, other operators and arbitrary expressions are not waivers. Every selected caller binding must establish the exclusions. Runtime requires an explicit completed, skipped Main section for each excluded step; execution success, failure, absence and duplicate evidence reject. Every remaining step, including fallback source builds and validation, remains mandatory. This establishes exclusion from the actual selected workflow, not coverage of a branch using a nonempty input.
+For explicit local reusable selections, `input-skip-steps` declares a disjoint subset of `steps` excluded by the caller’s statically bound typed inputs. The shared finite condition proof supports input strings/booleans, same-type `==`/`!=`, ASCII case-insensitive string comparisons and `contains`, `&&`/`||` and parentheses. It also binds `steps.<id>.outcome` to `skipped` when the unique earlier producer is itself proven excluded. Expression wrappers are allowed; constants alone, unknown inputs and mixed-type comparisons never establish an exclusion. Every selected caller binding must establish the exclusions. Runtime requires an explicit completed, skipped Main section for each excluded step; execution success, failure, absence and duplicate evidence reject. Every remaining step, including fallback source builds and validation, remains mandatory. This establishes exclusion from the actual selected workflow, not coverage of a branch using a nonempty input.
 
-For lane-specific selections, each `[[gate.replay.selections]]` declares `lane`, either the selected `job` id or `all-jobs = true`, `event = "pull_request"` or `"workflow_dispatch"`, and optional string-valued `inputs = { tier = "test" }`. An optional `workflow = "dylint.yml"` basename selects a different entrypoint for that lane; omission retains `[gate.replay].workflow`. The lane must cover exactly the named job and its recursively resolved `needs` dependencies, or every concrete job and dependency in the explicit whole-workflow selection. `job` and `all-jobs = true` are mutually exclusive; omitting both is invalid. A whole-workflow receipt must carry no job filter, and its workflow must match the lane’s entrypoint exactly. Missing or unreachable job claims are violations; dynamic dependency expressions and cycles cannot establish proof. Runtime input matching is exact, so a minimal-tier receipt cannot satisfy a test-tier expectation. Without selections, the default event is `pull_request`. A multi-selection full/opaque command is currently rejected; use individual lane commands.
+For lane-specific selections, each `[[gate.replay.selections]]` declares `lane`, either the selected `job` id or `all-jobs = true`, `event = "pull_request"` or `"workflow_dispatch"`, and optional string-valued `inputs = { tier = "test" }`. An optional `workflow = "dylint.yml"` basename selects a different entrypoint for that lane; omission retains `[gate.replay].workflow`. The lane must cover exactly the named job and its recursively resolved `needs` dependencies, or every concrete job and dependency in the explicit whole-workflow selection. `job` and `all-jobs = true` are mutually exclusive; omitting both is invalid. A whole-workflow receipt must carry no job filter, and its workflow must match the lane’s entrypoint exactly. Missing or unreachable job claims are violations; dynamic dependency expressions and cycles cannot establish proof. Runtime input matching is exact, so a minimal-tier receipt cannot satisfy a test-tier expectation. Without selections, the default event is `pull_request`. In qualified mode, a full command may prove the union of all selections when their workflow, event and inputs are identical. Every proof lane needs exactly one selection. The receipt carries no job filter and must prove every selected job and its dependency closure; shared execution identities appear once. Incompatible invocations and legacy multi-selection full commands reject before execution. A narrow lane command still requires that lane’s exact filter.
 
 Before the command, the checker creates a fresh output path in `CI_LINT_GATE_REPLAY_REPORT`. The command writes the original Bosn terminal JSON report there. A zero exit alone cannot pass: the report must bind the exact repository, resolved workspace, HEAD SHA and Git tree, clean source, workflow, selection, event, inputs and runner mode. It requires act2.3 or later, terminal success, zero runner/act exit codes, removed engine, unambiguous jobs, and every declared check completed successfully in a Main section with positive ordered execution sequence numbers. Missing, duplicate-key, symlink, oversized, malformed, skipped or failed evidence rejects before a lane record or attestation is written. Static replay coverage is checked before cached passes or an already-attested early exit. Synthetic fixtures are validation tests, never executed gate evidence.
+
+**Qualified replay full runs.** With qualified replay selections, the checker derives lane passes directly from the validated runner report. The repository command does not write or interpret a separate lane-pass receipt. The gate applies the same complete lane-accounting check before recording passes; an uncovered lane rejects. Shared prerequisites are validated once. Reported per-lane seconds are the full invocation's wall time, not additive job time or CPU time. Reused lanes keep their original records and timestamps even when a full run executes their checks again. This mechanism is fixture-tested; deployed provider and pilot qualification remain pending under #362.
+
+**Execution provider identity (#362).** Qualified replay may declare
+`provider-query = ["bosn", "ci", "runners", "list", "--json"]`. The query must
+exit successfully within 60 seconds and produce a JSON status object no larger
+than 64 KiB with `runners.execution_pins`. These pins use Bosn's existing
+`ActPins` fields: `interface_schema = 1`, an act2.11-or-later `act_version`, and
+five lowercase SHA-256 digests named `act_binary_digest`,
+`engine_manifest_digest`, `engine_config_digest`, `runner_manifest_digest`,
+and `runner_config_digest`. Unknown, missing, malformed or duplicate fields
+refuse proof. The effective pins enter every lane key, and terminal receipts
+must carry exactly the same `execution_pins` and matching `act_version`.
+Provider changes during execution or reuse refuse publication. Query scripts
+named in the argv are mandatory lane inputs. A gate without lanes reruns when
+enrolled, because its old summary trailer does not bind provider identity.
+Omitting `provider-query` preserves existing contracts and keys; it does not
+qualify their CLI version as proof of the running daemon's pins. The enrolled
+mechanism has synthetic regression coverage; real adopter qualification
+remains pending under #362.
 
 **Full-run receipts (GATE-007).** Repositories whose full gate runs jobs concurrently may declare `[gate.full-run]` with `receipt = "lane-passes-v1"` and two or more required lanes. On a multi-lane miss, `local-gate run` invokes `[gate].run` once and supplies `CI_LINT_GATE_RECEIPT` (a unique output path), `CI_LINT_GATE_TREE` and `CI_LINT_GATE_HEAD`. The command must check the actual jobs and write `{"version":1,"tree":"<CI_LINT_GATE_TREE>","passes":[{"lane":"<id>","secs":12},...]}` with every declared lane accounted for exactly once. An optional lane that cannot run on this host must appear in `"not-applicable":["<id>",...]` instead of `passes`; only lanes declared `optional = true` may use this field. Unavailable lanes produce `n/a` provenance and no cache record or `Ci-Attestation:` trailer. Missing lanes, duplicate results, and marking a required lane unavailable all fail closed. The checker records no pass unless the command succeeds, the receipt matches the tree and complete lane set, and the tracked tree stays unchanged. The receipt is a claim by the repository's gate command, so that command must validate its runner's structured job results before writing it. A single miss still runs the named lane. `--no-cache` forces a full run when this mode is declared.
 

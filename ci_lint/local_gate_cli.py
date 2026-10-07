@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import sys
+import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,8 @@ from ci_lint.rules.swatinem_ban import check_cache_025
 from ci_lint.gate_trust import TrustDecision, TrustInput
 from ci_lint.gate_trust import decide as decide_trust
 from ci_lint.lane_cache import ToolVersions, lane_key, lookup, run_audit, simulate, tree_entries
+from ci_lint.workflow_replay_runtime import query_execution_pins
+from ci_lint.gate_publish import publish
 from ci_lint.local_gate import (
     GateConfig,
     VerifyOutcome,
@@ -79,6 +82,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if config is None:
         return 2
     outcome = run_gate(repo, config, stamp=not args.no_stamp, force=args.force, use_cache=not args.no_cache)
+    print(outcome.message, file=sys.stderr if outcome.exit_code else sys.stdout)
+    return outcome.exit_code
+
+
+def _cmd_push(args: argparse.Namespace) -> int:
+    outcome = publish(Path(args.repo).resolve(), sha=args.sha, remote=args.remote)
     print(outcome.message, file=sys.stderr if outcome.exit_code else sys.stdout)
     return outcome.exit_code
 
@@ -153,7 +162,8 @@ def _job_decisions(repo: Path, inp: TrustInput, head_trusted: bool) -> tuple[Job
     lanes = tuple(lane.id for lane in base.lanes)
     loaded = load_attestation_definition(repo, rev=inp.base_sha, lanes=lanes)
     definition = loaded.definition if loaded is not None else None
-    commit = verify_attestations(repo, inp.head_sha, definition) if definition is not None else None
+    ages = {lane.id: lane.max_age_hours for lane in base.lanes}
+    commit = verify_attestations(repo, inp.head_sha, definition, max_age_hours=ages) if definition is not None else None
     return decide_jobs(definition, base.trust.skip, head_trusted=head_trusted, commit=commit)
 
 
@@ -211,10 +221,21 @@ def _cmd_lanes(args: argparse.Namespace) -> int:
             print(f"{sim.lane:10} reusable {sim.reusable}/{sim.commits} ({sim.rate:.0%})  most often forced by: "
                   + (", ".join(sim.top_triggers) or "-"))
         return 0
+    return _show_lane_cache(repo, config)
+
+
+def _show_lane_cache(repo: Path, config: GateConfig) -> int:
     entries = tree_entries(repo, "HEAD")
     versions = ToolVersions()
+    try:
+        pins = query_execution_pins(repo, config.replay)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        print(f"local-gate lanes: execution provider refused: {exc}", file=sys.stderr)
+        return 2
     for lane in config.lanes:
-        key = lane_key(entries, lane, gate_run=config.run, gate_source=config.source, versions=versions)
+        query = config.replay.provider_query if config.replay else ()
+        key = lane_key(entries, lane, gate_run=(*config.run, *query), gate_source=config.source,
+                       versions=versions, provider=pins)
         hit = lookup(repo, lane, key.key)
         state = f"HIT (passed {hit.age_hours(time.time()):.1f} h ago in {hit.secs}s)" if hit else "miss"
         tools = ", ".join(f"{t.tool}={t.version}" for t in key.tools) or "none declared"
@@ -224,16 +245,13 @@ def _cmd_lanes(args: argparse.Namespace) -> int:
 
 def _cmd_check_push(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
-    config = load_gate_config(repo).config
-    if config is None:
-        return 0
     push = check_push(repo, sys.stdin.read())
     code, problems = push.exit_code, push.problems
     if code:
         print("ci-lint local-gate: push refused -- these heads have not passed the local gate (GATE-003):", file=sys.stderr)
         for problem in problems:
             print(f"  {problem}", file=sys.stderr)
-        print(f"  fix: ci-lint local-gate run   (runs {config.command} and stamps HEAD), then push again", file=sys.stderr)
+        print("  fix: check out the refused head and run ci-lint local-gate run, then push again", file=sys.stderr)
     return code
 
 
@@ -292,6 +310,12 @@ def register(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     run.add_argument("--force", action="store_true", help="run even when HEAD is already attested")
     run.add_argument("--no-cache", action="store_true", help="GATE-007: run every lane, ignoring cached passes")
     run.set_defaults(func=_cmd_run)
+
+    push = lg.add_parser("push", help="validate and publish an exact stamped head; updates its existing PR")
+    push.add_argument("--repo", default=".")
+    push.add_argument("--sha", required=True, help="full commit id returned by local-gate run")
+    push.add_argument("--remote", default="origin", help="configured Git remote (default: origin)")
+    push.set_defaults(func=_cmd_push)
 
     ver = lg.add_parser("verify", help="CI side (GATE-003): fail when the PR head is not attested")
     ver.add_argument("--repo", default=".")

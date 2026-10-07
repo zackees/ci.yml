@@ -13,6 +13,9 @@ from dataclasses import dataclass, replace
 
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.workflow_replay import ReplayExpectation, ReplayInput, ReplayJob, prove_replay
+from ci_lint.workflow_replay_identity import identity_part
+from ci_lint.workflow_replay_checks import derive_checks
+from ci_lint.workflow_replay_expansion import ExpandedJob
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,91 @@ class MetadataChange:
 
 
 class WorkflowReplayTest(unittest.TestCase):
+    def test_outputs_are_available_only_after_the_qualified_job_is_proved(self) -> None:
+        expected = replace(self.expected, required_jobs=(replace(self.expected.required_jobs[0],
+                           identity=(identity_part("tests"),)),))
+        job = self.raw["tree"]["groups"][0]["jobs"][0]
+        job.update(job_id="tests", matrix=None, identity=[{"jobID": "tests", "matrix": None}],
+                   output_evidence={"schema_version": 1, "seq": 21,
+                                    "values": {"matrix": "[]"}, "error": None})
+        proof = prove_replay(self.raw, expected)
+        self.assertEqual(len(proof.outputs), 1)
+        self.assertEqual(proof.outputs[0].identity, expected.required_jobs[0].identity)
+        self.assertEqual(proof.outputs[0].name, "matrix")
+        self.assertEqual(proof.outputs[0].value, "[]")
+        self.raw["act_version"] = "0.2.89-act2.12"
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, expected)
+        self.raw["act_version"] = "0.2.89-act2.13"
+        job["sections"][0]["conclusion"] = "skipped"
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, expected)
+
+    def test_output_evidence_refuses_invalid_shape_and_unproved_sequence(self) -> None:
+        expected = replace(self.expected, required_jobs=(replace(self.expected.required_jobs[0],
+                           identity=(identity_part("tests"),)),))
+        job = self.raw["tree"]["groups"][0]["jobs"][0]
+        job.update(job_id="tests", matrix=None, identity=[{"jobID": "tests", "matrix": None}])
+        for change in (
+            MetadataChange("schema_version", True), MetadataChange("schema_version", 2),
+            MetadataChange("seq", True), MetadataChange("seq", 20),
+            MetadataChange("error", "duplicate-event"), MetadataChange("values", {}),
+            MetadataChange("values", {"matrix": True}), MetadataChange("values", {"1matrix": "[]"}),
+            MetadataChange("values", {"matrix": "x" * 65537}), MetadataChange("extra", "unknown"),
+        ):
+            evidence = {"schema_version": 1, "seq": 21, "values": {"matrix": "[]"}, "error": None}
+            evidence[change.field] = change.value
+            job["output_evidence"] = evidence
+            with self.subTest(field=change.field, value=str(change.value)[:80]):
+                with self.assertRaises(ValueError):
+                    prove_replay(self.raw, expected)
+
+    def test_unqualified_output_evidence_cannot_be_exposed(self) -> None:
+        job = self.raw["tree"]["groups"][0]["jobs"][0]
+        job["output_evidence"] = {"schema_version": 1, "seq": 21,
+                                  "values": {"matrix": "[]"}, "error": None}
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, self.expected)
+
+    def test_qualified_identity_never_matches_display_name_alone(self) -> None:
+        expected = replace(self.expected, required_jobs=(ReplayJob("diagnostic", ("Run tests",), identity=(
+            identity_part("caller", {"target": "linux"}), identity_part("tests", {"shard": 1}))),))
+        raw = copy.deepcopy(self.raw)
+        job = raw["tree"]["groups"][0]["jobs"][0]
+        job.update(key="Same display name", job_id="tests", matrix={"shard": 1}, identity=[
+            {"jobID": "caller", "matrix": {"target": "linux"}},
+            {"jobID": "tests", "matrix": {"shard": 1}},
+        ])
+        self.assertEqual(prove_replay(raw, expected).jobs, ("diagnostic",))
+        for change in (
+            'job.pop("identity")',
+            'job["identity"][0]["jobID"] = "other"',
+            'job["identity"][0]["matrix"] = {"target": "windows"}',
+            'job["identity"][1]["matrix"] = {"shard": 2}',
+            'job["job_id"] = "other"',
+            'job["matrix"] = {"shard": 2}',
+        ):
+            changed = copy.deepcopy(raw)
+            job = changed["tree"]["groups"][0]["jobs"][0]
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                exec(change)
+                prove_replay(changed, expected)
+
+    def test_qualified_same_names_require_every_execution(self) -> None:
+        expected = replace(self.expected, required_jobs=tuple(
+            ReplayJob("Same", ("Run tests",), identity=(identity_part(caller), identity_part("tests")))
+            for caller in ("first", "second")))
+        raw = copy.deepcopy(self.raw)
+        jobs = raw["tree"]["groups"][0]["jobs"]
+        jobs.append(copy.deepcopy(jobs[0]))
+        for job, caller in zip(jobs, ("first", "second"), strict=True):
+            job.update(key="Same", job_id="tests", matrix=None, identity=[
+                {"jobID": caller, "matrix": None}, {"jobID": "tests", "matrix": {}},
+            ])
+        self.assertEqual(prove_replay(raw, expected).jobs, ("Same", "Same"))
+        jobs[1]["identity"] = copy.deepcopy(jobs[0]["identity"])
+        with self.assertRaises(ValueError):
+            prove_replay(raw, expected)
     def setUp(self) -> None:
         self.scratch = tempfile.TemporaryDirectory()
         self.addCleanup(self.scratch.cleanup)
@@ -39,13 +127,40 @@ class WorkflowReplayTest(unittest.TestCase):
             "workflow": ".github/workflows/ci.yml", "job": None,
             "trigger": "pr", "event": "pull_request", "mode": "minimal", "state": "done",
             "conclusion": "success", "exit_code": 0, "act_exit_code": 0,
-            "cleanup": "removed", "act_version": "0.2.89-act2.4",
+            "cleanup": "removed", "act_version": "0.2.89-act2.13",
             "tree": {"malformed_lines": 0, "groups": [{"jobs": [{
                 "key": "CI/Tests", "status": "completed", "conclusion": "success",
                 "sections": [{"name": "Run tests", "stage": "Main", "status": "completed",
                               "conclusion": "success", "first_seq": 10, "last_seq": 20}],
             }]}]},
         }
+
+    def test_public_proof_requires_every_source_excluded_job(self) -> None:
+        executed = replace(self.expected.required_jobs[0], identity=(identity_part("tests"),))
+        excluded = derive_checks(ExpandedJob(
+            "ci.yml:writer", "Writer", self.expected.workflow, {},
+            {"if": "github.event_name == 'push'", "steps": [{"run": "write-cache"}]},
+            identity=(identity_part("writer"),)), mode="minimal", event="pull_request")
+        expected = replace(self.expected, required_jobs=(executed, excluded))
+        jobs = self.raw["tree"]["groups"][0]["jobs"]
+        jobs[0].update(job_id="tests", matrix=None, identity=[{"jobID": "tests", "matrix": None}])
+        jobs.append({"key": "Writer", "job_id": "writer", "matrix": None,
+                     "identity": [{"jobID": "writer", "matrix": None}],
+                     "status": "completed", "conclusion": "skipped", "sections": []})
+        self.assertEqual(prove_replay(self.raw, expected).jobs, (executed.key, excluded.key))
+        for change in (MetadataChange("conclusion", "success"), MetadataChange("status", "pending"),
+                       MetadataChange("sections", [{"stage": "Main", "conclusion": "success"}])):
+            altered = copy.deepcopy(self.raw)
+            altered["tree"]["groups"][0]["jobs"][1][change.field] = change.value
+            with self.assertRaises(ValueError):
+                prove_replay(altered, expected)
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, replace(expected, required_jobs=(excluded,)))
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, replace(expected, required_jobs=(executed, replace(excluded, steps=("Fake",)))))
+        jobs.pop()
+        with self.assertRaisesRegex(ValueError, "required job is missing"):
+            prove_replay(self.raw, expected)
 
     def test_valid_evidence_names_required_jobs(self) -> None:
         proof = prove_replay(self.raw, self.expected)

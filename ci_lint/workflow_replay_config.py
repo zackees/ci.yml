@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 
 from ci_lint.finding import Finding
+from ci_lint.execution_pins import ExecutionPins
 from ci_lint.toml_cursor import Cursor, TomlValue
 from ci_lint.workflow_replay import ReplayInput, ReplayJob
 
@@ -18,6 +19,7 @@ class DeclaredReplayJob:
     source_job: str
     proof: ReplayJob
     lanes: tuple[str, ...]
+    derive_checks: bool = False
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,10 @@ class ReplayConfig:
     mode: str
     jobs: tuple[DeclaredReplayJob, ...]
     selections: tuple[ReplaySelection, ...] = ()
+    report_source: str = "file"
+    qualified: bool = False
+    provider_query: tuple[str, ...] = ()
+    execution_pins: ExecutionPins | None = None
 
 
 def _bad(findings: list[Finding], source: str, path: str, message: str) -> None:
@@ -44,12 +50,15 @@ def _bad(findings: list[Finding], source: str, path: str, message: str) -> None:
 
 
 def _job(raw: dict[str, TomlValue], *, source: str, path: str,
-         findings: list[Finding]) -> DeclaredReplayJob | None:
+         findings: list[Finding], qualified: bool = False) -> DeclaredReplayJob | None:
     start = len(findings)
     cursor = Cursor(raw, path, findings, source)
     ref = cursor.str_("source-job")
-    key = cursor.str_("key")
-    steps = cursor.list_str("steps")
+    key = cursor.str_("key", required=not qualified)
+    if key is None and qualified:
+        key = ref
+    derive_checks = qualified and "steps" not in raw
+    steps = cursor.list_str("steps", required=not qualified)
     cache_saves = cursor.list_str("cache-save-steps", required=False)
     minimal_skips = cursor.list_str("minimal-skip-steps", required=False)
     mode_step = cursor.str_("minimal-mode-step", required=False) or ""
@@ -59,7 +68,7 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     cursor.finish()
     if ref is None or re.fullmatch(JOB_REF, ref) is None:
         _bad(findings, source, path, "source-job must be a workflow basename and job id")
-    if not key or not key.strip() or not steps or len(set(steps)) != len(steps) or any(not step.strip() for step in steps):
+    if not key or not key.strip() or (not steps and not derive_checks) or len(set(steps)) != len(steps) or any(not step.strip() for step in steps):
         _bad(findings, source, path, "key and distinct executed check names must be nonempty")
     if len(set(cache_saves)) != len(cache_saves) or not set(cache_saves).issubset(steps):
         _bad(findings, source, path, "cache-save-steps must be distinct declared steps")
@@ -79,7 +88,7 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     if len(findings) != start or ref is None or key is None:
         return None
     return DeclaredReplayJob(ref, ReplayJob(key, tuple(steps), tuple(cache_saves), tuple(minimal_skips), mode_step,
-                                          tuple(pr_saves), tuple(input_skips)), tuple(lanes))
+                                          tuple(pr_saves), tuple(input_skips)), tuple(lanes), derive_checks)
 
 
 def _selected_job(cursor: Cursor, source: str, path: str,
@@ -128,6 +137,16 @@ def _selections(cursor: Cursor, source: str, path: str,
     return tuple(selections)
 
 
+def _provider_query(cursor: Cursor, raw: dict[str, TomlValue], findings: list[Finding],
+                    source: str, path: str, qualified: bool) -> tuple[str, ...]:
+    query = tuple(cursor.list_str("provider-query", required=False))
+    if "provider-query" in raw and (not query or any(not token.strip() for token in query)):
+        _bad(findings, source, path, "provider-query must be a nonempty argv")
+    if query and not qualified:
+        _bad(findings, source, path, "provider-query requires qualified workflow replay")
+    return query
+
+
 def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
                  findings: list[Finding]) -> ReplayConfig | None:
     start = len(findings)
@@ -135,6 +154,9 @@ def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
     repository = cursor.str_("repository")
     workflow = cursor.str_("workflow")
     mode = cursor.str_("mode")
+    report_source = cursor.str_("report-source", required=False, default="file")
+    qualified = bool(cursor.bool_("qualified", required=False, default=False))
+    provider_query = _provider_query(cursor, raw, findings, source, path, qualified)
     raw_jobs = cursor.array_of_tables("jobs")
     selections = _selections(cursor, source, path, findings)
     cursor.finish()
@@ -144,16 +166,20 @@ def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
         _bad(findings, source, path, "workflow must be a workflow basename")
     if mode not in ("minimal", "full"):
         _bad(findings, source, path, "mode must be minimal or full")
+    if report_source not in ("file", "stdout"):
+        _bad(findings, source, path, "report-source must be file or stdout")
     jobs: list[DeclaredReplayJob] = []
     for index, item in enumerate(raw_jobs):
-        job = _job(item, source=source, path=f"{path}.jobs[{index}]", findings=findings)
+        job = _job(item, source=source, path=f"{path}.jobs[{index}]", findings=findings, qualified=qualified)
         if job is not None:
             jobs.append(job)
     covered_lanes = {lane for job in jobs for lane in job.lanes}
     if len({item.lane for item in selections}) != len(selections) or any(item.lane not in covered_lanes for item in selections):
         _bad(findings, source, path, "selections must name distinct replay-covered lanes")
-    if not jobs or len({job.proof.key for job in jobs}) != len(jobs):
-        _bad(findings, source, path, "declare one or more distinct execution job keys")
-    if len(findings) != start or repository is None or workflow is None or mode is None:
+    if (not jobs or len({job.proof.key for job in jobs}) != len(jobs)
+            or (qualified and len({job.source_job for job in jobs}) != len(jobs))):
+        _bad(findings, source, path, "declare distinct execution keys and, in qualified mode, distinct source-jobs")
+    if len(findings) != start or repository is None or workflow is None or mode is None or report_source is None:
         return None
-    return ReplayConfig(repository, f".github/workflows/{workflow}", mode, tuple(jobs), tuple(selections))
+    return ReplayConfig(repository, f".github/workflows/{workflow}", mode, tuple(jobs), tuple(selections), report_source,
+                        qualified, provider_query)
