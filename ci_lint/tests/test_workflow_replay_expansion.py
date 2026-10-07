@@ -44,6 +44,72 @@ class ReplayExpansionTest(unittest.TestCase):
         self.assertIsNotNone(refused.problem)
         self.assertEqual(refused.jobs, ())
 
+    def test_called_workflow_output_mapping_preserves_leaf_origin(self):
+        entry = workflow(".github/workflows/ci.yml", {"jobs": {
+            "planner": {"uses": "./.github/workflows/pre.yml"},
+            "test": {"needs": "planner", "strategy": {
+                "matrix": "${{ fromJSON(needs.planner.outputs.lanes) }}"}, "steps": []},
+        }})
+        called = workflow(".github/workflows/pre.yml", {
+            "on": {"workflow_call": {"outputs": {
+                "lanes": {"value": "${{ jobs.plan.outputs.matrix }}"},
+            }}}, "jobs": {"plan": {
+                "outputs": {"matrix": "${{ steps.plan.outputs.matrix }}"}, "steps": []}},
+        })
+        output = ReplayOutput((identity_part("planner"), identity_part("plan")),
+                              "matrix", '{"lane":["left","right"]}', 21)
+        proof = expand_selection((entry, called), entry.path, "test", qualified=True, outputs=(output,))
+        self.assertIsNone(proof.problem)
+        self.assertEqual(len(proof.jobs), 3)
+        self.assertEqual(proof.outputs[-1].origin, output.identity)
+        self.assertEqual(proof.outputs[-1].identity, (identity_part("planner"),))
+        for mapping in ("${{ jobs.other.outputs.matrix }}", "${{ jobs.plan.outputs.other }}",
+                        "${{ needs.plan.outputs.matrix }}"):
+            called.document["on"]["workflow_call"]["outputs"]["lanes"]["value"] = mapping
+            refused = expand_selection((entry, called), entry.path, "test", qualified=True, outputs=(output,))
+            self.assertIsNotNone(refused.problem)
+            self.assertEqual(refused.jobs, ())
+
+    def test_malformed_public_output_mapping_is_an_explicit_graph_refusal(self):
+        output = ReplayOutput((identity_part("linux"), identity_part("check")), "matrix", "[]", 21)
+        for definition in (None, [], {"value": True}, {"value": None}):
+            called = replace(self.called, document={"on": {"workflow_call": {"outputs": {
+                "matrix": definition,
+            }}}, "jobs": {"check": {"steps": [], "outputs": None}}})
+            refused = expand_selection((self.entry, called), self.entry.path, "linux",
+                                       qualified=True, outputs=(output,))
+            self.assertIsNotNone(refused.problem)
+            self.assertEqual(refused.jobs, ())
+
+    def test_nested_workflow_outputs_map_through_checked_callers(self):
+        entry = workflow(".github/workflows/ci.yml", {"jobs": {
+            "planner": {"uses": "./.github/workflows/middle.yml"},
+            "test": {"needs": "planner", "strategy": {
+                "matrix": "${{ fromJSON(needs.planner.outputs.lanes) }}"}, "steps": []},
+        }})
+        middle = workflow(".github/workflows/middle.yml", {
+            "on": {"workflow_call": {"outputs": {
+                "lanes": {"value": "${{ jobs.child.outputs.matrix }}"},
+            }}}, "jobs": {"child": {"uses": "./.github/workflows/pre.yml"}},
+        })
+        called = workflow(".github/workflows/pre.yml", {
+            "on": {"workflow_call": {"outputs": {
+                "matrix": {"value": "${{ jobs.plan.outputs.matrix }}"},
+            }}}, "jobs": {"plan": {
+                "outputs": {"matrix": "${{ steps.plan.outputs.matrix }}"}, "steps": []}},
+        })
+        output = ReplayOutput((identity_part("planner"), identity_part("child"), identity_part("plan")),
+                              "matrix", '{"lane":["left","right"]}', 21)
+        proof = expand_selection((entry, middle, called), entry.path, "test", qualified=True, outputs=(output,))
+        self.assertIsNone(proof.problem)
+        self.assertEqual(len(proof.jobs), 3)
+        self.assertTrue(all(item.origin == output.identity for item in proof.outputs[1:]))
+        self.assertEqual(proof.outputs[-1].identity, (identity_part("planner"),))
+        foreign = replace(output, identity=(identity_part("other"),) + output.identity[1:])
+        refused = expand_selection((entry, middle, called), entry.path, "test", qualified=True, outputs=(foreign,))
+        self.assertIsNotNone(refused.problem)
+        self.assertEqual(refused.jobs, ())
+
     def test_qualified_repeated_callers_and_leaf_matrices_are_distinct(self):
         entry = replace(self.entry, document={"jobs": {
             "first": {"name": "Same", "uses": "./.github/workflows/check.yml",

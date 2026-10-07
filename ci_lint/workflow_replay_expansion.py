@@ -2,13 +2,13 @@
 
 import re
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
 from ci_lint.workflow_replay_dependencies import _needs
 from ci_lint.workflow_replay_inputs import BoundInput, bind_call_inputs, bound_name
 from ci_lint.workflow_replay_identity import JobIdentity, identity_part, bounded_identity
 from ci_lint.workflow_replay_matrix import job_matrices
-from ci_lint.workflow_replay_outputs import ReplayOutput
+from ci_lint.workflow_replay_outputs import ReplayOutput, valid_output_name
 from ci_lint.workflow_scan import ParsedYamlFile, get_on_section, jobs_of
 from ci_lint.yaml_io import YamlValue
 
@@ -28,6 +28,7 @@ class ExpandedJob:
 class ReplayExpansion:
     jobs: tuple[ExpandedJob, ...]
     problem: str | None = None
+    outputs: tuple[ReplayOutput, ...] = ()
 
 
 def _literal_name(value: YamlValue) -> str:
@@ -74,6 +75,7 @@ class _ExpansionState:
     caller_prefixes: set[str]
     qualified: bool = False
     outputs: tuple[ReplayOutput, ...] = ()
+    mapped_outputs: list[ReplayOutput] = field(default_factory=list)
 
 
 def _record(state: _ExpansionState, resolved: ExpandedJob) -> None:
@@ -115,7 +117,7 @@ def _visit(state: _ExpansionState, current: str, job_id: str,
         raise ValueError(f"dependency job {current}:{job_id} does not exist")
     for dependency in _needs(job):
         _visit(state, current, dependency, prefix, ancestry, inputs, callers)
-    for matrix in job_matrices(job, outputs=state.outputs, scope=callers) if state.qualified else ("null",):
+    for matrix in job_matrices(job, outputs=state.outputs + tuple(state.mapped_outputs), scope=callers) if state.qualified else ("null",):
         resolved = _resolve_job(state.files, current, job_id, prefix, inputs,
                                 callers if state.qualified else None, matrix)
         if "uses" in job:
@@ -124,6 +126,37 @@ def _visit(state: _ExpansionState, current: str, job_id: str,
             _record(state, resolved)
     state.active.remove(identity)
     state.visited.add(identity)
+
+
+
+def _mapped_outputs(document: dict[str, YamlValue], callers: tuple[JobIdentity, ...],
+                    outputs: tuple[ReplayOutput, ...]) -> tuple[ReplayOutput, ...]:
+    contract = get_on_section(document).get("workflow_call")
+    declared = contract.get("outputs", {}) if isinstance(contract, dict) else {}
+    if not isinstance(declared, dict) or len(declared) > 256:
+        raise ValueError("called workflow outputs are not a bounded declaration")
+    mapped: list[ReplayOutput] = []
+    for name, definition in declared.items():
+        if not isinstance(name, str) or not valid_output_name(name) or not isinstance(definition, dict):
+            raise ValueError("called workflow output lacks a source mapping")
+        expression = definition.get("value")
+        match = re.fullmatch(r"\s*\$\{\{\s*jobs\.([A-Za-z_][A-Za-z0-9_-]*)"
+                             r"\.outputs\.([A-Za-z_][A-Za-z0-9_-]*)\s*\}\}\s*", expression if isinstance(expression, str) else "")
+        if match is None:
+            raise ValueError("called workflow output mapping is not statically proven")
+        job = jobs_of(document).get(match[1])
+        job_outputs = job.get("outputs") if job is not None else None
+        if job is None or ("uses" not in job and (not isinstance(job_outputs, dict) or match[2] not in job_outputs)):
+            raise ValueError("called workflow output references an undeclared job output")
+        candidates = [item for item in outputs if item.identity and item.identity[:-1] == callers
+                      and item.identity[-1].job_id == match[1] and item.name == match[2]]
+        if not candidates:
+            continue  # Unrequested public outputs are not execution evidence.
+        if len(candidates) != 1 or candidates[0].identity[-1].matrix != "null":
+            raise ValueError("called workflow output has ambiguous producer identity")
+        item = candidates[0]
+        mapped.append(replace(item, identity=callers, name=name, origin=item.origin or item.identity))
+    return tuple(mapped)
 
 
 def _called(state: _ExpansionState, current: str, job: dict[str, YamlValue],
@@ -144,6 +177,8 @@ def _called(state: _ExpansionState, current: str, job: dict[str, YamlValue],
     state.caller_prefixes.add(caller_prefix)
     for child in jobs:
         _visit(state, callee, child, caller_prefix, ancestry + (current,), bound, callers)
+    if state.qualified and (state.outputs or state.mapped_outputs):
+        state.mapped_outputs.extend(_mapped_outputs(document, callers, state.outputs + tuple(state.mapped_outputs)))
 
 
 def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str | None, *,
@@ -164,4 +199,5 @@ def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str
             _visit(state, path, root, "", (), inputs)
     except ValueError as exc:
         return ReplayExpansion((), str(exc))
-    return ReplayExpansion(tuple(sorted(state.jobs, key=lambda job: job.source_job)))
+    return ReplayExpansion(tuple(sorted(state.jobs, key=lambda job: job.source_job)),
+                           outputs=state.outputs + tuple(state.mapped_outputs))

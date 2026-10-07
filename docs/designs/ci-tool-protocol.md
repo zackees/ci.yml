@@ -558,3 +558,14 @@ reject. Static callers with no output evidence continue to reject expressions.
 This is a graph-resolution primitive: runtime two-stage orchestration and
 reusable workflow public-output mapping remain pending. No new attestation
 eligibility follows from passing this primitive's conformance fixtures.
+
+
+Reusable-output mapping now follows literal
+`workflow_call.outputs.<name>.value = jobs.<job>.outputs.<output>` declarations
+through checked local calls, including nested calls. Each mapped record retains
+its original qualified executed-leaf identity and sequence. Missing mappings,
+undeclared jobs/outputs, malformed definitions, foreign caller scope and
+ambiguous matrix producers refuse the dependent graph. Unrequested public
+outputs do not become evidence. Fixture conformance covers this binding;
+receipt-driven runtime orchestration and actual second-adopter qualification
+remain pending.

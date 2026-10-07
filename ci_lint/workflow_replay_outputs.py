@@ -17,6 +17,11 @@ class ReplayOutput:
     name: str
     value: str
     seq: int
+    origin: tuple[JobIdentity, ...] = ()
+
+
+def valid_output_name(name: str) -> bool:
+    return _NAME.fullmatch(name) is not None
 
 
 def _outputs(raw: JsonValue, identity: tuple[JobIdentity, ...], seq: int) -> tuple[ReplayOutput, ...]:
@@ -24,7 +29,7 @@ def _outputs(raw: JsonValue, identity: tuple[JobIdentity, ...], seq: int) -> tup
         raise ValueError("workflow replay outputs must be a nonempty bounded string map")
     values: list[ReplayOutput] = []
     for name, value in raw.items():
-        if _NAME.fullmatch(name) is None or not isinstance(value, str):
+        if not valid_output_name(name) or not isinstance(value, str):
             raise ValueError("workflow replay output name or value is invalid")
         values.append(ReplayOutput(identity, name, value, seq))
     if len(json.dumps(raw, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > 65536:
@@ -67,4 +72,3 @@ def unique_json_object(pairs: Iterable[Sequence[JsonValue]]) -> dict[str, JsonVa
             raise ValueError("replay report has duplicate or invalid JSON keys")
         result[key] = pair[1]
     return result
-
