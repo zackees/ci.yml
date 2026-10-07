@@ -64,6 +64,74 @@ are `template-362-public-17-pristine-base-manifest.json`,
 `template-362-pristine-base-comparison.json`. These measurements are wall time
 and cache evidence; they do not measure complete workflow CPU time.
 
+### Source-only successor and definition-change control
+
+[Template PR #69](https://github.com/zackees/template-python-rust-cmd/pull/69)
+adds one JSON-control test and preserves the enrolled workflow/policy surfaces.
+Its original Bosn/act2 run `66198fac-5cfb-4bde-973b-83747bb9afa5` completed
+21/21 jobs, including the new test, and removed the private engine. The frontend
+took 324.502 seconds; owned outer cgroup CPU increased by 609.562 seconds,
+including nested Docker children and excluding the host frontend. An unchanged
+invocation reused all three lanes in 5.712 seconds and preserved the original
+four trailers and their execution timestamps. The exact published head is
+`0ad05efa99755e307ab6ab3290170bfb904bffc7`.
+[Hosted run 37642365563](https://github.com/zackees/template-python-rust-cmd/actions/runs/37642365563)
+is queued with no jobs at this observation; hosted skips remain unproven.
+
+[Template PR #70](https://github.com/zackees/template-python-rust-cmd/pull/70)
+repairs the pre-existing default-branch reuse job's missing consumer checkout
+and Python import path. Its
+[hosted run 37642588191](https://github.com/zackees/template-python-rust-cmd/actions/runs/37642588191)
+succeeded and explicitly reported `surface-changed`, `skip_fast=false` and
+`skip_dylint=false`; both remote jobs executed. This proves the definition-change
+fallback. The push-only repaired command still requires actual main-push proof.
+
+### Compiler payload lifecycle: repair contract, not implemented
+
+Native act2.14 cache audit of the owned persistent Template namespace found
+only two completed compile-delta archives, totaling 2,574,099 bytes, and no
+base or Dylint archive. The latest archive's inner delta contains 93 files,
+including 24 compiler `output-N` files totaling 4,580,292 bytes. Its retained
+baseline contains 73 compiler outputs totaling 69,342,364 bytes; none occur
+in the saved delta. Setup-soldr cooks dependencies before the consumer snapshots
+that baseline, even when the base restore misses. Those newly cooked outputs
+are therefore treated as pre-existing base objects and excluded from the delta,
+although no persistent local base holds them.
+
+Every observed saved compiler output is under `daemon-state/.../artifacts/`.
+Excluding the entire daemon-state tree would discard real reusable payload.
+Conversely, hashing the whole live tree includes unstable session/index metadata.
+The repair follows this sequence in both independent stores:
+
+1. The compiler/backend owner identifies completed reusable objects and their
+   integrity/compatibility metadata, including any data needed to replay compiler
+   output. Ci-lint and consumers must not infer that set from version-specific
+   directory names or duplicate the backend's generation parser.
+2. Capture the successfully restored immutable payload before any cooking or
+   build can mutate it. A genuine restore miss has an empty restored payload;
+   newly cooked dependencies must not become an alleged pre-existing base.
+3. Import compatible committed objects before cooking, using the backend's
+   supported generation/index lifecycle. Copying files into an already-running
+   daemon does not prove that the daemon can discover them.
+4. Publish new completed compiler objects at a successful build boundary,
+   including after an exact archive hit. Later test failure cannot create a
+   passing attestation; interruption or cache outage must preserve the prior
+   committed generation. Bosn owns local durable storage and coordination;
+   hosted writer policy remains independently governed by the declared flows.
+5. Apply deltas only against the exact immutable restored payload identity.
+   Preserve content validation: key equality or ignored digest mismatches cannot
+   authorize an overlay. Cache publication reports its own outcome independently
+   of execution qualification and cleanup.
+
+This is a required lifecycle contract, not a new cache layer or an implemented
+backend capability. Qualification must inspect newly saved objects and show
+substantially fewer compatible dependency misses in a fresh private engine,
+with all remaining misses classified. Unchanged attestation reuse alone does
+not establish this cache proof. The native audit and archive comparison are
+retained as `template-362-payload-store-audit.json` and
+`template-362-cold-base-payload-omission-proof.json`; these machine-local files
+are provenance, not public downloadable artifacts.
+
 ## Ownership and invocation
 
 `ci-lint`, distributed from `zackees/ci.yml`, owns policy interpretation,
