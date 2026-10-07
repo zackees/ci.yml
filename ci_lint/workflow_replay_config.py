@@ -18,6 +18,7 @@ class DeclaredReplayJob:
     source_job: str
     proof: ReplayJob
     lanes: tuple[str, ...]
+    derive_checks: bool = False
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,8 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     key = cursor.str_("key", required=not qualified)
     if key is None and qualified:
         key = ref
-    steps = cursor.list_str("steps")
+    derive_checks = qualified and "steps" not in raw
+    steps = cursor.list_str("steps", required=not qualified)
     cache_saves = cursor.list_str("cache-save-steps", required=False)
     minimal_skips = cursor.list_str("minimal-skip-steps", required=False)
     mode_step = cursor.str_("minimal-mode-step", required=False) or ""
@@ -63,7 +65,7 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     cursor.finish()
     if ref is None or re.fullmatch(JOB_REF, ref) is None:
         _bad(findings, source, path, "source-job must be a workflow basename and job id")
-    if not key or not key.strip() or not steps or len(set(steps)) != len(steps) or any(not step.strip() for step in steps):
+    if not key or not key.strip() or (not steps and not derive_checks) or len(set(steps)) != len(steps) or any(not step.strip() for step in steps):
         _bad(findings, source, path, "key and distinct executed check names must be nonempty")
     if len(set(cache_saves)) != len(cache_saves) or not set(cache_saves).issubset(steps):
         _bad(findings, source, path, "cache-save-steps must be distinct declared steps")
@@ -83,7 +85,7 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     if len(findings) != start or ref is None or key is None:
         return None
     return DeclaredReplayJob(ref, ReplayJob(key, tuple(steps), tuple(cache_saves), tuple(minimal_skips), mode_step,
-                                          tuple(pr_saves), tuple(input_skips)), tuple(lanes))
+                                          tuple(pr_saves), tuple(input_skips)), tuple(lanes), derive_checks)
 
 
 def _selected_job(cursor: Cursor, source: str, path: str,

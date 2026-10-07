@@ -18,6 +18,7 @@ from ci_lint.workflow_replay import ReplayExpectation, ReplayJob, ReplayInput, p
 from ci_lint.workflow_replay_config import ReplayConfig, DeclaredReplayJob
 from ci_lint.workflow_replay_expansion import expand_selection
 from ci_lint.workflow_replay_inputs import BoundInput
+from ci_lint.workflow_replay_checks import derive_checks
 from ci_lint.workflow_scan import load_workflows
 
 REPORT_ENV = "CI_LINT_GATE_REPLAY_REPORT"
@@ -65,7 +66,8 @@ def _execute(repo: Path, argv: tuple[str, ...], report: Path, *, report_source: 
 
 
 def _required_jobs(repo: Path, declared: tuple[DeclaredReplayJob, ...], *, workflow: str,
-                   selected: str | None, qualified: bool, inputs: tuple[ReplayInput, ...]) -> tuple[ReplayJob, ...]:
+                   selected: str | None, qualified: bool, inputs: tuple[ReplayInput, ...],
+                   mode: str, event: str) -> tuple[ReplayJob, ...]:
     if not qualified:
         return tuple(job.proof for job in declared)
     expanded = expand_selection(tuple(load_workflows(repo)), workflow, selected, qualified=True,
@@ -77,7 +79,8 @@ def _required_jobs(repo: Path, declared: tuple[DeclaredReplayJob, ...], *, workf
         raise ValueError("qualified replay has duplicate source-job declarations")
     if set(declarations) != {job.source_job for job in expanded.jobs}:
         raise ValueError("qualified replay declaration differs from the complete selected graph")
-    return tuple(replace(declarations[job.source_job].proof, key=job.key, identity=job.identity)
+    return tuple(derive_checks(job, mode=mode, event=event) if declarations[job.source_job].derive_checks else
+                 replace(declarations[job.source_job].proof, key=job.key, identity=job.identity)
                  for job in expanded.jobs)
 
 
@@ -98,7 +101,7 @@ def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig,
     inputs = selection.inputs if selection is not None else ()
     try:
         required = _required_jobs(repo, jobs, workflow=workflow, selected=chosen, qualified=config.qualified,
-                                  inputs=inputs)
+                                  inputs=inputs, mode=config.mode, event=event)
     except (OSError, ValueError) as exc:
         return CheckedCommand(1, f"workflow replay proof rejected before execution: {exc}")
     expectation = ReplayExpectation(config.repository, repo, head, tree, workflow,

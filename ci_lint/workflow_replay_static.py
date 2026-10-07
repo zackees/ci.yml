@@ -11,6 +11,7 @@ from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig
 from ci_lint.workflow_replay_expansion import ExpandedJob, expand_selection
 from ci_lint.workflow_replay_inputs import BoundInput
 from ci_lint.workflow_replay_input_skips import excluded_input_steps
+from ci_lint.workflow_replay_checks import derive_checks
 from ci_lint.workflow_scan import ParsedYamlFile, as_dict, jobs_of, load_workflows, steps_of
 from ci_lint.yaml_io import YamlValue
 
@@ -151,6 +152,23 @@ def _check_pr_selections(config: ReplayConfig) -> list[Finding]:
     return findings
 
 
+def _check_declared_checks(config: ReplayConfig, declared: DeclaredReplayJob, job: dict[str, YamlValue],
+                           expanded: tuple[ExpandedJob, ...], path: str,
+                           defaults: YamlValue) -> list[Finding]:
+    if not declared.derive_checks:
+        return (_check_job(declared, job, path, defaults, config.mode, qualified=config.qualified)
+                + _check_input_skips(declared, job, expanded, path))
+    try:
+        if not config.qualified or not expanded:
+            raise ValueError("source-derived replay has no qualified selected executions")
+        for item in expanded:
+            derive_checks(item, mode=config.mode, event="pull_request")
+    except ValueError as exc:
+        return [Finding(rule="GATE-001", path=path, message=str(exc),
+                        fix="give every executable step a unique resolvable name; preserve required checks")]
+    return []
+
+
 def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
     files = tuple(load_workflows(repo))
     workflows = {item.path: item for item in files}
@@ -188,6 +206,5 @@ def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
             continue
         if not config.qualified and "uses" not in job and "strategy" not in job:
             findings.extend(_check_identity(declared, document, job, path, keys))
-        findings.extend(_check_job(declared, job, path, document.get("defaults"), config.mode, qualified=config.qualified))
-        findings.extend(_check_input_skips(declared, job, expanded, path))
+        findings.extend(_check_declared_checks(config, declared, job, expanded, path, document.get("defaults")))
     return findings

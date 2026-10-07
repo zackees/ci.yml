@@ -21,6 +21,19 @@ lanes = ["tests"]
 
 
 class ReplayDeclarationTest(unittest.TestCase):
+    def test_qualified_omitted_steps_derive_checks_from_source(self) -> None:
+        document = DECLARATION.replace('mode = "minimal"', 'mode = "minimal"\nqualified = true')
+        document = document.replace('steps = ["Run tests"]\n', '')
+        findings: list[Finding] = []
+        config = parse_replay(tomllib.loads(document), source="local-gate.toml", path="gate.replay", findings=findings)
+        self.assertEqual(findings, [])
+        assert config is not None
+        self.assertTrue(config.jobs[0].derive_checks)
+        for addition in ('steps = []\n', 'input-skip-steps = ["Run tests"]\n'):
+            findings = []
+            self.assertIsNone(parse_replay(tomllib.loads(document + addition), source="local-gate.toml",
+                                          path="gate.replay", findings=findings))
+
     def test_qualified_declarations_do_not_repeat_display_names(self) -> None:
         document = DECLARATION.replace('mode = "minimal"', 'mode = "minimal"\nqualified = true')
         document = document.replace('key = "CI/Tests"\n', '')

@@ -685,8 +685,17 @@ Per-gate trailers emitted from reused passes retain the original execution time.
 
 `[gate.replay] qualified = true` derives execution identities from the selected
 workflow graph: caller IDs and every literal caller/leaf matrix leg. In this
-mode `key` is optional and diagnostic; each `source-job` is declared once,
-including its mandatory checks. The runner must supply matching structured
+mode `key` is optional and diagnostic; each `source-job` is declared once.
+Omitting `steps` derives every executable step and its name from the source
+for each bound caller profile; explicitly empty `steps` is invalid. Explicit
+step lists keep their existing checked contract. Derived declarations cannot
+supply manual skip lists. Input interpolation may resolve a step name; every
+resulting name must be unique and nonempty. The same finite source condition
+proof is used by static validation and runtime. Unknown guards leave checks
+mandatory. Derived proof additionally binds the declared receipt event and
+excludes failure/cancellation diagnostics only while requiring all validation
+steps to succeed. Excluded steps still need explicit completed, skipped Main
+evidence. The runner must supply matching structured
 `identity` components and consistent leaf `job_id`/`matrix` fields. Dynamic,
 duplicate or unbounded matrices and missing/duplicate execution identities
 reject. This opt-in verifier is implemented; deployed runner qualification and
@@ -737,7 +746,7 @@ the whole enforcement (this repository's own `local-gate.toml`).
 
 For a PR replay in either mode, `pr-cache-save-steps` names a disjoint subset of `steps` excluded by a non-PR writer guard. Static binding accepts only an official `actions/cache/save` action with nonempty `path` and `key`, no `run`, and exactly `github.event_name != 'pull_request'` or `github.ref == 'refs/heads/main'`, optionally followed by ` && steps.<id>.outputs.cache-hit != 'true'`. Expression wrappers are allowed; other guards are unknown. Each declared save must have exactly one completed, skipped Main section; successful execution, absence, failure, cancellation and Post-only evidence reject. Dispatch selections cannot declare these exclusions. Unlike an exact-hit save, exclusion follows from the PR event rather than a restored cache, so this concession requires no matching restore and establishes no cache-payload or writer compliance. Validation commands, restores, install steps and general conditional actions remain mandatory.
 
-For explicit local reusable selections, `input-skip-steps` declares a disjoint subset of `steps` excluded by the caller’s statically bound string inputs. Static binding recognizes exactly `inputs.<id> != ''` with a known empty value, and `steps.<id>.outcome == 'success'` when the unique earlier producer is itself proven excluded. Expression wrappers are allowed; literal `if: false`, unknown inputs, other operators and arbitrary expressions are not waivers. Every selected caller binding must establish the exclusions. Runtime requires an explicit completed, skipped Main section for each excluded step; execution success, failure, absence and duplicate evidence reject. Every remaining step, including fallback source builds and validation, remains mandatory. This establishes exclusion from the actual selected workflow, not coverage of a branch using a nonempty input.
+For explicit local reusable selections, `input-skip-steps` declares a disjoint subset of `steps` excluded by the caller’s statically bound typed inputs. The shared finite condition proof supports input strings/booleans, same-type `==`/`!=`, ASCII case-insensitive string comparisons and `contains`, `&&`/`||` and parentheses. It also binds `steps.<id>.outcome` to `skipped` when the unique earlier producer is itself proven excluded. Expression wrappers are allowed; constants alone, unknown inputs and mixed-type comparisons never establish an exclusion. Every selected caller binding must establish the exclusions. Runtime requires an explicit completed, skipped Main section for each excluded step; execution success, failure, absence and duplicate evidence reject. Every remaining step, including fallback source builds and validation, remains mandatory. This establishes exclusion from the actual selected workflow, not coverage of a branch using a nonempty input.
 
 For lane-specific selections, each `[[gate.replay.selections]]` declares `lane`, either the selected `job` id or `all-jobs = true`, `event = "pull_request"` or `"workflow_dispatch"`, and optional string-valued `inputs = { tier = "test" }`. An optional `workflow = "dylint.yml"` basename selects a different entrypoint for that lane; omission retains `[gate.replay].workflow`. The lane must cover exactly the named job and its recursively resolved `needs` dependencies, or every concrete job and dependency in the explicit whole-workflow selection. `job` and `all-jobs = true` are mutually exclusive; omitting both is invalid. A whole-workflow receipt must carry no job filter, and its workflow must match the lane’s entrypoint exactly. Missing or unreachable job claims are violations; dynamic dependency expressions and cycles cannot establish proof. Runtime input matching is exact, so a minimal-tier receipt cannot satisfy a test-tier expectation. Without selections, the default event is `pull_request`. A multi-selection full/opaque command is currently rejected; use individual lane commands.
 

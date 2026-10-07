@@ -55,7 +55,9 @@ matrix expansion must all remain distinguishable. The act2 PR #30 implementation
 is the candidate to qualify; its existence does not establish deployment.
 
 `[gate.replay] qualified = true` enables source-derived identities. A declaration
-names each `source-job` and its checks once; `key` is optional in this mode.
+names each `source-job` once; `key` is optional in this mode. Omitting `steps`
+derives every executable check from the workflow source for each execution;
+explicit step declarations retain their existing checked contract.
 The shared workflow resolver expands every selected caller, prerequisite and
 literal matrix leg. Literal products, exclusions and includes are supported;
 expressions, duplicate legs and graphs exceeding the bounds reject before
@@ -67,8 +69,24 @@ matrix references. Each caller leg gets its own binding. Boolean `false` stays
 false; the string `"false"` is not coerced into a boolean. Missing exact input
 or matrix references and type mismatches reject before running the selected
 graph. Other runner-context expressions remain unknown and cannot establish
-an execution identity or justify a skipped check. This binding
-does not yet interpret compound step conditions or derive per-profile checks.
+an execution identity or justify a skipped check.
+
+Source-derived checks bind input interpolation in step names and reject
+unnamed, empty, duplicate or unresolved names. Their finite condition proof
+supports typed inputs, same-type equality, ASCII case-insensitive string
+comparisons/`contains`, boolean grouping and the declared receipt event.
+Unknown contexts and mixed-type comparisons remain unknown. A known false
+profile condition may exclude a step even when another operand is unknown;
+an unknown condition leaves the check mandatory. This follows the relevant
+[GitHub expression semantics](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions)
+without running workflow expressions. The syntax is bounded to 4096 characters
+and 256 AST nodes. Constants alone never waive checks.
+
+Failure/cancellation diagnostics are excluded only in the proof that requires
+all selected validation checks to succeed. Every source-excluded check still
+needs exactly one completed, skipped Main section. Missing, failed, cancelled
+or unexpectedly executed excluded checks reject. Existing exact-hit save and
+minimal-mode guard classifiers are shared with explicit declarations.
 
 The terminal Bosn job document carries `identity`, an ordered list of
 `{jobID, matrix}` components from root caller to leaf. `matrix` is an object or
@@ -81,9 +99,10 @@ are identical. Bounds are 32 identity components, 64 KiB per identity,
 Current implementation proof is fixture conformance, including the runtime
 adapter reading real temporary workflow files. Runner capability negotiation
 and deployed Bosn/act2 qualification are still pending. The clud source audit
-also found unnamed steps and conditional profiles that need source-derived
-checks before the generic verifier can replace its private gate script;
-these findings do not justify accepting arbitrary skipped checks.
+now resolves the five routine selections after naming their unnamed steps,
+including the three unit matrix legs. This is source conformance, not actual
+execution proof. Generic full-run receipts, provider compatibility and the
+adopter command still need qualification before replacing the private script.
 
 The existing trailer stamp is a content checksum, not a digital signature.
 Writer trust, trusted base policy and audit runs remain necessary. Merely

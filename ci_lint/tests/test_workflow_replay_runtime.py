@@ -15,6 +15,52 @@ from ci_lint.workflow_replay_runtime import _read_report, run_checked_command
 
 class ReplayRuntimeTest(WorkflowReplayTest):
     @requires_yaml_tooling
+    def test_source_derived_runtime_requires_each_bound_profile(self) -> None:
+        workflows = self.workspace / ".github" / "workflows"
+        workflows.mkdir(parents=True)
+        (workflows / "ci.yml").write_text(
+            "jobs:\n  lint:\n    uses: ./.github/workflows/check.yml\n"
+            "    with: {compile: false, clippy: true}\n"
+            "  build:\n    uses: ./.github/workflows/check.yml\n"
+            "    with: {compile: true, clippy: false}\n")
+        (workflows / "check.yml").write_text(
+            "on:\n  workflow_call:\n    inputs:\n"
+            "      compile: {type: boolean}\n      clippy: {type: boolean}\n"
+            "jobs:\n  tests:\n    steps:\n"
+            "      - {name: Run tests, run: tests, if: inputs.compile}\n"
+            "      - {name: Clippy, run: lint, if: inputs.clippy}\n"
+            "      - {name: Failure log, run: diagnostic, if: 'failure()'}\n")
+        config = replace(self.config(), qualified=True, report_source="stdout", jobs=(
+            replace(self.config().jobs[0], source_job="check.yml:tests", derive_checks=True),))
+        original = self.raw["tree"]["groups"][0]["jobs"][0]
+        jobs = []
+        for caller in ("lint", "build"):
+            job = copy.deepcopy(original)
+            job.update(job_id="tests", matrix=None, identity=[
+                {"jobID": caller, "matrix": None}, {"jobID": "tests", "matrix": None}])
+            base = copy.deepcopy(original["sections"][0])
+            job["sections"] = []
+            for name, executed in (("Run tests", caller == "build"), ("Clippy", caller == "lint"), ("Failure log", False)):
+                job["sections"].append({**base, "name": name, "stage": "Main", "status": "completed",
+                                        "conclusion": "success" if executed else "skipped",
+                                        "first_seq": 1 if executed else None, "last_seq": 2 if executed else None})
+            jobs.append(job)
+        self.raw["tree"]["groups"][0]["jobs"] = jobs
+        fixture = self.workspace / "profiles.json"
+        command = self.command(f"print(pathlib.Path({str(fixture)!r}).read_text())\n")
+        for conclusion, valid in (("success", True), ("skipped", False), ("failure", False)):
+            jobs[0]["sections"][1]["conclusion"] = conclusion
+            fixture.write_text(json.dumps(self.raw))
+            outcome = run_checked_command(self.workspace, command, config,
+                                          head=self.expected.sha, tree=self.expected.git_tree)
+            self.assertEqual(outcome.returncode == 0, valid, outcome.error)
+        jobs[0]["sections"].pop(1)
+        fixture.write_text(json.dumps(self.raw))
+        outcome = run_checked_command(self.workspace, command, config,
+                                      head=self.expected.sha, tree=self.expected.git_tree)
+        self.assertEqual(outcome.returncode, 1)
+
+    @requires_yaml_tooling
     def test_qualified_runtime_derives_all_caller_and_leaf_legs(self) -> None:
         workflows = self.workspace / ".github" / "workflows"
         workflows.mkdir(parents=True)
