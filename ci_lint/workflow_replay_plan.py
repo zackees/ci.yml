@@ -5,12 +5,14 @@ from pathlib import Path
 
 from ci_lint.workflow_replay import ReplayInput, ReplayJob
 from ci_lint.workflow_replay_checks import derive_checks
+from ci_lint.workflow_replay_conditions import condition_output_references
+from ci_lint.workflow_replay_dependencies import _needs
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig, ReplaySelection
 from ci_lint.workflow_replay_expansion import ExpandedJob, OutputProver, expand_selection
 from ci_lint.workflow_replay_identity import JobIdentity
 from ci_lint.workflow_replay_inputs import BoundInput
-from ci_lint.workflow_replay_outputs import ReplayOutput
-from ci_lint.workflow_scan import ParsedYamlFile, load_workflows
+from ci_lint.workflow_replay_outputs import ReplayOutput, PendingOutput, dependency_output
+from ci_lint.workflow_scan import ParsedYamlFile, load_workflows, as_dict, steps_of
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,22 @@ def declared_check(declared: DeclaredReplayJob, expanded: ExpandedJob, *, mode: 
             replace(declared.proof, key=expanded.key, identity=expanded.identity))
 
 
+def _pending_guards(expanded: ExpandedJob) -> bool:
+    job = as_dict(expanded.job)
+    dependencies = _needs(job)
+    conditions = (job.get("if"), *(step.get("if") for step in steps_of(job)))
+    pending = False
+    for condition in conditions:
+        for reference in condition_output_references(condition):
+            if reference.producer not in dependencies:
+                continue  # An unknown context cannot excuse a required check.
+            try:
+                dependency_output(expanded.outputs, expanded.identity[:-1], reference.producer, reference.name)
+            except PendingOutput:
+                pending = True
+    return pending
+
+
 def _required(files: tuple[ParsedYamlFile, ...], config: ReplayConfig,
               selection: ReplaySelection, jobs: tuple[DeclaredReplayJob, ...], *,
               defer_outputs: bool = False, prove_outputs: OutputProver | None = None) -> ReplayRequirements:
@@ -51,17 +69,21 @@ def _required(files: tuple[ParsedYamlFile, ...], config: ReplayConfig,
     declarations = {job.source_job: job for job in jobs}
     if len(declarations) != len(jobs):
         raise ValueError("qualified replay has duplicate source-job declarations")
+    pending_guards = False
 
     def preflight(expanded: ExpandedJob) -> tuple[ReplayOutput, ...]:
+        nonlocal pending_guards
         declared = declarations.get(expanded.source_job)
         if declared is None:
             raise ValueError("qualified replay producer has no source declaration")
         declared_check(declared, expanded, mode=config.mode, event=selection.event)
+        pending_guards = pending_guards or (declared.derive_checks and _pending_guards(expanded))
         return ()
 
     expanded = expand_selection(files, selection.workflow or config.workflow, selection.selected_job, qualified=True,
                                 inputs=tuple(BoundInput(item.name, item.value) for item in selection.inputs),
-                                prove_outputs=prove_outputs or (preflight if defer_outputs else None))
+                                prove_outputs=prove_outputs or (preflight if defer_outputs else None),
+                                event=selection.event)
     if expanded.pending and defer_outputs:
         return ReplayRequirements((), pending=True)
     if expanded.problem:
@@ -72,7 +94,7 @@ def _required(files: tuple[ParsedYamlFile, ...], config: ReplayConfig,
                    for job in expanded.jobs)
     if all(proof.excluded for proof in proofs):
         raise ValueError("qualified replay selection has no required executed job")
-    return ReplayRequirements(proofs)
+    return ReplayRequirements(proofs, pending=pending_guards)
 
 
 def _full(config: ReplayConfig, files: tuple[ParsedYamlFile, ...], *,

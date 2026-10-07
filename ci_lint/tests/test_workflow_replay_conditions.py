@@ -2,13 +2,20 @@
 
 import unittest
 
-from ci_lint.workflow_replay_conditions import condition_excludes
+from ci_lint.workflow_replay_conditions import condition_excludes, condition_output_references, GuardOutput
 from ci_lint.workflow_replay_inputs import BoundInput
 from ci_lint.workflow_replay_identity import JobIdentity
 from ci_lint.workflow_replay_outputs import ReplayOutput
 
 
 class ConditionProofTest(unittest.TestCase):
+    def test_output_reference_discovery_reuses_parser_and_ignores_strings(self):
+        self.assertEqual(condition_output_references(
+            "${{ contains(fromJSON(needs.plan.outputs.suites), 'needs.other.outputs.fake') }}"),
+            (GuardOutput("plan", "suites"),))
+        for expression in ("'needs.plan.outputs.test' == 'true'", "needs.plan.outputs.test + 1", False):
+            self.assertEqual(condition_output_references(expression), ())
+
     def setUp(self):
         self.inputs = (BoundInput("compile", False), BoundInput("profile", "dev"),
                        BoundInput("artifact", ""), BoundInput("target", "linux-x64"))

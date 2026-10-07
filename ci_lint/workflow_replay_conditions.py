@@ -11,6 +11,7 @@ from ci_lint.workflow_replay_outputs import ReplayOutput, dependency_output
 from ci_lint.yaml_io import YamlValue
 
 _TOKEN = re.compile(r"\s+|'(?:[^']|'')*'|[A-Za-z_][A-Za-z0-9_.-]*|&&|\|\||==|!=|[!(),]")
+_OUTPUT_REFERENCE = re.compile(r"needs\.([A-Za-z_][A-Za-z0-9_-]*)\.outputs\.([A-Za-z_][A-Za-z0-9_-]*)")
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,12 @@ class GuardValue:
 class GuardReference:
     name: str
     reference: str
+
+
+@dataclass(frozen=True)
+class GuardOutput:
+    producer: str
+    name: str
 
 
 @dataclass(frozen=True)
@@ -86,6 +93,25 @@ def _name(context: GuardContext, identifier: str) -> str:
     return next((item.reference for item in context.references if item.name == identifier), "")
 
 
+def _parsed_condition(expression: YamlValue) -> ParsedGuard:
+    if not isinstance(expression, str) or len(expression) > 4096:
+        raise ValueError("unsupported condition")
+    expression = expression.strip()
+    if expression.startswith("${{") and expression.endswith("}}"):
+        expression = expression[3:-2].strip()
+    return _parse(expression)
+
+
+def condition_output_references(expression: YamlValue) -> tuple[GuardOutput, ...]:
+    """Find output references through the same bounded condition parser."""
+    try:
+        parsed = _parsed_condition(expression)
+    except (SyntaxError, ValueError, RecursionError):
+        return ()
+    return tuple(GuardOutput(match[1], match[2]) for item in parsed.references
+                 if (match := _OUTPUT_REFERENCE.fullmatch(item.reference)) is not None)
+
+
 def _scalar(value: str | bool, *, bound: bool = False) -> GuardValue:
     return GuardValue(value, bool(value), bound)
 
@@ -100,7 +126,7 @@ def _reference(reference: str, context: GuardContext) -> GuardValue:
     match = re.fullmatch(r"steps\.([A-Za-z0-9_-]+)\.outcome", reference)
     if match and match[1] in context.producers:
         return _scalar("skipped", bound=True)
-    match = re.fullmatch(r"needs\.([A-Za-z_][A-Za-z0-9_-]*)\.outputs\.([A-Za-z_][A-Za-z0-9_-]*)", reference)
+    match = _OUTPUT_REFERENCE.fullmatch(reference)
     if match and match[1] in context.dependencies:
         try:
             output = dependency_output(context.outputs, context.scope, match[1], match[2])
@@ -211,13 +237,8 @@ def condition_excludes(expression: YamlValue, inputs: tuple[BoundInput, ...],
     selected validation. It then excludes failure/cancellation diagnostics.
     Mixed-type comparisons and unrecognized contexts remain unknown.
     """
-    if not isinstance(expression, str) or len(expression) > 4096:
-        return False
-    expression = expression.strip()
-    if expression.startswith("${{") and expression.endswith("}}"):
-        expression = expression[3:-2].strip()
     try:
-        parsed = _parse(expression)
+        parsed = _parsed_condition(expression)
         context = GuardContext(inputs, frozenset(producers), parsed.references, successful, event,
                                outputs, dependencies, scope)
         result = _value(parsed.node.body, context)

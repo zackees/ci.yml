@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 from ci_lint.workflow_replay_dependencies import _needs
+from ci_lint.workflow_replay_conditions import condition_excludes
 from ci_lint.workflow_replay_inputs import BoundInput, bind_call_inputs, bound_name
 from ci_lint.workflow_replay_identity import JobIdentity, identity_part, bounded_identity
 from ci_lint.workflow_replay_matrix import job_matrices
@@ -83,6 +84,7 @@ class _ExpansionState:
     outputs: tuple[ReplayOutput, ...] = ()
     mapped_outputs: list[ReplayOutput] = field(default_factory=list)
     prove_outputs: OutputProver | None = None
+    event: str | None = None
 
 
 def _record(state: _ExpansionState, resolved: ExpandedJob) -> None:
@@ -114,6 +116,19 @@ def _begin(state: _ExpansionState, identity: str) -> bool:
     return True
 
 
+def _matrices(state: _ExpansionState, job: dict[str, YamlValue], inputs: tuple[BoundInput, ...],
+              callers: tuple[JobIdentity, ...]) -> tuple[str, ...]:
+    if not state.qualified:
+        return ("null",)
+    outputs = state.outputs + tuple(state.mapped_outputs)
+    # GitHub evaluates a concrete job's condition before matrix expansion.
+    # A bound false condition retains one explicit skipped job, never zero jobs.
+    if "uses" not in job and condition_excludes(job.get("if"), inputs, set(), event=state.event,
+                                                outputs=outputs, dependencies=_needs(job), scope=callers):
+        return ("null",)
+    return job_matrices(job, outputs=outputs, scope=callers)
+
+
 def _visit(state: _ExpansionState, current: str, job_id: str,
            prefix: str, ancestry: tuple[str, ...], inputs: tuple[BoundInput, ...] = (),
            callers: tuple[JobIdentity, ...] = ()) -> None:
@@ -127,7 +142,7 @@ def _visit(state: _ExpansionState, current: str, job_id: str,
         raise ValueError(f"dependency job {current}:{job_id} does not exist")
     for dependency in _needs(job):
         _visit(state, current, dependency, prefix, ancestry, inputs, callers)
-    for matrix in job_matrices(job, outputs=state.outputs + tuple(state.mapped_outputs), scope=callers) if state.qualified else ("null",):
+    for matrix in _matrices(state, job, inputs, callers):
         resolved = _resolve_job(state.files, current, job_id, prefix, inputs,
                                 callers if state.qualified else None, matrix)
         if "uses" in job:
@@ -194,14 +209,15 @@ def _called(state: _ExpansionState, current: str, job: dict[str, YamlValue],
 def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str | None, *,
                      qualified: bool = False, inputs: tuple[BoundInput, ...] = (),
                      outputs: tuple[ReplayOutput, ...] = (),
-                     prove_outputs: OutputProver | None = None) -> ReplayExpansion:
+                     prove_outputs: OutputProver | None = None, event: str | None = None) -> ReplayExpansion:
     """Exclude virtual callers; require all their concrete jobs and prerequisites.
 
     Qualified mode derives caller IDs and every literal matrix leg from the
     source, optionally resolving matrices from previously proved outputs.
     Legacy display-name mode cannot disambiguate repeated callers.
     """
-    state = _ExpansionState(files, [], set(), set(), set(), qualified, outputs, prove_outputs=prove_outputs)
+    state = _ExpansionState(files, [], set(), set(), set(), qualified, outputs,
+                            prove_outputs=prove_outputs, event=event)
     try:
         roots = (selected,) if selected is not None else tuple(jobs_of(_document(files, path)))
         if not roots:

@@ -544,8 +544,7 @@ aggregation, unsupported expressions, duplicate JSON keys, oversized expansion
 and missing or refused evidence reject proof. A producer-provided empty matrix
 cannot remove coverage without proving the source policy that permits it.
 The bounded runtime extension below implements this resolution for supported
-expressions. Guard-only output deferral, pre-matrix job exclusions and
-end-to-end hosted qualification remain pending.
+expressions. Actual adopter and end-to-end hosted qualification remain pending.
 
 
 The shared matrix expander now accepts already-proved dependency outputs for
@@ -593,11 +592,31 @@ expressions also remain unknown. The source-derived check contract snapshots
 only outputs already accepted by dependency execution proof. Every excluded
 step still requires an explicit completed/skipped Main section in the receipt;
 omission, failure, success, another stage or an unfinished section rejects.
-This is implemented on the existing deferred matrix runtime path and exercised
-by a child-process receipt fixture. Jobs with output guards but no dynamic
-matrix still need a deferred preflight path; a false job guard must be proved
-before permitting an empty dynamic matrix. Neither adopter nor hosted skip
+Preflight now discovers output references through the same bounded condition
+parser, ignoring quoted strings. A source-derived job whose conditions require
+unavailable declared dependency outputs enters the existing deferred runtime
+path even without a dynamic matrix. Preflight continues checking source names
+and declaration coverage; deferred state cannot itself produce a pass. Queried
+providers older than act2.13 refuse before the child executes.
+
+For concrete jobs, a bound false job condition is evaluated before matrix
+expansion. It retains one nonmatrix identity whose receipt must show a completed
+skipped job with no sections. This permits a policy-guarded empty dynamic
+matrix; an empty matrix without that proof still rejects. Virtual reusable
+callers retain their existing traversal and do not gain this exclusion. The
+child-process receipt fixture preserves ordinary executed tests alongside the
+excluded platform job, rejects missing/refused/early/unproved planner evidence,
+and rejects a constant-false coverage waiver. Neither adopter nor hosted skip
 qualification is claimed by these fixtures.
+
+A small workflow executed with the released act2.13 Linux binary
+(`48541dd9f8d579a6521dba02cbeec207c12359220c504ec3b2424dce8b79c5db`)
+also confirms the producer behavior: its planner emits `lanes=[]`, an ordinary
+dependent test executes successfully, and the guarded platform job emits
+`jobResult=skipped` with qualified identity `platforms` and an empty matrix.
+This is producer conformance, separate from a Bosn receipt or an adopter's
+attestation. The local evidence bundle is
+`/tmp/ci-cpu-investigation/act2-empty-matrix-362-XXXXXX/evidence.json`.
 
 [Act2 release .13](https://github.com/zackees/act2/releases/tag/v0.2.89-act2.13)
 is now published after exact merged-commit full CI
