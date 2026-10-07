@@ -136,7 +136,8 @@ no source proof or passing result. The compiled candidate query and focused
 CLI/identity tests and all five PR checks pass. Bosn consumption is committed
 in its adoption worktree (`128de149`): bootstrap and offline readiness share
 a typed, bounded validator of the same digest-verified binary. Isolated
-engine/pin/runner tests and Clippy passed. A compatible release is pending.
+engine/pin/runner tests and Clippy passed. The compatible release is published;
+Bosn pin adoption is under isolated qualification.
 
 Act2's exact merged release candidate is
 `0c9947b7d75a61edb6bcde3087614c00321a23a1`;
@@ -146,9 +147,16 @@ The clean default-branch checkout and live master matched before publishing;
 the tag and release were both absent. Tag `v0.2.89-act2.11` now names this
 qualified candidate. The existing
 [release workflow run 37572787591](https://github.com/zackees/act2/actions/runs/37572787591)
-is packaging it; artifact verification and Bosn pin adoption remain pending.
-Verify archive and extracted executable hashes plus the actual capability
-response before changing Bosn's pins.
+completed successfully. The published Linux x86_64 archive was downloaded
+and verified against `checksums.txt`: archive SHA-256
+`753d2f1e9db1d31088ef0de372b5b124e932481d3b4987ad420de8ce278c9e64`,
+extracted regular executable SHA-256
+`bd9c112f9fb54eb159e6b45a1223f9ed6e84e8e5ee6f9a1cb27c1d6f913a1c4d`.
+The actual executable reports version `0.2.89-act2.11` and schema-1
+`act2` capabilities `qualified-job-identity-v1` and `step-stage-result-v1`,
+even with a nonexistent workflow path and Docker socket. Bosn's adoption
+worktree now uses these verified artifact pins; isolated checks and actual
+adopter execution must qualify that change before deployment.
 
 Clud's adoption candidate (`060373a7`) now declares the generic replay
 mappings and invokes Bosn directly. Its source-derived full union is eight
