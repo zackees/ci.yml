@@ -9,7 +9,6 @@ import stat
 import subprocess
 import tempfile
 import time
-from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import BinaryIO
@@ -17,6 +16,7 @@ from typing import BinaryIO
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.execution_pins import ExecutionPins, parse_execution_pins
 from ci_lint.workflow_replay import ReplayExpectation, prove_replay
+from ci_lint.workflow_replay_outputs import unique_json_object
 from ci_lint.workflow_replay_config import ReplayConfig
 from ci_lint.workflow_replay_plan import build_plan
 from ci_lint.full_run_receipt import FullRunEvidence, ReceiptPass
@@ -32,21 +32,11 @@ class CheckedCommand:
     full_run: FullRunEvidence | None = None
 
 
-def _unique_object(pairs: Iterable[Sequence[JsonValue]]) -> dict[str, JsonValue]:
-    result: dict[str, JsonValue] = {}
-    for pair in pairs:
-        key = pair[0]
-        if not isinstance(key, str) or key in result:
-            raise ValueError("replay report has duplicate or invalid JSON keys")
-        result[key] = pair[1]
-    return result
-
-
 def _read_report(path: Path, *, max_bytes: int = MAX_REPORT_BYTES) -> JsonValue:
     metadata = path.lstat()
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > max_bytes:
         raise ValueError(f"replay report must be a regular file no larger than {max_bytes} bytes")
-    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object)
+    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_json_object)
 
 
 def query_execution_pins(repo: Path, config: ReplayConfig | None) -> ExecutionPins | None:

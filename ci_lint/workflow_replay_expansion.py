@@ -8,6 +8,7 @@ from ci_lint.workflow_replay_dependencies import _needs
 from ci_lint.workflow_replay_inputs import BoundInput, bind_call_inputs, bound_name
 from ci_lint.workflow_replay_identity import JobIdentity, identity_part, bounded_identity
 from ci_lint.workflow_replay_matrix import job_matrices
+from ci_lint.workflow_replay_outputs import ReplayOutput
 from ci_lint.workflow_scan import ParsedYamlFile, get_on_section, jobs_of
 from ci_lint.yaml_io import YamlValue
 
@@ -72,6 +73,7 @@ class _ExpansionState:
     active: set[str]
     caller_prefixes: set[str]
     qualified: bool = False
+    outputs: tuple[ReplayOutput, ...] = ()
 
 
 def _record(state: _ExpansionState, resolved: ExpandedJob) -> None:
@@ -113,7 +115,7 @@ def _visit(state: _ExpansionState, current: str, job_id: str,
         raise ValueError(f"dependency job {current}:{job_id} does not exist")
     for dependency in _needs(job):
         _visit(state, current, dependency, prefix, ancestry, inputs, callers)
-    for matrix in job_matrices(job) if state.qualified else ("null",):
+    for matrix in job_matrices(job, outputs=state.outputs, scope=callers) if state.qualified else ("null",):
         resolved = _resolve_job(state.files, current, job_id, prefix, inputs,
                                 callers if state.qualified else None, matrix)
         if "uses" in job:
@@ -145,13 +147,15 @@ def _called(state: _ExpansionState, current: str, job: dict[str, YamlValue],
 
 
 def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str | None, *,
-                     qualified: bool = False, inputs: tuple[BoundInput, ...] = ()) -> ReplayExpansion:
+                     qualified: bool = False, inputs: tuple[BoundInput, ...] = (),
+                     outputs: tuple[ReplayOutput, ...] = ()) -> ReplayExpansion:
     """Exclude virtual callers; require all their concrete jobs and prerequisites.
 
     Qualified mode derives caller IDs and every literal matrix leg from the
-    source. Legacy display-name mode cannot disambiguate repeated callers.
+    source, optionally resolving matrices from previously proved outputs.
+    Legacy display-name mode cannot disambiguate repeated callers.
     """
-    state = _ExpansionState(files, [], set(), set(), set(), qualified)
+    state = _ExpansionState(files, [], set(), set(), set(), qualified, outputs)
     try:
         roots = (selected,) if selected is not None else tuple(jobs_of(_document(files, path)))
         if not roots:

@@ -1,24 +1,29 @@
-"""Bounded literal workflow matrices; expressions cannot prove coverage."""
+"""One bounded matrix expander for literals and proved dependency outputs."""
 
 import itertools
 import json
 import math
+import re
 
-from ci_lint.workflow_replay_identity import matrix_json
+from ci_lint.workflow_replay_identity import JobIdentity, matrix_json
+from ci_lint.workflow_replay_outputs import ReplayOutput, unique_json_object
+from ci_lint.workflow_replay_dependencies import _needs
 from ci_lint.yaml_io import YamlValue
 
 MAX_MATRIX = 256
 
 
-def _literal(value: YamlValue) -> None:
+def _literal(value: YamlValue, depth: int = 0) -> None:
+    if depth > 32 or (isinstance(value, float) and not math.isfinite(value)):
+        raise ValueError("matrix has excessive depth or nonfinite values")
     if isinstance(value, str) and "${{" in value:
         raise ValueError("dynamic matrix expansion is not statically proven")
     if isinstance(value, dict):
         for child in value.values():
-            _literal(child)
+            _literal(child, depth + 1)
     if isinstance(value, list):
         for child in value:
-            _literal(child)
+            _literal(child, depth + 1)
 
 
 def _entries(matrix: dict[str, YamlValue], name: str) -> list[dict[str, YamlValue]]:
@@ -57,7 +62,33 @@ def _apply_includes(rows: list[dict[str, YamlValue]], includes: list[dict[str, Y
     rows.extend(extras)
 
 
-def job_matrices(job: dict[str, YamlValue]) -> tuple[str, ...]:
+
+def _resolved(value: YamlValue, job: dict[str, YamlValue], outputs: tuple[ReplayOutput, ...],
+              scope: tuple[JobIdentity, ...]) -> YamlValue:
+    if not isinstance(value, str) or "${{" not in value:
+        return value
+    match = re.fullmatch(
+        r"\s*\$\{\{\s*fromJSON\(\s*needs\.([A-Za-z_][A-Za-z0-9_-]*)"
+        r"\.outputs\.([A-Za-z_][A-Za-z0-9_-]*)\s*\)\s*\}\}\s*", value,
+        flags=re.IGNORECASE)
+    if match is None or match[1] not in _needs(job):
+        raise ValueError("dynamic matrix requires a declared dependency output")
+    candidates = [item for item in outputs if item.name == match[2] and item.identity
+                  and item.identity[:-1] == scope and item.identity[-1].job_id == match[1]]
+    if len(candidates) != 1 or candidates[0].identity[-1].matrix != "null":
+        raise ValueError("dynamic matrix output is missing or has ambiguous producer identity")
+    if len(candidates[0].value.encode("utf-8")) > 65536:
+        raise ValueError("dynamic matrix output exceeds 64 KiB")
+    try:
+        resolved = json.loads(candidates[0].value, object_pairs_hook=unique_json_object)
+        _literal(resolved)
+    except (ValueError, RecursionError) as exc:
+        raise ValueError("dynamic matrix output is not bounded literal JSON") from exc
+    return resolved
+
+
+def job_matrices(job: dict[str, YamlValue], *, outputs: tuple[ReplayOutput, ...] = (),
+                 scope: tuple[JobIdentity, ...] = ()) -> tuple[str, ...]:
     strategy = job.get("strategy")
     if strategy is None:
         return ("null",)
@@ -65,9 +96,14 @@ def job_matrices(job: dict[str, YamlValue]) -> tuple[str, ...]:
         raise ValueError("matrix strategy is not statically proven")
     if "matrix" not in strategy:
         return ("null",)
-    raw = strategy["matrix"]
+    original = strategy["matrix"]
+    raw = _resolved(original, job, outputs, scope)
+    dynamic = raw is not original
     if not isinstance(raw, dict):
         raise ValueError("matrix expansion is not statically proven")
+    resolved = {name: _resolved(value, job, outputs, scope) for name, value in raw.items()}
+    dynamic = dynamic or any(resolved[name] is not raw[name] for name in raw)
+    raw = resolved
     _literal(raw)
     axes = tuple(key for key in raw if key not in ("include", "exclude"))
     excludes = _entries(raw, "exclude")
@@ -77,6 +113,8 @@ def job_matrices(job: dict[str, YamlValue]) -> tuple[str, ...]:
     _apply_includes(rows, _entries(raw, "include"), axes)
     if len(rows) > MAX_MATRIX:
         raise ValueError("matrix expansion exceeds the bounded graph limit")
+    if dynamic and not rows:
+        raise ValueError("dynamic matrix cannot remove all execution coverage")
     encoded = tuple(matrix_json(row) for row in rows) or ("null",)
     if len(set(encoded)) != len(encoded):
         raise ValueError("matrix has duplicate execution identities")

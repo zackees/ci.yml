@@ -9,6 +9,8 @@ from unittest.mock import patch
 from ci_lint.finding import Status
 from ci_lint.tests.helpers import requires_yaml_tooling
 from ci_lint.workflow_replay import ReplayJob
+from ci_lint.workflow_replay_outputs import ReplayOutput
+from ci_lint.workflow_replay_identity import identity_part
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig, ReplaySelection
 from ci_lint.workflow_replay_dependencies import check_selection_dependencies
 from ci_lint.workflow_replay_expansion import expand_selection
@@ -22,6 +24,26 @@ def workflow(path, document):
 
 
 class ReplayExpansionTest(unittest.TestCase):
+    def test_proved_dynamic_matrix_retains_dependencies_and_every_concrete_leg(self):
+        # Proved-output fixture; this is graph conformance, not an executed gate.
+        entry = replace(self.entry, document={"jobs": {
+            "plan": {"steps": [{"name": "Plan", "run": "plan"}]},
+            "test": {"needs": "plan", "strategy": {
+                "matrix": "${{ fromJSON(needs.plan.outputs.matrix) }}"},
+                "steps": [{"name": "Test", "run": "test"}]},
+        }})
+        output = ReplayOutput((identity_part("plan"),), "matrix", '{"lane":["left","right"]}', 21)
+        proof = expand_selection((entry,), entry.path, "test", qualified=True, outputs=(output,))
+        self.assertIsNone(proof.problem)
+        self.assertEqual(len(proof.jobs), 3)
+        self.assertEqual({job.identity for job in proof.jobs}, {
+            (identity_part("plan"),), (identity_part("test", {"lane": "left"}),),
+            (identity_part("test", {"lane": "right"}),),
+        })
+        refused = expand_selection((entry,), entry.path, "test", qualified=True)
+        self.assertIsNotNone(refused.problem)
+        self.assertEqual(refused.jobs, ())
+
     def test_qualified_repeated_callers_and_leaf_matrices_are_distinct(self):
         entry = replace(self.entry, document={"jobs": {
             "first": {"name": "Same", "uses": "./.github/workflows/check.yml",

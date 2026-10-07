@@ -3,6 +3,7 @@
 import json
 import re
 from dataclasses import dataclass
+from collections.abc import Iterable, Sequence
 
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.workflow_replay_identity import JobIdentity
@@ -56,3 +57,14 @@ def proved_outputs(job: dict[str, JsonValue], identity: tuple[JobIdentity, ...],
     if type(seq) is not int or not 0 < last < seq:
         raise ValueError("workflow replay output evidence does not follow executed checks")
     return _outputs(raw["values"], identity, seq)
+
+
+def unique_json_object(pairs: Iterable[Sequence[JsonValue]]) -> dict[str, JsonValue]:
+    result: dict[str, JsonValue] = {}
+    for pair in pairs:
+        key = pair[0]
+        if not isinstance(key, str) or key in result:
+            raise ValueError("replay report has duplicate or invalid JSON keys")
+        result[key] = pair[1]
+    return result
+

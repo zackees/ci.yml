@@ -546,3 +546,15 @@ cannot remove coverage without proving the source policy that permits it.
 Current shared expansion rejects dynamic matrices before execution; this
 section specifies the next verifier change and does not claim implementation
 or end-to-end hosted qualification.
+
+
+The shared matrix expander now accepts already-proved dependency outputs for
+whole-matrix or axis-level `fromJSON(needs.<job>.outputs.<name>)` expressions.
+It applies the existing literal product/include/exclude rules and retains the
+producer dependency and every concrete leg. Matching requires the same caller
+scope and an unambiguous non-matrix producer. Duplicate JSON fields, nonfinite
+values, excessive depth/size, embedded expressions and empty dynamic expansion
+reject. Static callers with no output evidence continue to reject expressions.
+This is a graph-resolution primitive: runtime two-stage orchestration and
+reusable workflow public-output mapping remain pending. No new attestation
+eligibility follows from passing this primitive's conformance fixtures.
