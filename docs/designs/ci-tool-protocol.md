@@ -291,3 +291,25 @@ with changed pins while keeping the CLI version can therefore leave the local
 lane key unchanged. Binding the actual provider profile into reuse and comparing
 it with the executed receipt remains required before claiming the tool/ABI
 negative controls or production end-to-end qualification complete.
+
+### Provider identity implementation evidence
+
+Bosn candidate `fdbcde7` reuses its existing typed `ActPins` contract rather
+than introducing another provider record. Runner status and new run receipts
+carry the same adapter schema, act version and binary digest, engine manifest
+and config digests, and runner manifest and config digests. Planning checks
+captured pins before resolving an engine image. Legacy records remain readable
+without pins and cannot supply provider identity for an enrolled reuse proof.
+
+Review found that explicit retries cloned historical provider fields. A focused
+isolated regression test reproduced that mismatch before the fix; retries now
+capture the current provider while preserving source SHA, Git tree, snapshot
+digest, event payload, parameters and retry ancestry. Formatting, all-target
+Clippy and all six pin tests passed, followed by a clean review. The retained
+RED and GREEN logs are `bosn-provider-retry-red.log` and
+`bosn-provider-retry-green.log` in the investigation scratch directory.
+
+This candidate has not replaced the immutable binary running the current Clud
+qualification. ci-lint still needs to query the effective profile before reuse,
+include it in each lane's result key, and compare it to terminal evidence before
+publishing a pass. An exposed profile is not itself a successful execution.
