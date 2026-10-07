@@ -8,6 +8,7 @@ human-readable and ancestor-defining.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -205,6 +206,15 @@ class VerifyTest(GitCase):
         self.assertIsNotNone(parsed[1].error)
         changed = replace(parsed[0].attestation, secs=99)
         self.assertNotEqual(changed.compute_stamp(), changed.stamp)
+
+    def test_boolean_execution_timestamp_is_malformed(self) -> None:
+        self.commit("base")
+        line = self.attest("rust/all/fmt", "rust")
+        raw = json.loads(line.split(": ", 1)[1])
+        raw["at"] = True
+        parsed = parse_trailers("Ci-Attestation: " + json.dumps(raw))
+        self.assertIsNone(parsed[0].attestation)
+        self.assertIsNotNone(parsed[0].error)
 
 
 class KeysPriorityTest(GitCase):

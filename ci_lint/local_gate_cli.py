@@ -155,7 +155,8 @@ def _job_decisions(repo: Path, inp: TrustInput, head_trusted: bool) -> tuple[Job
     lanes = tuple(lane.id for lane in base.lanes)
     loaded = load_attestation_definition(repo, rev=inp.base_sha, lanes=lanes)
     definition = loaded.definition if loaded is not None else None
-    commit = verify_attestations(repo, inp.head_sha, definition) if definition is not None else None
+    ages = {lane.id: lane.max_age_hours for lane in base.lanes}
+    commit = verify_attestations(repo, inp.head_sha, definition, max_age_hours=ages) if definition is not None else None
     return decide_jobs(definition, base.trust.skip, head_trusted=head_trusted, commit=commit)
 
 

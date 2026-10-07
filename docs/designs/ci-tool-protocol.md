@@ -350,3 +350,28 @@ mandatory stamped gate passed. Bosn provider candidate `fdbcde7` built in its
 isolated test stack; its separate executable hashes to
 `2a15e2e851cf944736a9cf27cc78611e6d7fa1dbea832c38b183dc88b2abb887`.
 It has not replaced the immutable binary that produced this cold-run evidence.
+
+### Hosted freshness and required-check enforcement
+
+A diagnostic over the retained cold receipt confirmed all 96 required checks
+in eight concrete jobs passed. The original report remains rejected: the
+diagnostic removed the twelve unqualified placeholders only in memory and
+never wrote an attestation or cached pass.
+
+Act2 PR #53 merged as `4849612c36b906208cf8e4b9826ec9b38f7d5c70` after
+all five PR checks passed. Full checks run `37580056082` qualifies that exact
+merged commit before publication; no release or Bosn pin change is claimed here.
+
+The hosted skip verifier previously checked record integrity without applying
+the local lane's expiration bound. A focused regression reproduced both an
+expired record and a record more than 60 seconds in the future authorizing a
+skip. The consumer now applies the PR base's lane `max-age-hours` (default 24)
+using the same freshness predicate as local cache lookup. Reuse keeps the
+original execution timestamp; message changes cannot extend evidence lifetime.
+Merged-PR cache promotion shares the predicate and keeps its existing zero
+future-clock allowance. Integrity-only `attest verify` remains explicit.
+
+The live Clud main branch reports `protected: false`, its protection endpoint
+returns 404, and its repository ruleset list is empty. The workflow's CI OK
+aggregator therefore is not currently a mechanically required merge check.
+The pilot must establish that required check before claiming remote enforcement.

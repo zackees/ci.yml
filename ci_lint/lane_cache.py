@@ -43,6 +43,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
+from ci_lint.freshness import DEFAULT_MAX_AGE_HOURS, fresh
 from ci_lint.execution_pins import ExecutionPins
 from ci_lint.globs import glob_to_regex
 from ci_lint.proc import run_captured
@@ -52,7 +53,6 @@ KEY_VERSION = "gate-007/v1"
 # EX_TEMPFAIL: an `optional` lane's way to say "cannot run on this host".
 NOT_APPLICABLE_EXIT = 75
 LANE_WEIGHTS: tuple[str, ...] = ("heavy", "light")
-DEFAULT_MAX_AGE_HOURS = 24.0
 # Gate declarations: always a lane input, for every lane.
 DECLARATION_BASENAMES: frozenset[str] = frozenset({"local-gate.toml", "ci.toml"})
 
@@ -351,11 +351,10 @@ def lookup(repo: Path, lane: LaneConfig, key: str, *, now: float | None = None) 
     secs = raw.get("secs")
     if not isinstance(passed_at, (int, float)) or not isinstance(secs, int):
         return None
-    entry = CacheEntry(lane.id, key, float(passed_at), secs, str(raw.get("head", "")), str(raw.get("tree", "")))
     current = time.time() if now is None else now
-    if entry.age_hours(current) > lane.max_age_hours or entry.passed_at > current + 60:
+    if not fresh(passed_at, current, lane.max_age_hours * 3600):
         return None
-    return entry
+    return CacheEntry(lane.id, key, float(passed_at), secs, str(raw.get("head", "")), str(raw.get("tree", "")))
 
 
 def record(repo: Path, lane: LaneConfig, key: str, *, secs: int, head: str, tree: str) -> Path:

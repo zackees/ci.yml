@@ -52,6 +52,7 @@ Ci-Attestation: {"at":1790917000,"gate":"rust/x86_64-unknown-linux-gnu/test","ho
 - **Omission means not run.** A declared gate with no trailer runs remotely. There is no "skipped" entry.
 - **Stamp:** `sha256(tree \n parents \n canonical-json-without-stamp)`, truncated to 32 hex digits. A commit's hash covers its own message, so the stamp binds the tree and the parents instead. Editing the JSON, changing content, or rebasing invalidates it (`bad-stamp`, `wrong-tree`, `wrong-parents`). The stamp is tamper-evident; it is not a signature.
 - **Size:** about 330 bytes per gate. Five gates add under 2 KiB to the commit message.
+- **Freshness for hosted skips:** the verifier uses each lane's `max-age-hours` from the PR base (default 24 hours). Expired evidence or timestamps more than 60 seconds in the future cannot authorize a skip. Reuse preserves the original execution timestamp. `attest verify` without an age policy checks integrity only.
 
 ## In CI
 
