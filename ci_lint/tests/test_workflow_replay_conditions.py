@@ -41,6 +41,26 @@ class ConditionProofTest(unittest.TestCase):
         self.assertTrue(condition_excludes(guard, (), set(), event="pull_request"))
         self.assertFalse(condition_excludes(guard, (), set(), event="push"))
 
+    def test_negation_uses_bound_truth_and_preserves_unknowns(self):
+        for guard in ("!inputs.profile", "!!inputs.compile", "!(!inputs.compile)",
+                      "!inputs.profile == true", "!inputs.profile != false",
+                      "!(inputs.profile == 'dev')"):
+            with self.subTest(guard=guard):
+                self.assertTrue(self.excluded(guard))
+        for guard in ("!inputs.compile", "!inputs.missing", "!!inputs.missing",
+                      "!false", "!true", "!inputs.profile == ''",
+                      "!inputs.profile == 'dev'"):
+            with self.subTest(guard=guard):
+                self.assertFalse(self.excluded(guard))
+
+    def test_negated_status_guards_require_successful_execution_proof(self):
+        guard = "!cancelled() && !failure() && inputs.profile == 'release'"
+        self.assertTrue(self.excluded(guard, successful=True))
+        self.assertFalse(self.excluded("!success()"))
+        self.assertTrue(self.excluded("!success()", successful=True))
+        self.assertFalse(self.excluded("!cancelled() && !failure()", successful=True))
+        self.assertFalse(self.excluded("!cancelled()"))
+
     def test_skipped_producer_and_operand_valued_boolean_operators(self):
         self.assertTrue(self.excluded("steps.download.outcome == 'success'"))
         self.assertFalse(self.excluded("steps.missing.outcome == 'success'"))

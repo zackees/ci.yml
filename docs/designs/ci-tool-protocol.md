@@ -104,7 +104,11 @@ an execution identity or justify a skipped check.
 Source-derived checks bind input interpolation in step names and reject
 unnamed, empty, duplicate or unresolved names. Their finite condition proof
 supports typed inputs, same-type equality, ASCII case-insensitive string
-comparisons/`contains`, boolean grouping and the declared receipt event.
+comparisons/`contains`, boolean grouping, unary `!` and the declared receipt event.
+Negation binds before comparisons, preserves unknown values and yields a
+boolean; `!cancelled()` and `!failure()` require the same successful-execution
+premise as the other status functions. An unknown status can still occur in
+a conjunction proven false by a bound input, without guessing that status.
 Unknown contexts and mixed-type comparisons remain unknown. A known false
 profile condition may exclude a step even when another operand is unknown;
 an unknown condition leaves the check mandatory. This follows the relevant

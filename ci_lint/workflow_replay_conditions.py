@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from ci_lint.workflow_replay_inputs import BoundInput
 from ci_lint.yaml_io import YamlValue
 
-_TOKEN = re.compile(r"\s+|'(?:[^']|'')*'|[A-Za-z_][A-Za-z0-9_.-]*|&&|\|\||==|!=|[(),]")
+_TOKEN = re.compile(r"\s+|'(?:[^']|'')*'|[A-Za-z_][A-Za-z0-9_.-]*|&&|\|\||==|!=|[!(),]")
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,10 @@ def _parse(expression: str) -> ParsedGuard:
             continue
         if token.startswith("'"):
             parts.append(json.dumps(token[1:-1].replace("''", "'")))
+        elif token == "!":
+            # Parse only: Invert has GitHub's high unary precedence, unlike
+            # Python's `not`. The AST is interpreted below, never evaluated.
+            parts.append("~")
         elif token in ("&&", "||", "true", "false"):
             parts.append({"&&": "and", "||": "or", "true": "True", "false": "False"}[token])
         elif token[0].isalpha() or token[0] == "_":
@@ -143,6 +147,10 @@ def _value(node: ast.AST, context: GuardContext) -> GuardValue:
         return _compare(node, context)
     if isinstance(node, ast.Call):
         return _call(node, context)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Invert):
+        operand = _value(node.operand, context)
+        return (_scalar(not operand.truth, bound=operand.bound)
+                if operand.truth is not None else GuardValue())
     if isinstance(node, ast.BoolOp):
         result = _value(node.values[0], context)
         for child in node.values[1:]:
