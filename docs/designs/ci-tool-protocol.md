@@ -1189,8 +1189,8 @@ payload lifecycle work; neither changes the attestation trust rules.
   lanes in 0.999 seconds. The exact published head retained all seven commit
   attestations; hosted run `37650279564` accepted them, skipped Rust and policy,
   and passed. The fix merged at `68ad9b1e0ae9fe7ed6819f3ba8b0090b146617a5`.
-  Public Bosn 0.1.17 still lacks this fix; successful local writer replay on
-  the upcoming runtime remains unproven.
+  Public Bosn 0.1.18 includes this fix; successful local writer replay on
+  that runtime remains unproven.
 - The stock upload-artifact client's query handling discarded an unescaped
   trailing base64 signature `=`. [Act2 PR #57](https://github.com/zackees/act2/pull/57)
   URL-encodes that value while preserving strict signature verification. The
@@ -1220,13 +1220,28 @@ both had zero executed steps. Dispatch/rerun retries returned HTTP 500, and
 subsequent reads still showed the same terminal attempt and no replacement run.
 The Linux wheel completed build, smoke test and upload. A downloaded copy was
 installed as a private pilot candidate, with version and archive/native hashes
-verified against that artifact. This is not a public release or rollout.
+verified against that artifact. This installation initially qualified only a
+private candidate.
 The owned daemon was confirmed idle before the graceful switch to the private
 0.1.18 candidate. Live CLI queries confirm the actual daemon version and act2.15
 binary digest above. Managed-task admission is one runner at four CPUs, CI
 admission is also one runner, and the outer engine has a four-CPU quota. These
 are owned-pilot limits, not aggregate admission across independent state roots.
-Publication and four public wheel checks remain pending.
+After GitHub reported mitigation of its [October 7 incident](https://www.githubstatus.com/incidents/qpfv5p86dmrl),
+the same candidate passed [dry run 37660350720](https://github.com/zackees/bosn/actions/runs/37660350720),
+including all four wheel builds and both hosted macOS smoke tests. The incident's
+reported 16:52–17:01 UTC impact overlaps the first dry run and HTTP 500 responses;
+this correlation does not establish every runner-acquisition or queue cause.
+[Publication 37661138319](https://github.com/zackees/bosn/actions/runs/37661138319)
+then passed and published [Bosn 0.1.18](https://github.com/zackees/bosn/releases/tag/v0.1.18)
+on GitHub and PyPI. All four downloaded public wheels match both registries'
+SHA-256 metadata and declare the expected `cp310-abi3` tags. The installed Linux
+native executable has SHA-256
+`46a6b69678c7786075f9aa9ef0d0d9f8952f8fff95bd6206833a2c0b5208c39c`,
+identical to the candidate already executing the backend gate. Its public CLI
+confirms daemon 0.1.18 and the act2.15 digest above; the running daemon's executable
+path still names the private qualification installation. No gate restart was
+needed to adopt an identical executable.
 
 Payload integrity has a separate narrow correction in
 [setup-soldr PR #572](https://github.com/zackees/setup-soldr/pull/572), head
@@ -1246,12 +1261,14 @@ export/import contract, exact-hit publication of new objects, interruption-safe
 generations, or fresh-engine compiler hits. The independent local and hosted
 cache acceptance requirements remain unchanged.
 
-## Backend-owned compiler snapshot API (unpublished draft)
+## Backend-owned compiler snapshot API (public draft)
 
 Zccache's artifact crate owns the snapshot API; Bosn, act2 and `ci-lint` do not
 parse its index or layout. The current draft is committed locally as `985e522f`
-on `feat/362-compiler-snapshot`. It remains unpublished; full repository
-qualification is pending. The sole primary review returned clean after its
+on `feat/362-compiler-snapshot`. Its complete repository gate passed and
+[zccache PR #1934](https://github.com/zackees/zccache/pull/1934) publishes the
+stamped head below. It remains unmerged; hosted qualification and a public
+backend release are pending. The sole primary review returned clean after its
 correction below.
 
 Export retains the authoritative index, including output names, sizes, modes,
@@ -1287,8 +1304,12 @@ normalization. The regression covers absent and healthy flat fallback payloads;
 it passes with legacy path validation enabled. The same primary reviewer
 confirmed the correction and returned clean. The earlier full gate passed lint
 and CI-script tests before its owned MSRV replay was deliberately cancelled for
-this source change. A new complete gate runs against the corrected commit; no
-full pass is claimed yet.
+this source change. The corrected complete gate passed all six lanes in 2,203 seconds:
+lint 38s, Python CI tests 46s, MSRV check 467s, rustdoc 55s, Dylint 903s and
+integration tests 693s. Its source commit is
+`985e522f53ce200aa52db755d13f63b558c844e3`, tree
+`4f43401ad28eae71da5bc80ab0797485ce8fcc04`; seven attestations were stamped
+on head `7c13233c1cf17db2717b82404a978000232cec47`.
 
 Caller-controlled parents and immutable source snapshots are required; hostile
 filesystem races and portable exclusive reservation of empty destinations are
@@ -1296,3 +1317,20 @@ not proved. Managed-daemon shutdown coordination, transport hooks, pre-cook base
 capture, exact-hit new-object publication, and actual fresh-engine compiler hits
 remain required. Cache snapshots are separate from test evidence. No cache
 warmth or complete durability acceptance is claimed from crate tests.
+
+## Retained execution-receipt controls
+
+The actual Template terminal receipt for run
+`66198fac` proves six executed jobs against eight required job definitions. Its
+pre-stamp source is `90f5aa6410da0b6daac0b45c5c04d882053d0521`, tree
+`b2510154d5e00eac04e7bb5b640cb2a6a40fbbbe`. Reconstructing that exact tracked
+source with `git archive` allows the production receipt validator to check the
+retained execution evidence without repeating the build. The positive receipt
+passes; all 22 mutated receipts fail: source/workspace/repository mismatches,
+dirty or nonterminal execution, cancellation and failure codes, unknown cleanup,
+provider version/digest mismatches, missing or duplicated required jobs, altered
+job identities, failed or skipped required Rust tests, and duplicate JSON fields.
+
+These controls test the execution-receipt boundary. They do not prove hosted
+author authorization, freshness, parent validation, publication interruption or
+cache warmth. Those acceptance requirements remain separate.
