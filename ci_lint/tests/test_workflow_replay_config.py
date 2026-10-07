@@ -21,6 +21,17 @@ lanes = ["tests"]
 
 
 class ReplayDeclarationTest(unittest.TestCase):
+    def test_provider_query_is_a_qualified_nonempty_argv(self):
+        for value, qualified, valid in (('["bosn", "ci", "runners", "list", "--json"]', True, True),
+                                        ('[]', True, False), ('[""]', True, False),
+                                        ('["bosn"]', False, False), ('"bosn"', True, False)):
+            document = DECLARATION.replace('mode = "minimal"',
+                        f'mode = "minimal"\nqualified = {str(qualified).lower()}\nprovider-query = {value}')
+            findings: list[Finding] = []
+            config = parse_replay(tomllib.loads(document), source="local-gate.toml",
+                                  path="gate.replay", findings=findings)
+            self.assertEqual(config is not None, valid, findings)
+
     def test_qualified_omitted_steps_derive_checks_from_source(self) -> None:
         document = DECLARATION.replace('mode = "minimal"', 'mode = "minimal"\nqualified = true')
         document = document.replace('steps = ["Run tests"]\n', '')

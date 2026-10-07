@@ -10,11 +10,12 @@ import subprocess
 import tempfile
 import time
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import BinaryIO
 
 from ci_lint.cargo_messages import JsonValue
+from ci_lint.execution_pins import ExecutionPins, parse_execution_pins
 from ci_lint.workflow_replay import ReplayExpectation, prove_replay
 from ci_lint.workflow_replay_config import ReplayConfig
 from ci_lint.workflow_replay_plan import build_plan
@@ -41,11 +42,35 @@ def _unique_object(pairs: Iterable[Sequence[JsonValue]]) -> dict[str, JsonValue]
     return result
 
 
-def _read_report(path: Path) -> JsonValue:
+def _read_report(path: Path, *, max_bytes: int = MAX_REPORT_BYTES) -> JsonValue:
     metadata = path.lstat()
-    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_REPORT_BYTES:
-        raise ValueError("replay report must be a regular file no larger than 16 MiB")
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > max_bytes:
+        raise ValueError(f"replay report must be a regular file no larger than {max_bytes} bytes")
     return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object)
+
+
+def query_execution_pins(repo: Path, config: ReplayConfig | None) -> ExecutionPins | None:
+    if config is None or not config.provider_query:
+        return None
+    with tempfile.TemporaryDirectory(prefix="ci-provider-") as scratch:
+        path = Path(scratch) / "status.json"
+        with path.open("wb") as output, (Path(scratch) / "stderr.log").open("wb") as errors:
+            process = subprocess.run(list(config.provider_query), cwd=repo, stdin=subprocess.DEVNULL,
+                                     stdout=output, stderr=errors, timeout=60, check=False)
+        if process.returncode != 0:
+            raise ValueError(f"execution provider query failed (exit {process.returncode})")
+        raw = _read_report(path, max_bytes=64 * 1024)
+    runners = raw.get("runners") if isinstance(raw, dict) else None
+    if not isinstance(runners, dict):
+        raise ValueError("execution provider status has no runners record")
+    return parse_execution_pins(runners.get("execution_pins"))
+
+
+def bind_execution_pins(repo: Path, config: ReplayConfig) -> ReplayConfig:
+    pins = query_execution_pins(repo, config)
+    if config.execution_pins is not None and config.execution_pins != pins:
+        raise ValueError("execution provider changed during the gate; rerun with current pins")
+    return replace(config, execution_pins=pins)
 
 
 def _execute(repo: Path, argv: tuple[str, ...], report: Path, *, report_source: str,
@@ -69,13 +94,14 @@ def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig,
                         head: str, tree: str, lane: str | None = None,
                         env: dict[str, str] | None = None, stdout: BinaryIO | None = None) -> CheckedCommand:
     try:
+        config = bind_execution_pins(repo, config)
         plan = build_plan(repo, config, lane=lane)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         return CheckedCommand(1, f"workflow replay proof rejected before execution: {exc}")
     expectation = ReplayExpectation(config.repository, repo, head, tree, plan.workflow,
                                     plan.selected, config.mode, plan.required,
                                     "pr" if plan.event == "pull_request" else plan.event, plan.event,
-                                    plan.inputs)
+                                    plan.inputs, config.execution_pins)
     start = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="ci-replay-") as scratch:
         report = Path(scratch) / "report.json"
@@ -87,7 +113,8 @@ def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig,
             if returncode != 0:
                 return CheckedCommand(returncode)
             prove_replay(_read_report(report), expectation)
-        except (OSError, UnicodeError, ValueError) as exc:
+            bind_execution_pins(repo, config)
+        except (OSError, UnicodeError, ValueError, subprocess.TimeoutExpired) as exc:
             return CheckedCommand(1, f"workflow replay proof rejected: {exc}")
     evidence = (FullRunEvidence(tuple(ReceiptPass(lane, int(round(time.monotonic() - start))) for lane in plan.lanes))
                 if plan.lanes else None)

@@ -33,6 +33,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -42,6 +43,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from ci_lint.finding import Finding, Status
+from ci_lint.execution_pins import ExecutionPins
 from ci_lint.globs import glob_to_regex
 from ci_lint.proc import run_captured
 from ci_lint.toml_cursor import Cursor, TomlValue
@@ -189,7 +191,7 @@ def tree_entries(repo: Path, tree: str) -> list[TreeEntry]:
 
 
 def mandatory_paths(lane: LaneConfig, gate_run: tuple[str, ...], gate_source: str, paths: set[str]) -> set[str]:
-    named = {token for token in (*gate_run, *lane.run) if token in paths}
+    named = {posixpath.normpath(token.replace("\\", "/")) for token in (*gate_run, *lane.run)} & paths
     named.add(gate_source)
     always = DECLARATION_BASENAMES | pin_basenames(lane.tools)
     named.update(p for p in paths if p.rsplit("/", 1)[-1] in always)
@@ -263,6 +265,7 @@ class KeyHeader:
     run: tuple[str, ...]
     tools: tuple[ToolVersion, ...]
     env: tuple[EnvValue, ...]
+    provider: ExecutionPins | None = None
 
 
 @dataclass(frozen=True)
@@ -280,6 +283,7 @@ def lane_key(
     gate_source: str,
     versions: ToolVersions,
     environ: Mapping[str, str] | None = None,
+    provider: ExecutionPins | None = None,
 ) -> LaneKey:
     env = os.environ if environ is None else environ
     inputs = lane_inputs(entries, lane, gate_run, gate_source)
@@ -288,8 +292,12 @@ def lane_key(
         run=lane.run,
         tools=tuple(versions.get(tool) for tool in sorted(set(lane.tools))),
         env=tuple(EnvValue(name, env.get(name, "")) for name in sorted(set(lane.env))),
+        provider=provider,
     )
-    h = hashlib.sha256(json.dumps(asdict(header), sort_keys=True).encode())
+    document = asdict(header)
+    if provider is None:
+        document.pop("provider")
+    h = hashlib.sha256(json.dumps(document, sort_keys=True).encode())
     for entry in inputs:
         h.update(b"\0")
         h.update(entry.path.encode())

@@ -313,3 +313,13 @@ This candidate has not replaced the immutable binary running the current Clud
 qualification. ci-lint still needs to query the effective profile before reuse,
 include it in each lane's result key, and compare it to terminal evidence before
 publishing a pass. An exposed profile is not itself a successful execution.
+
+The consumer candidate now adds opt-in `provider-query` to qualified replay.
+It reads `runners.execution_pins` before lookup, fingerprints the typed pins in
+every lane key, and compares the terminal receipt to the same captured profile.
+It rechecks the provider before publication, including an invocation made
+entirely of cached lane passes. Missing status, failed queries, duplicate JSON,
+unsupported schemas and malformed digests refuse proof. Existing contracts
+retain their original keys when this opt-in is absent. This enrollment must be
+added to the real adopters after the current immutable candidate run finishes;
+synthetic provider-change controls do not establish a deployed skip.

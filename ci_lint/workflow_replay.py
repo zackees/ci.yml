@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ci_lint.cargo_messages import JsonValue
+from ci_lint.execution_pins import ExecutionPins, parse_execution_pins
 from ci_lint.workflow_replay_identity import JobIdentity, matrix_json, parse_identity
 
 
@@ -46,6 +47,7 @@ class ReplayExpectation:
     trigger: str = "pr"
     event: str = "pull_request"
     inputs: tuple[ReplayInput, ...] = ()
+    execution_pins: ExecutionPins | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,11 @@ def _inputs(raw: dict[str, JsonValue], expected: ReplayExpectation) -> None:
 
 
 def _metadata(raw: dict[str, JsonValue], expected: ReplayExpectation) -> None:
+    if expected.execution_pins is not None:
+        if parse_execution_pins(raw.get("execution_pins")) != expected.execution_pins:
+            raise ValueError("workflow replay execution provider differs from the queried daemon")
+        if raw.get("act_version") != expected.execution_pins.act_version:
+            raise ValueError("workflow replay act version differs from execution provider pins")
     scalars: dict[str, str | int | None] = {
         "schema_version": 1, "provider": "github", "repository": expected.repository, "engine": "act",
         "sha": expected.sha, "git_tree": expected.git_tree, "dirty": None,

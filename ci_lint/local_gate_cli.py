@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import sys
+import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,7 @@ from ci_lint.rules.swatinem_ban import check_cache_025
 from ci_lint.gate_trust import TrustDecision, TrustInput
 from ci_lint.gate_trust import decide as decide_trust
 from ci_lint.lane_cache import ToolVersions, lane_key, lookup, run_audit, simulate, tree_entries
+from ci_lint.workflow_replay_runtime import query_execution_pins
 from ci_lint.local_gate import (
     GateConfig,
     VerifyOutcome,
@@ -211,10 +213,21 @@ def _cmd_lanes(args: argparse.Namespace) -> int:
             print(f"{sim.lane:10} reusable {sim.reusable}/{sim.commits} ({sim.rate:.0%})  most often forced by: "
                   + (", ".join(sim.top_triggers) or "-"))
         return 0
+    return _show_lane_cache(repo, config)
+
+
+def _show_lane_cache(repo: Path, config: GateConfig) -> int:
     entries = tree_entries(repo, "HEAD")
     versions = ToolVersions()
+    try:
+        pins = query_execution_pins(repo, config.replay)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        print(f"local-gate lanes: execution provider refused: {exc}", file=sys.stderr)
+        return 2
     for lane in config.lanes:
-        key = lane_key(entries, lane, gate_run=config.run, gate_source=config.source, versions=versions)
+        query = config.replay.provider_query if config.replay else ()
+        key = lane_key(entries, lane, gate_run=(*config.run, *query), gate_source=config.source,
+                       versions=versions, provider=pins)
         hit = lookup(repo, lane, key.key)
         state = f"HIT (passed {hit.age_hours(time.time()):.1f} h ago in {hit.secs}s)" if hit else "miss"
         tools = ", ".join(f"{t.tool}={t.version}" for t in key.tools) or "none declared"

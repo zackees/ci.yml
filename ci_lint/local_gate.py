@@ -49,7 +49,7 @@ import time
 import tomllib
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO
 
@@ -59,7 +59,7 @@ from ci_lint.attestations import strip_trailers as strip_attestation_trailers
 from ci_lint.finding import Finding, Status
 from ci_lint.gate_run_lock import hold as hold_gate_run_lock
 from ci_lint.workflow_replay_config import ReplayConfig, parse_replay
-from ci_lint.workflow_replay_runtime import CheckedCommand, run_checked_command
+from ci_lint.workflow_replay_runtime import CheckedCommand, bind_execution_pins, run_checked_command
 from ci_lint.workflow_replay_static import check_replay_static
 from ci_lint.full_run_receipt import FullRunConfig, load_receipt, parse_full_run, validate_evidence
 from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
@@ -611,6 +611,15 @@ def _run_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, reused
         return _execute_full_lanes(repo, config, head, tree, reused, pending, log_dir, Path(scratch) / "receipt.json")
 
 
+def _execution_changed(repo: Path, head: str, config: GateConfig) -> str | None:
+    if config.replay is not None:
+        try:
+            bind_execution_pins(repo, config.replay)
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            return f"execution provider refused: {exc}"
+    return _changed(repo, head)
+
+
 def _execute_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, reused: dict[str, str],
                         pending: list[_Pending], log_dir: Path, receipt_path: Path) -> LaneRun:
     log = log_dir / "full-run.log"
@@ -641,7 +650,7 @@ def _execute_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, re
     if loaded.evidence is None:
         print(f"local-gate: full run has no usable lane proof: {loaded.error}; full log: {log}", file=sys.stderr)
         return LaneRun(1, [], secs)
-    problem = _changed(repo, head)
+    problem = _execution_changed(repo, head, config)
     if problem is not None:
         print(f"local-gate: {problem}", file=sys.stderr)
         return LaneRun(1, [], secs)
@@ -675,12 +684,16 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
 
     entries = tree_entries(repo, tree)
     versions = ToolVersions()
+    replay = bind_execution_pins(repo, config.replay) if config.replay is not None else None
+    config = replace(config, replay=replay)
     log_dir = lane_log_dir(repo)
     log_dir.mkdir(parents=True, exist_ok=True)
     reused: dict[str, str] = {}
     pending: list[_Pending] = []
     for lane in config.lanes:
-        key = lane_key(entries, lane, gate_run=config.run, gate_source=config.source, versions=versions)
+        key = lane_key(entries, lane, gate_run=(*config.run, *(replay.provider_query if replay else ())),
+                       gate_source=config.source, versions=versions,
+                       provider=replay.execution_pins if replay else None)
         hit = lookup(repo, lane, key.key) if use_cache else None
         if hit is not None:
             print(
@@ -709,7 +722,7 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
             outcomes.append(outcome)
         if chain is not None:
             outcomes.extend(chain.result())
-    problem = _changed(repo, head)
+    problem = _execution_changed(repo, head, config)
     if problem is not None:
         print(f"local-gate: {problem}", file=sys.stderr)
     else:
@@ -755,7 +768,7 @@ def run_gate(
     try:
         with hold_gate_run_lock(cache_dir(repo).parent / "run.lock"):
             return _run_gate(repo, config, stamp=stamp, force=force, use_cache=use_cache)
-    except (OSError, GitError, subprocess.CalledProcessError) as error:
+    except (OSError, GitError, ValueError, subprocess.SubprocessError) as error:
         return RunOutcome(2, f"local-gate run: {error}")
 
 
@@ -776,8 +789,11 @@ def _run_gate(  # noqa: C901
     replay_problem = _replay_coverage_problem(config, repo)
     if replay_problem:
         return RunOutcome(1, replay_problem)
+    if config.replay is not None:
+        config = replace(config, replay=bind_execution_pins(repo, config.replay))
     already_attested = check_commit(repo, head).state == "attested"
-    if not config.lanes and not force and use_cache and already_attested:
+    if (not config.lanes and not force and use_cache and already_attested
+            and not (config.replay and config.replay.provider_query)):
         return RunOutcome(0, f"local-gate run: HEAD {head[:12]} is already attested for its tree", head)
     tree = tree_of(repo, head)
     if config.lanes:
@@ -816,6 +832,9 @@ def _run_gate(  # noqa: C901
             "local-gate run: the gate passed but changed the repository (a formatter rewrote files, or HEAD "
             "moved); review and commit the result, then run the gate again:\n  " + "\n  ".join(after[:20]),
         )
+    provider_problem = _execution_changed(repo, head, config)
+    if provider_problem is not None:
+        return RunOutcome(1, f"local-gate run: {provider_problem}")
     if not stamp:
         return RunOutcome(0, f"local-gate run: passed in {secs}s (not stamped)", head)
     new_head = stamp_head(repo, Attestation(tree=tree, secs=secs))

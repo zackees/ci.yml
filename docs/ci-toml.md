@@ -754,6 +754,24 @@ Before the command, the checker creates a fresh output path in `CI_LINT_GATE_REP
 
 **Qualified replay full runs.** With qualified replay selections, the checker derives lane passes directly from the validated runner report. The repository command does not write or interpret a separate lane-pass receipt. The gate applies the same complete lane-accounting check before recording passes; an uncovered lane rejects. Shared prerequisites are validated once. Reported per-lane seconds are the full invocation's wall time, not additive job time or CPU time. Reused lanes keep their original records and timestamps even when a full run executes their checks again. This mechanism is fixture-tested; deployed provider and pilot qualification remain pending under #362.
 
+**Execution provider identity (#362).** Qualified replay may declare
+`provider-query = ["bosn", "ci", "runners", "list", "--json"]`. The query must
+exit successfully within 60 seconds and produce a JSON status object no larger
+than 64 KiB with `runners.execution_pins`. These pins use Bosn's existing
+`ActPins` fields: `interface_schema = 1`, an act2.11-or-later `act_version`, and
+five lowercase SHA-256 digests named `act_binary_digest`,
+`engine_manifest_digest`, `engine_config_digest`, `runner_manifest_digest`,
+and `runner_config_digest`. Unknown, missing, malformed or duplicate fields
+refuse proof. The effective pins enter every lane key, and terminal receipts
+must carry exactly the same `execution_pins` and matching `act_version`.
+Provider changes during execution or reuse refuse publication. Query scripts
+named in the argv are mandatory lane inputs. A gate without lanes reruns when
+enrolled, because its old summary trailer does not bind provider identity.
+Omitting `provider-query` preserves existing contracts and keys; it does not
+qualify their CLI version as proof of the running daemon's pins. The enrolled
+mechanism has synthetic regression coverage; real adopter qualification
+remains pending under #362.
+
 **Full-run receipts (GATE-007).** Repositories whose full gate runs jobs concurrently may declare `[gate.full-run]` with `receipt = "lane-passes-v1"` and two or more required lanes. On a multi-lane miss, `local-gate run` invokes `[gate].run` once and supplies `CI_LINT_GATE_RECEIPT` (a unique output path), `CI_LINT_GATE_TREE` and `CI_LINT_GATE_HEAD`. The command must check the actual jobs and write `{"version":1,"tree":"<CI_LINT_GATE_TREE>","passes":[{"lane":"<id>","secs":12},...]}` with every declared lane accounted for exactly once. An optional lane that cannot run on this host must appear in `"not-applicable":["<id>",...]` instead of `passes`; only lanes declared `optional = true` may use this field. Unavailable lanes produce `n/a` provenance and no cache record or `Ci-Attestation:` trailer. Missing lanes, duplicate results, and marking a required lane unavailable all fail closed. The checker records no pass unless the command succeeds, the receipt matches the tree and complete lane set, and the tracked tree stays unchanged. The receipt is a claim by the repository's gate command, so that command must validate its runner's structured job results before writing it. A single miss still runs the named lane. `--no-cache` forces a full run when this mode is declared.
 
 **Attested skip (GATE-008).** `ci-lint local-gate verify --trust --github-output` (in the verify job, with full history: `fetch-depth: 0`) writes `trusted`, `would_trust` and `trust_reason`. It is `true` only when **every** check holds: the event is `pull_request`; the base commit's declaration enables `[gate.trust]`; no full label; not a fork; author association is OWNER, MEMBER or COLLABORATOR; the head carries a trailer for its exact tree (not merely an attested first parent); the trailer's lane provenance covers every lane the base declares; no changed path (merge-base diff) matches a surface; and the head is not in the audit sample. Every other case is a reason code, and the jobs run as before. Pushes, schedules and dispatches never skip.

@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 
 from ci_lint.finding import Finding
+from ci_lint.execution_pins import ExecutionPins
 from ci_lint.toml_cursor import Cursor, TomlValue
 from ci_lint.workflow_replay import ReplayInput, ReplayJob
 
@@ -39,6 +40,8 @@ class ReplayConfig:
     selections: tuple[ReplaySelection, ...] = ()
     report_source: str = "file"
     qualified: bool = False
+    provider_query: tuple[str, ...] = ()
+    execution_pins: ExecutionPins | None = None
 
 
 def _bad(findings: list[Finding], source: str, path: str, message: str) -> None:
@@ -134,6 +137,16 @@ def _selections(cursor: Cursor, source: str, path: str,
     return tuple(selections)
 
 
+def _provider_query(cursor: Cursor, raw: dict[str, TomlValue], findings: list[Finding],
+                    source: str, path: str, qualified: bool) -> tuple[str, ...]:
+    query = tuple(cursor.list_str("provider-query", required=False))
+    if "provider-query" in raw and (not query or any(not token.strip() for token in query)):
+        _bad(findings, source, path, "provider-query must be a nonempty argv")
+    if query and not qualified:
+        _bad(findings, source, path, "provider-query requires qualified workflow replay")
+    return query
+
+
 def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
                  findings: list[Finding]) -> ReplayConfig | None:
     start = len(findings)
@@ -143,6 +156,7 @@ def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
     mode = cursor.str_("mode")
     report_source = cursor.str_("report-source", required=False, default="file")
     qualified = bool(cursor.bool_("qualified", required=False, default=False))
+    provider_query = _provider_query(cursor, raw, findings, source, path, qualified)
     raw_jobs = cursor.array_of_tables("jobs")
     selections = _selections(cursor, source, path, findings)
     cursor.finish()
@@ -168,4 +182,4 @@ def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
     if len(findings) != start or repository is None or workflow is None or mode is None or report_source is None:
         return None
     return ReplayConfig(repository, f".github/workflows/{workflow}", mode, tuple(jobs), tuple(selections), report_source,
-                        qualified)
+                        qualified, provider_query)
