@@ -9,6 +9,7 @@ from ci_lint.workflow_replay_minimal_skip import classify_minimal_skip
 from ci_lint.workflow_replay_dependencies import check_selection_dependencies
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig
 from ci_lint.workflow_replay_expansion import ExpandedJob, expand_selection
+from ci_lint.workflow_replay_inputs import BoundInput
 from ci_lint.workflow_replay_input_skips import excluded_input_steps
 from ci_lint.workflow_scan import ParsedYamlFile, as_dict, jobs_of, load_workflows, steps_of
 from ci_lint.yaml_io import YamlValue
@@ -59,9 +60,9 @@ def _check_cache_saves(declared: DeclaredReplayJob, job: dict[str, YamlValue],
 
 
 def _check_job(declared: DeclaredReplayJob, job: dict[str, YamlValue],
-               path: str, workflow_defaults: YamlValue = None, mode: str = "minimal") -> list[Finding]:
+               path: str, workflow_defaults: YamlValue = None, mode: str = "minimal", *, qualified: bool = False) -> list[Finding]:
     findings = _check_minimal_skips(declared, job, path, mode)
-    if "uses" in job or "strategy" in job:
+    if "uses" in job or ("strategy" in job and not qualified):
         return [Finding(rule="GATE-001", path=path, status=Status.NEEDS_REVIEW,
                         message=f"replay job {declared.source_job} has reusable or matrix coverage",
                         fix="prove expanded job and step coverage before attesting this replay")]
@@ -112,10 +113,15 @@ def _check_identity(declared: DeclaredReplayJob, document: dict[str, YamlValue],
 def _expanded_jobs(config: ReplayConfig, declared: DeclaredReplayJob,
                    files: tuple[ParsedYamlFile, ...]) -> tuple[ExpandedJob, ...]:
     jobs: list[ExpandedJob] = []
+    if config.qualified and not config.selections:
+        proof = expand_selection(files, config.workflow, None, qualified=True)
+        return tuple(job for job in proof.jobs if job.source_job == declared.source_job)
     for selection in config.selections:
         if selection.lane not in declared.lanes:
             continue
-        proof = expand_selection(files, selection.workflow or config.workflow, selection.selected_job)
+        proof = expand_selection(files, selection.workflow or config.workflow, selection.selected_job,
+                                 qualified=config.qualified,
+                                 inputs=tuple(BoundInput(item.name, item.value) for item in selection.inputs))
         jobs.extend(job for job in proof.jobs if job.source_job == declared.source_job)
     return tuple(jobs)
 
@@ -158,7 +164,7 @@ def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
         path = f".github/workflows/{workflow}"
         expanded = _expanded_jobs(config, declared, files)
         keys = tuple(sorted({job.key for job in expanded}))
-        if path != config.workflow and len(keys) != 1:
+        if path != config.workflow and (not expanded if config.qualified else len(keys) != 1):
             findings.append(Finding(rule="GATE-001", path=path, status=Status.NEEDS_REVIEW,
                                     message="replay job belongs to another workflow; entrypoint reachability is unproven",
                                     fix="prove reusable-workflow expansion and execution coverage"))
@@ -180,8 +186,8 @@ def check_replay_static(config: ReplayConfig, repo: Path) -> list[Finding]:
                                     message=f"declared replay job {job_id} does not exist",
                                     fix="declare an existing workflow job"))
             continue
-        if "uses" not in job and "strategy" not in job:
+        if not config.qualified and "uses" not in job and "strategy" not in job:
             findings.extend(_check_identity(declared, document, job, path, keys))
-        findings.extend(_check_job(declared, job, path, document.get("defaults"), config.mode))
+        findings.extend(_check_job(declared, job, path, document.get("defaults"), config.mode, qualified=config.qualified))
         findings.extend(_check_input_skips(declared, job, expanded, path))
     return findings

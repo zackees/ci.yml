@@ -37,6 +37,7 @@ class ReplayConfig:
     jobs: tuple[DeclaredReplayJob, ...]
     selections: tuple[ReplaySelection, ...] = ()
     report_source: str = "file"
+    qualified: bool = False
 
 
 def _bad(findings: list[Finding], source: str, path: str, message: str) -> None:
@@ -45,11 +46,13 @@ def _bad(findings: list[Finding], source: str, path: str, message: str) -> None:
 
 
 def _job(raw: dict[str, TomlValue], *, source: str, path: str,
-         findings: list[Finding]) -> DeclaredReplayJob | None:
+         findings: list[Finding], qualified: bool = False) -> DeclaredReplayJob | None:
     start = len(findings)
     cursor = Cursor(raw, path, findings, source)
     ref = cursor.str_("source-job")
-    key = cursor.str_("key")
+    key = cursor.str_("key", required=not qualified)
+    if key is None and qualified:
+        key = ref
     steps = cursor.list_str("steps")
     cache_saves = cursor.list_str("cache-save-steps", required=False)
     minimal_skips = cursor.list_str("minimal-skip-steps", required=False)
@@ -137,6 +140,7 @@ def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
     workflow = cursor.str_("workflow")
     mode = cursor.str_("mode")
     report_source = cursor.str_("report-source", required=False, default="file")
+    qualified = bool(cursor.bool_("qualified", required=False, default=False))
     raw_jobs = cursor.array_of_tables("jobs")
     selections = _selections(cursor, source, path, findings)
     cursor.finish()
@@ -150,14 +154,16 @@ def parse_replay(raw: dict[str, TomlValue], *, source: str, path: str,
         _bad(findings, source, path, "report-source must be file or stdout")
     jobs: list[DeclaredReplayJob] = []
     for index, item in enumerate(raw_jobs):
-        job = _job(item, source=source, path=f"{path}.jobs[{index}]", findings=findings)
+        job = _job(item, source=source, path=f"{path}.jobs[{index}]", findings=findings, qualified=qualified)
         if job is not None:
             jobs.append(job)
     covered_lanes = {lane for job in jobs for lane in job.lanes}
     if len({item.lane for item in selections}) != len(selections) or any(item.lane not in covered_lanes for item in selections):
         _bad(findings, source, path, "selections must name distinct replay-covered lanes")
-    if not jobs or len({job.proof.key for job in jobs}) != len(jobs):
-        _bad(findings, source, path, "declare one or more distinct execution job keys")
+    if (not jobs or len({job.proof.key for job in jobs}) != len(jobs)
+            or (qualified and len({job.source_job for job in jobs}) != len(jobs))):
+        _bad(findings, source, path, "declare distinct execution keys and, in qualified mode, distinct source-jobs")
     if len(findings) != start or repository is None or workflow is None or mode is None or report_source is None:
         return None
-    return ReplayConfig(repository, f".github/workflows/{workflow}", mode, tuple(jobs), tuple(selections), report_source)
+    return ReplayConfig(repository, f".github/workflows/{workflow}", mode, tuple(jobs), tuple(selections), report_source,
+                        qualified)

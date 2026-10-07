@@ -13,6 +13,7 @@ from dataclasses import dataclass, replace
 
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.workflow_replay import ReplayExpectation, ReplayInput, ReplayJob, prove_replay
+from ci_lint.workflow_replay_identity import identity_part
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,45 @@ class MetadataChange:
 
 
 class WorkflowReplayTest(unittest.TestCase):
+    def test_qualified_identity_never_matches_display_name_alone(self) -> None:
+        expected = replace(self.expected, required_jobs=(ReplayJob("diagnostic", ("Run tests",), identity=(
+            identity_part("caller", {"target": "linux"}), identity_part("tests", {"shard": 1}))),))
+        raw = copy.deepcopy(self.raw)
+        job = raw["tree"]["groups"][0]["jobs"][0]
+        job.update(key="Same display name", job_id="tests", matrix={"shard": 1}, identity=[
+            {"jobID": "caller", "matrix": {"target": "linux"}},
+            {"jobID": "tests", "matrix": {"shard": 1}},
+        ])
+        self.assertEqual(prove_replay(raw, expected).jobs, ("diagnostic",))
+        for change in (
+            'job.pop("identity")',
+            'job["identity"][0]["jobID"] = "other"',
+            'job["identity"][0]["matrix"] = {"target": "windows"}',
+            'job["identity"][1]["matrix"] = {"shard": 2}',
+            'job["job_id"] = "other"',
+            'job["matrix"] = {"shard": 2}',
+        ):
+            changed = copy.deepcopy(raw)
+            job = changed["tree"]["groups"][0]["jobs"][0]
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                exec(change)
+                prove_replay(changed, expected)
+
+    def test_qualified_same_names_require_every_execution(self) -> None:
+        expected = replace(self.expected, required_jobs=tuple(
+            ReplayJob("Same", ("Run tests",), identity=(identity_part(caller), identity_part("tests")))
+            for caller in ("first", "second")))
+        raw = copy.deepcopy(self.raw)
+        jobs = raw["tree"]["groups"][0]["jobs"]
+        jobs.append(copy.deepcopy(jobs[0]))
+        for job, caller in zip(jobs, ("first", "second"), strict=True):
+            job.update(key="Same", job_id="tests", matrix=None, identity=[
+                {"jobID": caller, "matrix": None}, {"jobID": "tests", "matrix": {}},
+            ])
+        self.assertEqual(prove_replay(raw, expected).jobs, ("Same", "Same"))
+        jobs[1]["identity"] = copy.deepcopy(jobs[0]["identity"])
+        with self.assertRaises(ValueError):
+            prove_replay(raw, expected)
     def setUp(self) -> None:
         self.scratch = tempfile.TemporaryDirectory()
         self.addCleanup(self.scratch.cleanup)

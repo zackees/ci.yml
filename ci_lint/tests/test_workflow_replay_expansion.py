@@ -22,6 +22,38 @@ def workflow(path, document):
 
 
 class ReplayExpansionTest(unittest.TestCase):
+    def test_qualified_repeated_callers_and_leaf_matrices_are_distinct(self):
+        entry = replace(self.entry, document={"jobs": {
+            "first": {"name": "Same", "uses": "./.github/workflows/check.yml",
+                      "strategy": {"matrix": {"target": ["linux", "windows"]}}},
+            "second": {"name": "Same", "uses": "./.github/workflows/check.yml"},
+        }})
+        called = replace(self.called, document={"on": {"workflow_call": {}}, "jobs": {
+            "check": {"name": "Same", "strategy": {"matrix": {"shard": [1, 2]}}, "steps": []},
+        }})
+        proof = expand_selection((entry, called), entry.path, None, qualified=True)
+        self.assertIsNone(proof.problem)
+        self.assertEqual(len(proof.jobs), 6)
+        self.assertEqual(len({job.identity for job in proof.jobs}), 6)
+        self.assertEqual({tuple(part.job_id for part in job.identity) for job in proof.jobs},
+                         {("first", "check"), ("second", "check")})
+
+    def test_qualified_nested_callers_preserve_each_matrix(self):
+        entry = replace(self.entry, document={"jobs": {
+            "linux": {"uses": "./.github/workflows/middle.yml",
+                      "strategy": {"matrix": {"os": ["linux"]}}},
+        }})
+        middle = workflow(".github/workflows/middle.yml", {"on": {"workflow_call": {}}, "jobs": {
+            "nested": {"uses": "./.github/workflows/check.yml",
+                       "strategy": {"matrix": {"arch": ["arm", "x64"]}}},
+        }})
+        proof = expand_selection((entry, middle, self.called), entry.path, "linux", qualified=True)
+        self.assertIsNone(proof.problem)
+        self.assertEqual(len(proof.jobs), 4)
+        for job in proof.jobs:
+            self.assertEqual(tuple(part.job_id for part in job.identity[:2]), ("linux", "nested"))
+            self.assertEqual(job.identity[0].matrix, '{"os":"linux"}')
+
     def setUp(self):
         self.entry = workflow(".github/workflows/ci.yml", {
             "name": "CI", "jobs": {

@@ -54,6 +54,28 @@ not identity. Direct jobs, nested calls, repeated leaf names and caller/leaf
 matrix expansion must all remain distinguishable. The act2 PR #30 implementation
 is the candidate to qualify; its existence does not establish deployment.
 
+`[gate.replay] qualified = true` enables source-derived identities. A declaration
+names each `source-job` and its checks once; `key` is optional in this mode.
+The shared workflow resolver expands every selected caller, prerequisite and
+literal matrix leg. Literal products, exclusions and includes are supported;
+expressions, duplicate legs and graphs exceeding the bounds reject before
+execution. Legacy display-name declarations retain their existing behavior.
+
+The terminal Bosn job document carries `identity`, an ordered list of
+`{jobID, matrix}` components from root caller to leaf. `matrix` is an object or
+null; an empty object normalizes to null. Object key order is irrelevant.
+The leaf must also agree with the document's `job_id` and `matrix` fields.
+Duplicate identities and missing required legs reject even if display names
+are identical. Bounds are 32 identity components, 64 KiB per identity,
+256 matrix legs per job and 512 concrete jobs per resolved selection.
+
+Current implementation proof is fixture conformance, including the runtime
+adapter reading real temporary workflow files. Runner capability negotiation
+and deployed Bosn/act2 qualification are still pending. The clud source audit
+also found unnamed steps and boolean/conditional profiles that need source
+binding before the generic verifier can replace its private gate script;
+these findings do not justify accepting arbitrary skipped checks.
+
 The existing trailer stamp is a content checksum, not a digital signature.
 Writer trust, trusted base policy and audit runs remain necessary. Merely
 copying a trailer or receiving process exit zero is insufficient evidence.
@@ -82,7 +104,7 @@ transfer of compiler payloads between environments.
 | --- | --- | --- |
 | Local unchanged invocation skips | Real generic invocation twice; same graph executed once, unchanged HEAD and original evidence age | Focused lane regression tests pass; Bosn pilot pending |
 | Invalidated evidence reruns | Expired receipt, changed tools/inputs, explicit rerun, tampering and omitted/failed checks | Expiry, tool change and `--no-cache` regression tests pass; remaining cases pending |
-| Qualified execution identities | Direct/nested/same-name and caller/leaf matrix conformance, incomplete receipt rejected | act2 PR #30 open; integration qualification pending |
+| Qualified execution identities | Direct/nested/same-name and caller/leaf matrix conformance, incomplete receipt rejected | Shared resolver/verifier fixture tests pass; act2 PR #30 open; deployed qualification pending |
 | Persistent local compiler objects | Two fresh engines, restored prior objects and retained new publications; classified residual misses | Pending |
 | Hosted PR skip | Actual stamped PR head, verifier outputs, precisely skipped covered jobs, successful aggregator | Pending |
 | Hosted rejection and full runs | Wrong tree/parents, stale evidence, untrusted writer/fork, changed surfaces, audit and release | Pilot evidence pending |

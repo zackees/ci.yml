@@ -683,6 +683,15 @@ cached-pass freshness, including an already stamped HEAD. An unchanged fresh
 repeat skips execution and keeps HEAD unchanged. `--no-cache` reruns the lanes.
 Per-gate trailers emitted from reused passes retain the original execution time.
 
+`[gate.replay] qualified = true` derives execution identities from the selected
+workflow graph: caller IDs and every literal caller/leaf matrix leg. In this
+mode `key` is optional and diagnostic; each `source-job` is declared once,
+including its mandatory checks. The runner must supply matching structured
+`identity` components and consistent leaf `job_id`/`matrix` fields. Dynamic,
+duplicate or unbounded matrices and missing/duplicate execution identities
+reject. This opt-in verifier is implemented; deployed runner qualification and
+the adopter pilots remain pending under issue #362.
+
 The one local command the remote quick gate must be a subset of. A
 repository without `ci.toml` declares the identical table as `[gate]` in a
 repo-root `local-gate.toml`; declaring both is `GATE-001`. Parsed strictly

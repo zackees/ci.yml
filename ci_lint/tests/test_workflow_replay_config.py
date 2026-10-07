@@ -21,6 +21,24 @@ lanes = ["tests"]
 
 
 class ReplayDeclarationTest(unittest.TestCase):
+    def test_qualified_declarations_do_not_repeat_display_names(self) -> None:
+        document = DECLARATION.replace('mode = "minimal"', 'mode = "minimal"\nqualified = true')
+        document = document.replace('key = "CI/Tests"\n', '')
+        findings: list[Finding] = []
+        config = parse_replay(tomllib.loads(document), source="local-gate.toml", path="gate.replay", findings=findings)
+        self.assertEqual(findings, [])
+        assert config is not None
+        self.assertTrue(config.qualified)
+        self.assertEqual(config.jobs[0].proof.key, "ci.yml:tests")
+
+    def test_qualified_source_cannot_be_duplicated_under_another_label(self) -> None:
+        document = DECLARATION.replace('mode = "minimal"', 'mode = "minimal"\nqualified = true')
+        document += '\n[[jobs]]\nsource-job="ci.yml:tests"\nkey="Another label"\nsteps=["Other check"]\nlanes=["tests"]\n'
+        findings: list[Finding] = []
+        self.assertIsNone(parse_replay(tomllib.loads(document), source="local-gate.toml",
+                                      path="gate.replay", findings=findings))
+        self.assertTrue(findings)
+
     def test_report_source_is_explicit_and_strict(self) -> None:
         for value, valid in (("file", True), ("stdout", True), ("unknown", False), ("", False)):
             with self.subTest(value=value):

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ci_lint.cargo_messages import JsonValue
+from ci_lint.workflow_replay_identity import JobIdentity, matrix_json, parse_identity
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class ReplayJob:
     minimal_mode_step: str = ""
     pr_cache_save_steps: tuple[str, ...] = ()
     input_skip_steps: tuple[str, ...] = ()
+    identity: tuple[JobIdentity, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -92,16 +94,19 @@ def _metadata(raw: dict[str, JsonValue], expected: ReplayExpectation) -> None:
 class _JobDocument:
     key: str
     raw: dict[str, JsonValue]
+    identity: tuple[JobIdentity, ...] = ()
 
 
-def _jobs(raw: JsonValue) -> tuple[_JobDocument, ...]:
+def _jobs(raw: JsonValue, *, qualified: bool = False) -> tuple[_JobDocument, ...]:
     # These maps are parsed JSON documents; callers receive validated proof records.
     if not isinstance(raw, dict) or type(raw.get("malformed_lines")) is not int or raw["malformed_lines"] != 0:
         raise ValueError("workflow replay job tree is malformed")
     groups = raw.get("groups")
     if not isinstance(groups, list):
         raise ValueError("workflow replay groups are missing")
-    jobs: dict[str, _JobDocument] = {}
+    jobs: list[_JobDocument] = []
+    identities: set[tuple[JobIdentity, ...]] = set()
+    keys: set[str] = set()
     for group in groups:
         if not isinstance(group, dict) or not isinstance(group.get("jobs"), list):
             raise ValueError("workflow replay group is malformed")
@@ -109,10 +114,14 @@ def _jobs(raw: JsonValue) -> tuple[_JobDocument, ...]:
             if not isinstance(job, dict):
                 raise ValueError("workflow replay job is malformed")
             key = job.get("key")
-            if not isinstance(key, str) or not key or key in jobs:
+            identity = parse_identity(job.get("identity")) if qualified else ()
+            duplicate = identity in identities if qualified else key in keys
+            if not isinstance(key, str) or not key or duplicate:
                 raise ValueError("workflow replay job identity is missing or duplicated")
-            jobs[key] = _JobDocument(key, job)
-    return tuple(jobs.values())
+            jobs.append(_JobDocument(key, job, identity))
+            identities.add(identity)
+            keys.add(key)
+    return tuple(jobs)
 
 
 def _step(section: JsonValue, name: str) -> bool:
@@ -126,6 +135,9 @@ def _step(section: JsonValue, name: str) -> bool:
 
 
 def _prove_job(raw: dict[str, JsonValue], expected: ReplayJob) -> None:
+    if expected.identity and (raw.get("job_id") != expected.identity[-1].job_id
+                              or matrix_json(raw.get("matrix")) != expected.identity[-1].matrix):
+        raise ValueError(f"workflow replay leaf differs from qualified identity: {expected.key}")
     if raw.get("status") != "completed" or raw.get("conclusion") != "success":
         raise ValueError(f"workflow replay job did not pass: {expected.key}")
     if (len(set(expected.cache_save_steps)) != len(expected.cache_save_steps)
@@ -184,7 +196,10 @@ def _input_skips(expected: ReplayExpectation) -> None:
 def prove_replay(raw: JsonValue, expected: ReplayExpectation) -> ReplayProof:
     if not isinstance(raw, dict):
         raise ValueError("workflow replay evidence must be a JSON object")
-    if not expected.required_jobs or len({job.key for job in expected.required_jobs}) != len(expected.required_jobs):
+    qualified = any(job.identity for job in expected.required_jobs)
+    distinct = len({job.identity if qualified else job.key for job in expected.required_jobs})
+    if not expected.required_jobs or distinct != len(expected.required_jobs) or (qualified and any(
+            not job.identity for job in expected.required_jobs)):
         raise ValueError("workflow replay requires distinct named jobs")
     _minimal_skips(expected)
     _pr_cache_saves(expected)
@@ -197,9 +212,12 @@ def prove_replay(raw: JsonValue, expected: ReplayExpectation) -> ReplayProof:
         raise ValueError("workflow replay requires a declared PR or dispatch selection")
     _inputs(raw, expected)
     _metadata(raw, expected)
-    jobs = {item.key: item for item in _jobs(raw.get("tree"))}
+    jobs = _jobs(raw.get("tree"), qualified=qualified)
+    by_identity = {item.identity: item for item in jobs}
+    by_key = {item.key: item for item in jobs}
     for job in expected.required_jobs:
-        if job.key not in jobs:
+        actual = by_identity.get(job.identity) if qualified else by_key.get(job.key)
+        if actual is None:
             raise ValueError(f"workflow replay required job is missing: {job.key}")
-        _prove_job(jobs[job.key].raw, job)
+        _prove_job(actual.raw, job)
     return ReplayProof(tuple(job.key for job in expected.required_jobs))
