@@ -101,8 +101,17 @@ adapter reading real temporary workflow files. Runner capability negotiation
 and deployed Bosn/act2 qualification are still pending. The clud source audit
 now resolves the five routine selections after naming their unnamed steps,
 including the three unit matrix legs. This is source conformance, not actual
-execution proof. Generic full-run receipts, provider compatibility and the
-adopter command still need qualification before replacing the private script.
+execution proof. A qualified full invocation now validates the union of the
+lane selections, with each shared execution identity checked once. Selections
+must use the same workflow, event and inputs; the full receipt has no job
+filter. The checker derives lane passes from its own successful verification,
+then the gate applies the existing complete-lane accounting. No repository
+script needs to create a second receipt or duplicate the job validator.
+Per-lane seconds describe the full invocation's wall time, not CPU time.
+Fixture integration proves one command seeds two lanes, an unchanged repeat
+starts no command, and an omitted required job caches/stamps nothing.
+Provider compatibility and the actual adopter run still need qualification
+before replacing the private script.
 
 The existing trailer stamp is a content checksum, not a digital signature.
 Writer trust, trusted base policy and audit runs remain necessary. Merely

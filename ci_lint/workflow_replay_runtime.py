@@ -8,18 +8,17 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
 from ci_lint.cargo_messages import JsonValue
-from ci_lint.workflow_replay import ReplayExpectation, ReplayJob, ReplayInput, prove_replay
-from ci_lint.workflow_replay_config import ReplayConfig, DeclaredReplayJob
-from ci_lint.workflow_replay_expansion import expand_selection
-from ci_lint.workflow_replay_inputs import BoundInput
-from ci_lint.workflow_replay_checks import derive_checks
-from ci_lint.workflow_scan import load_workflows
+from ci_lint.workflow_replay import ReplayExpectation, prove_replay
+from ci_lint.workflow_replay_config import ReplayConfig
+from ci_lint.workflow_replay_plan import build_plan
+from ci_lint.full_run_receipt import FullRunEvidence, ReceiptPass
 
 REPORT_ENV = "CI_LINT_GATE_REPLAY_REPORT"
 MAX_REPORT_BYTES = 16 * 1024 * 1024
@@ -29,6 +28,7 @@ MAX_REPORT_BYTES = 16 * 1024 * 1024
 class CheckedCommand:
     returncode: int
     error: str | None = None
+    full_run: FullRunEvidence | None = None
 
 
 def _unique_object(pairs: Iterable[Sequence[JsonValue]]) -> dict[str, JsonValue]:
@@ -65,49 +65,18 @@ def _execute(repo: Path, argv: tuple[str, ...], report: Path, *, report_source: 
     return process.returncode
 
 
-def _required_jobs(repo: Path, declared: tuple[DeclaredReplayJob, ...], *, workflow: str,
-                   selected: str | None, qualified: bool, inputs: tuple[ReplayInput, ...],
-                   mode: str, event: str) -> tuple[ReplayJob, ...]:
-    if not qualified:
-        return tuple(job.proof for job in declared)
-    expanded = expand_selection(tuple(load_workflows(repo)), workflow, selected, qualified=True,
-                                inputs=tuple(BoundInput(item.name, item.value) for item in inputs))
-    if expanded.problem:
-        raise ValueError(expanded.problem)
-    declarations = {job.source_job: job for job in declared}
-    if len(declarations) != len(declared):
-        raise ValueError("qualified replay has duplicate source-job declarations")
-    if set(declarations) != {job.source_job for job in expanded.jobs}:
-        raise ValueError("qualified replay declaration differs from the complete selected graph")
-    return tuple(derive_checks(job, mode=mode, event=event) if declarations[job.source_job].derive_checks else
-                 replace(declarations[job.source_job].proof, key=job.key, identity=job.identity)
-                 for job in expanded.jobs)
-
-
 def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig, *,
                         head: str, tree: str, lane: str | None = None,
                         env: dict[str, str] | None = None, stdout: BinaryIO | None = None) -> CheckedCommand:
-    jobs = tuple(job for job in config.jobs if lane is None or lane in job.lanes)
-    if not jobs:
-        return CheckedCommand(1, f"no workflow replay proof declared for lane {lane}")
-    refs = {job.source_job for job in jobs}
-    selected = next(iter(refs)).split(":", 1)[1] if lane is not None and len(refs) == 1 else None
-    selection = next((item for item in config.selections if item.lane == lane), None)
-    if lane is None and config.selections:
-        return CheckedCommand(1, "multi-selection replay requires separate lane commands and reports")
-    event = selection.event if selection is not None else "pull_request"
-    workflow = selection.workflow if selection is not None and selection.workflow is not None else config.workflow
-    chosen = selection.selected_job if selection is not None else selected
-    inputs = selection.inputs if selection is not None else ()
     try:
-        required = _required_jobs(repo, jobs, workflow=workflow, selected=chosen, qualified=config.qualified,
-                                  inputs=inputs, mode=config.mode, event=event)
+        plan = build_plan(repo, config, lane=lane)
     except (OSError, ValueError) as exc:
         return CheckedCommand(1, f"workflow replay proof rejected before execution: {exc}")
-    expectation = ReplayExpectation(config.repository, repo, head, tree, workflow,
-                                    chosen, config.mode, required,
-                                    "pr" if event == "pull_request" else event, event,
-                                    inputs)
+    expectation = ReplayExpectation(config.repository, repo, head, tree, plan.workflow,
+                                    plan.selected, config.mode, plan.required,
+                                    "pr" if plan.event == "pull_request" else plan.event, plan.event,
+                                    plan.inputs)
+    start = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="ci-replay-") as scratch:
         report = Path(scratch) / "report.json"
         child_env = dict(env) if env is not None else os.environ.copy()
@@ -120,4 +89,6 @@ def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig,
             prove_replay(_read_report(report), expectation)
         except (OSError, UnicodeError, ValueError) as exc:
             return CheckedCommand(1, f"workflow replay proof rejected: {exc}")
-    return CheckedCommand(0)
+    evidence = (FullRunEvidence(tuple(ReceiptPass(lane, int(round(time.monotonic() - start))) for lane in plan.lanes))
+                if plan.lanes else None)
+    return CheckedCommand(0, full_run=evidence)

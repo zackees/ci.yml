@@ -60,7 +60,7 @@ from ci_lint.finding import Finding, Status
 from ci_lint.workflow_replay_config import ReplayConfig, parse_replay
 from ci_lint.workflow_replay_runtime import CheckedCommand, run_checked_command
 from ci_lint.workflow_replay_static import check_replay_static
-from ci_lint.full_run_receipt import FullRunConfig, load_receipt, parse_full_run
+from ci_lint.full_run_receipt import FullRunConfig, load_receipt, parse_full_run, validate_evidence
 from ci_lint.gate_isolation import IsolationConfig, check_isolation, parse_isolation
 from ci_lint.gate_trust import TrustConfig, WorkflowFacts, WorkflowJob, check_trust_static, parse_trust
 from ci_lint.lane_cache import (
@@ -631,8 +631,11 @@ def _execute_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, re
         print(f"local-gate: full run FAILED after {secs}s (exit {proc.returncode}); full log: {log}", file=sys.stderr)
         print("\n".join(lines[-150:]), file=sys.stderr, flush=True)
         return LaneRun(proc.returncode or 1, [], secs)
-    loaded = load_receipt(receipt_path, tree=tree, expected_lanes=tuple(lane.id for lane in config.lanes),
-                          optional_lanes=tuple(lane.id for lane in config.lanes if lane.optional))
+    expected_lanes = tuple(lane.id for lane in config.lanes)
+    optional_lanes = tuple(lane.id for lane in config.lanes if lane.optional)
+    loaded = (validate_evidence(proc.full_run, expected_lanes=expected_lanes, optional_lanes=optional_lanes)
+              if proc.full_run is not None else
+              load_receipt(receipt_path, tree=tree, expected_lanes=expected_lanes, optional_lanes=optional_lanes))
     if loaded.evidence is None:
         print(f"local-gate: full run has no usable lane proof: {loaded.error}; full log: {log}", file=sys.stderr)
         return LaneRun(1, [], secs)
