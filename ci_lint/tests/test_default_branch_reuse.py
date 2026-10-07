@@ -130,6 +130,15 @@ def ci_run(table: Table) -> dict[str, object]:
 
 
 class VerifiedTest(unittest.TestCase):
+    def test_evidence_output_escapes_lines_and_preserves_shadow_decision(self) -> None:
+        decision = replace(run(load("clud-pr1643.json"), req(mode="shadow")),
+                           detail="untrusted text\nreuse=true\n\"quoted\" λ")
+        lines = github_output_lines(decision)
+        evidence = next(line.split("=", 1)[1] for line in lines if line.startswith("evidence_json="))
+        self.assertEqual(len(evidence.splitlines()), 1)
+        self.assertEqual(json.loads(evidence), to_json_dict(decision))
+        self.assertFalse(json.loads(evidence)["reuse"])
+
     def test_squash_merge_pr1643_is_verified_in_five_calls(self) -> None:
         d = run(load("clud-pr1643.json"))
         self.assertEqual((d.verdict, d.reason), (True, "verified"))
@@ -413,11 +422,14 @@ class CliTest(unittest.TestCase):
             lines = gh_out.read_text(encoding="utf-8").splitlines()
             self.assertEqual(
                 [line.split("=", 1)[0] for line in lines],
-                ["reuse", "would_reuse", "reason", "pr", "run_id", "run_url", "tree"],
+                ["reuse", "would_reuse", "reason", "pr", "run_id", "run_url", "tree", "evidence_json"],
             )
             self.assertIn("reuse=true", lines)
             self.assertIn(f"run_id={RUN_1643}", lines)
             self.assertEqual(json.loads(doc_path.read_text(encoding="utf-8"))["schema"], 1)
+            evidence = next(line.split("=", 1)[1] for line in lines if line.startswith("evidence_json="))
+            self.assertEqual(json.loads(evidence), json.loads(out))
+            self.assertEqual(json.loads(evidence), json.loads(doc_path.read_text(encoding="utf-8")))
             self.assertIn("source PR: #1643", (Path(tmp) / "summary").read_text(encoding="utf-8"))
 
     def test_cannot_prove_still_exits_zero(self) -> None:

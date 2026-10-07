@@ -36,6 +36,8 @@ network.
 
 from __future__ import annotations
 
+import json
+
 import re
 import urllib.parse
 from dataclasses import dataclass, field, replace
@@ -543,6 +545,7 @@ def github_output_lines(d: ReuseDecision) -> list[str]:
         f"run_id={first.run_id if first else ''}",
         f"run_url={first.run_url if first else ''}",
         f"tree={d.tree or ''}",
+        "evidence_json=" + json.dumps(to_json_dict(d), separators=(",", ":")),
     ]
 
 
