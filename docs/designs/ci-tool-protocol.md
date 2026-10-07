@@ -1334,3 +1334,62 @@ job identities, failed or skipped required Rust tests, and duplicate JSON fields
 These controls test the execution-receipt boundary. They do not prove hosted
 author authorization, freshness, parent validation, publication interruption or
 cache warmth. Those acceptance requirements remain separate.
+
+## Public-provider fresh-engine cache control
+
+Two clean-source executions used public Bosn 0.1.18 and act2.15 on Template
+head `1622641a07cf04bc0ed18b1f697bc54b22f4cbd6`, in distinct private engines.
+Both ran the existing push workflow under the owned outer engine's four-CPU
+quota, with no Git push or attestation stamp. The first run
+`5fd20c27-39a0-4714-831c-42592fea72f9` saved the build/registry/Dylint caches
+but failed at `CI OK`: fetching the pinned `actions/download-artifact` action
+hit a TLS handshake timeout. Bosn reported failure and removed the engine.
+Its 307.226 wall seconds and 599.415 owned CPU seconds include that failure.
+
+The second run `f7d2c2c1-fe14-4793-8415-2927fa2476a8` restored those local
+archives, passed all 21 jobs and removed its engine in 172.240 wall seconds,
+using 241.747 owned CPU seconds. The Dylint job's isolated compiler stats
+reported 36 hits, zero cacheable misses and 63 non-cacheable requests, versus
+the first run's zero hits, 152 misses and 63 non-cacheable requests. These
+actual hits establish some compiler-object durability across engine teardown.
+The fast job emitted no warm session stats; its hit count is unknown. The
+wall/CPU difference is not a pure build-latency comparison because the first
+run failed during final action acquisition. The subsequent snapshot test task
+started after the warm run and its CPU sample finished.
+
+Read-only copies of build cache IDs 8 and 12 contain 97 and 349 staged
+`output-*` files, respectively, plus staged manifests and pointers. Neither
+contains `.stdout` or `.stderr` files. Member lists alone do not establish
+diagnostic replay completeness. This control uses stock setup-soldr archives;
+it does not exercise the unpublished backend snapshot API. Exact-hit publication
+of new objects, per-request residual classification, two real code edits and
+complete compiler replay remain required.
+
+Native Windows qualification of [backend PR #1934](https://github.com/zackees/zccache/pull/1934)
+exposed `PermissionDenied` in snapshot tests, including empty export, and the
+snapshot writer test. Its Linux pass did not establish Windows behavior. The
+correction closes synced manifest handles before renaming their containing
+directories through the existing kernal-api owner. Focused isolated Linux tests
+and the same primary review pass; the corrected full gate and actual hosted
+Windows qualification remain pending. The backend must not merge or release
+from its earlier Linux-only snapshot qualification.
+
+## Published-commit hosted-consumer controls
+
+The production hosted consumer and required-check aggregator were exercised
+locally against Template's actual published head
+`0ad05efa99755e307ab6ab3290170bfb904bffc7` and base
+`b359bd4931b4840a82aebb3d0d4efe43b431962d`. The positive control authorizes
+`fast` and `dylint` skips using the original trailers and base policy. All 23
+negative controls refuse aggregation: unauthorized/unknown author, fork,
+unavailable base, full label, expanded title selection, failed/missing verifier,
+non-string or false skip outputs, push/dispatch/release/local-replay context,
+wrong workflow, expired evidence, changed tree or parents, deterministic audit
+sampling, failed/missing required job, omitted gate and tampered gate. Commit
+mutations write only an isolated clone's objects. Event and `needs` mutations
+are local controls, not actual hosted events.
+
+These results extend the retained execution-receipt controls to the portable
+commit and consumer boundary. They do not replace the original queued hosted
+Template run `37642365563`, establish remote cache warmth, or prove concurrent
+publication and interruption safety.
