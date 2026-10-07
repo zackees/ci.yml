@@ -60,6 +60,8 @@ def _receipt(payload: JsonValue, key: str) -> LocalHealReceipt:
     count, size = payload.get("deleted_count"), payload.get("reclaimed_archive_bytes")
     if type(count) is not int or not 0 <= count <= 100_000 or type(size) is not int or not 0 <= size <= 2**63 - 1:
         raise LocalHealError("act2 cleanup response has invalid deletion accounting")
+    if count == 0 and size != 0:
+        raise LocalHealError("act2 cleanup reports reclaimed bytes without a deleted entry")
     return LocalHealReceipt(1, key, count, size)
 
 

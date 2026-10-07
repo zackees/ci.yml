@@ -26,6 +26,7 @@ class LocalCacheHealTest(unittest.TestCase):
         self.addCleanup(remote_guard.stop)
         self.calls = []
         self.status = 200
+        self.raw = None
         self.payload = {"schema_version": 1, "key": "old-key", "deleted_count": 1,
                         "reclaimed_archive_bytes": 80}
         owner = self
@@ -38,7 +39,7 @@ class LocalCacheHealTest(unittest.TestCase):
                 if owner.status == 302:
                     self.send_header("Location", "/redirected")
                 self.end_headers()
-                self.wfile.write(json.dumps(owner.payload).encode())
+                self.wfile.write(json.dumps(owner.payload).encode() if owner.raw is None else owner.raw)
 
             def log_message(self, *_args):
                 pass
@@ -95,7 +96,7 @@ class LocalCacheHealTest(unittest.TestCase):
 
     def test_response_must_prove_exact_key_and_bounded_counts(self):
         for field, value in (("schema_version", 2), ("key", "another-key"), ("deleted_count", -1),
-                             ("deleted_count", True), ("reclaimed_archive_bytes", -1)):
+                             ("deleted_count", True), ("deleted_count", 0), ("reclaimed_archive_bytes", -1)):
             with self.subTest(field=field, value=value):
                 saved = self.payload[field]
                 self.payload[field] = value
@@ -110,3 +111,18 @@ class LocalCacheHealTest(unittest.TestCase):
             remote.assert_called_once()
             self.assertTrue(remote.call_args.args[0].startswith("https://api.github.com/repos/owner/repo/actions/caches?"))
         self.assertEqual(self.calls, [])
+
+    def test_absent_exact_key_reports_zero_actual_reclamation(self):
+        self.payload["deleted_count"] = 0
+        self.payload["reclaimed_archive_bytes"] = 0
+        result = self.invoke()
+        self.assertEqual(result.code, 0, result.error)
+        self.assertEqual(json.loads(result.output)["deleted_count"], 0)
+
+    def test_duplicate_fields_and_oversized_documents_are_rejected(self):
+        for raw in (b'{"schema_version":1,"key":"old-key","deleted_count":1,"deleted_count":0,"reclaimed_archive_bytes":0}',
+                    b" " * 65_537, b"not JSON"):
+            self.raw = raw
+            result = self.invoke()
+            self.assertEqual(result.code, 1)
+            self.assertNotIn("a" * 32, result.error)
