@@ -743,5 +743,65 @@ attested skips in a hosted run.
 is the ordinary PR run for this published head. Because the adoption changes
 workflow and policy surfaces, its remote fallback is expected and cannot
 count as hosted attestation-skip proof. A later source-only head against the
-adopted base policy must prove those skips. The end-to-end pilot remains
-incomplete until that evidence and the remaining issue #362 controls exist.
+adopted base policy must prove those skips. The next section records that
+source-only proof; the remaining issue #362 controls still require completion.
+
+
+### Source-only local-to-hosted proof
+
+[Clud PR #1886](https://github.com/zackees/clud/pull/1886) changed only the
+local diagnostic implementation and its tests. Its new regression first
+failed under actual Bosn/act2 run `b97dc68a-bf24-4be5-a715-549df4d8f2d6`:
+a success report with missing or malformed failure counters displayed PASS.
+The reviewed fix requires typed counters; malformed reports fail explicitly.
+This diagnostic parser does not decide attestation eligibility.
+
+The ordinary shared gate then accepted run
+`10ab476f-a913-4c31-aebe-38a19b5435c1`: all 26 jobs completed, zero failed,
+engine removed, five lanes proved in 605 seconds. The formerly failing
+regression passed. An identical invocation reused all five lanes in 1.260
+seconds without changing any attestation. The shared publisher transported
+stamped head `d678d0c7052739cdab3f49583c61a360fe118329`, tree
+`a12c997d6da15a1bb82948f4e226b2a8654746c9`, parent `bcd7dc50`, and its
+unchanged message with seven gate trailers.
+
+[Hosted run 37609104548](https://github.com/zackees/clud/actions/runs/37609104548)
+completed successfully on that exact head. Its CI mode log records GATE-008
+`trusted` and GATE-010 all required gates attested for each of static checks,
+Dylint, Clippy, build and unit. All five corresponding hosted jobs skipped;
+`CI OK` succeeded. Main protection was read back with that check required
+from GitHub Actions app id `15368`, including administrators. PR #1886
+merged ordinarily as `7249e603`, without an admin bypass.
+
+This establishes the Clud local execution → local result reuse → portable
+commit evidence → exact publication → hosted per-job skip → required-check
+path. It does not establish public Bosn deployment, second-consumer coverage
+or compiler-cache durability. Combined evidence is retained in
+`/tmp/ci-cpu-investigation/clud-362-end-to-end-attestation-proof.json`, with
+terminal receipt, events, repeat, remote commit, hosted jobs and verifier log,
+and protection snapshots alongside it. [Issue #362's progress record](https://github.com/zackees/ci.yml/issues/362#issuecomment-6036264298)
+links the authoritative hosted run. Bosn migration PR #539 has merged as
+`a0451fc2`; a new version must still pass its exact-main full CI and existing
+pretag release gate before public deployment is claimed.
+
+### Incremental compiler-cache writes are not yet durable
+
+During that same Clud run, the build runner had 31 newly written cache files
+absent from its restored compiler archive: four manifests, nine compiler
+output files totalling 549,346,006 bytes, and associated control files. Its
+compiler store was under
+`/tmp/setup-soldr-soldr/cache/zccache/daemon-state/embedded-v1/v1.15.0/artifacts`,
+outside the persistent `/opt/hostedtoolcache` mount. The final build save
+summary (event 7389) reported `skipped exact hit`; Docker subsequently
+reported the build container absent. Bosn's tool-cache persistence does not
+capture this compiler store. An exact archive hit therefore does not retain
+these newly compiled objects when the job's private store is discarded.
+
+The comparison, archive member list, mount inspection and save observations
+are retained as `clud-362-live-build-artifact-comparison.json`,
+`clud-362-live-build-restored-archive-members.txt`,
+`clud-362-live-cache-mount-evidence.json` and
+`clud-362-typed-verdict-cache-save-observations.json` in the same evidence
+directory. A fresh-engine behavioral control and durability repair remain
+required. This evidence does not establish aggregate production CPU
+attribution or justify treating compiler-cache hits as execution proof.
