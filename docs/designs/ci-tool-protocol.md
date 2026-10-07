@@ -1170,3 +1170,46 @@ This is filesystem transport evidence, not proof of a real compiler hit or
 atomic import into a concurrently written compiler store. The pilot continues
 to restore into private engines before compilation rather than introducing
 a shared writable artifact directory.
+
+
+## Writer-path integrity follow-ups (qualification in progress)
+
+A supported local `push` replay selected the cache writer (`cache_save=true`)
+but failed before compilation. This adds two provider defects to the compiler
+payload lifecycle work; neither changes the attestation trust rules.
+
+- Bosn's frozen depth-1 checkout omitted `HEAD^`, so the existing lockfile
+  comparison conservatively reported a changed lockfile for an ordinary source
+  edit. Candidate `4caf7752a6cfa08742314bcfabf9b32f81a02eda` requests depth 2
+  for both head and base, retaining deeper PR merge-base history when needed.
+  Initial or shallow sources retain only available history. The isolated
+  regression failed on missing `HEAD^`; 14 focused tests then passed with one
+  ignored, including unchanged lockfiles and a base equal to head. Its complete
+  Rust replay passed; the Linux lane is still running. No shipped snapshot fix
+  or successful local writer is claimed by these results.
+- The stock upload-artifact client's query handling discarded an unescaped
+  trailing base64 signature `=`. [Act2 PR #57](https://github.com/zackees/act2/pull/57)
+  URL-encodes that value while preserving strict signature verification. The
+  actual pinned client reproduced the loss and preserved the signature after
+  encoding. Artifact package tests and all PR checks passed. The merged commit
+  is `73c1eea4d868bb38a84c3050db395f6f21f4c6e7`; exact-main
+  [qualification 37648485379](https://github.com/zackees/act2/actions/runs/37648485379)
+  is running before release.
+
+Payload integrity has a separate narrow correction in
+[setup-soldr PR #572](https://github.com/zackees/setup-soldr/pull/572), head
+`0dda4ca925564e29fed9c1bc100f771dec350510`. Its existing classifier preserved
+compiler replay files in older artifact layouts but dropped `.stdout` and
+`.stderr` below generation-scoped `daemon-state/<namespace>/**/artifacts/`.
+The focused fixture reproduced the omissions. The extended classifier keeps
+those files while excluding standalone daemon sidecars and logs; namespace
+and version identities remain backend-owned. All 15 payload tests, typecheck
+and the full npm suite passed (916 passed, one skipped). The four regenerated
+bundles each contain only the intended semantic classifier change after
+module-ID mapping. Hosted qualification and the existing exact-SHA downstream
+canary required for floating-tag promotion remain pending.
+
+These fixes do not establish pre-cook baseline capture, a complete backend
+export/import contract, exact-hit publication of new objects, interruption-safe
+generations, or fresh-engine compiler hits. The independent local and hosted
+cache acceptance requirements remain unchanged.
