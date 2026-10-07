@@ -854,3 +854,19 @@ Validation includes an actual Git head with valid trailers reproducing the
 previous TEST-001 aggregator rejection, and adversarial consumer/CLI fixtures.
 Independent Template and hosted qualification of this candidate is pending;
 fixture results are not evidence of an actual hosted skipped job.
+
+
+### PR title selection guard (candidate, issue #362)
+
+The shared hosted event adapter carries both actual labels and title bracket
+tokens. It uses the planner's existing `extract_bracket_tokens` parser, so
+trust and planning read exactly the same token grammar. The PR-base
+`full-labels` deny list matches either source of selection. Consumers whose
+coverage expands through title tags must include those tags in this list.
+A matching selection forces remote execution in both the verifier and the
+independent CI OK consumer, even when every ordinary local gate is attested.
+
+The Template enrollment probe reproduced the missing title guard: a valid
+ordinary local proof plus `[ci-full]` was still credited for its required
+skipped job. The regression now refuses that skip using the shared parser.
+Independent hosted qualification remains pending.

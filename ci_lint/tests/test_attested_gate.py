@@ -55,6 +55,7 @@ class AttestedGateTest(unittest.TestCase):
             'payload["pull_request"]["head"]["repo"]["full_name"] = "fork/repo"',
             'payload["pull_request"]["base"]["sha"] = "a" * 40',
             'payload["pull_request"]["labels"] = [{"name": "ci-full"}]',
+            'payload["pull_request"]["title"] = "[ci-full] add native coverage"',
             'needs["verify"]["result"] = "failure"',
             'needs.pop("verify")',
             'needs["verify"].pop("outputs")',

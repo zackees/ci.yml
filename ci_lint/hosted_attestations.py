@@ -12,6 +12,7 @@ from ci_lint.gate_trust import TrustInput, decide
 from ci_lint.local_gate import load_gate_config_at
 from ci_lint.workflow_scan import load_workflows_at
 from ci_lint.workflow_replay_maintenance import non_attestable_jobs
+from ci_lint.rules.contract import extract_bracket_tokens
 
 
 def job_decisions(repo: Path, inp: TrustInput, head_trusted: bool) -> tuple[JobDecision, ...]:
@@ -48,6 +49,7 @@ def trust_input(payload: dict[str, JsonValue], event: str, sha: str) -> TrustInp
         return obj if isinstance(obj, str) else None
 
     raw_labels = pr.get("labels")
+    title = pr.get("title")
     labels = tuple(
         label["name"] for label in (raw_labels if isinstance(raw_labels, list) else [])
         if isinstance(label, dict) and isinstance(label.get("name"), str)
@@ -60,6 +62,7 @@ def trust_input(payload: dict[str, JsonValue], event: str, sha: str) -> TrustInp
         head_repo=text(pr, "head", "repo", "full_name"),
         base_repo=text(pr, "base", "repo", "full_name"),
         labels=labels,
+        title_tags=tuple(extract_bracket_tokens(title)) if isinstance(title, str) else (),
     )
 
 

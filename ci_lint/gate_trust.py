@@ -114,6 +114,7 @@ class TrustInput:
     head_repo: str | None
     base_repo: str | None
     labels: tuple[str, ...]
+    title_tags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -211,9 +212,9 @@ def decide(repo: Path, inp: TrustInput) -> TrustDecision:  # noqa: C901
     if base is None or base.trust is None or base.trust.mode == "never":
         return _no("not-opted-in", "the base commit's gate declaration does not enable [gate.trust]")
     trust = base.trust
-    hit = sorted(set(inp.labels) & set(trust.full_labels))
+    hit = sorted(set((*inp.labels, *inp.title_tags)) & set(trust.full_labels))
     if hit:
-        return _no("full-label", f"label {hit[0]!r} forces the full remote run")
+        return _no("full-label", f"selection {hit[0]!r} forces the full remote run")
     if inp.head_repo and inp.base_repo and inp.head_repo != inp.base_repo:
         return _no("fork", f"head repository {inp.head_repo} is a fork of {inp.base_repo}")
     if (inp.author_association or "") not in TRUSTED_ASSOCIATIONS:
