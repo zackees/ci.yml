@@ -214,7 +214,7 @@ transfer of compiler payloads between environments.
 | Local unchanged invocation skips | Real generic invocation twice; same graph executed once, unchanged HEAD and original evidence age | Proven for Clud head `100ec0fc`: full run 682s, unchanged repeat 0.924s, no new run/engine and original timestamp preserved |
 | Invalidated evidence reruns | Expired receipt, changed tools/inputs, explicit rerun, tampering and omitted/failed checks | Expiry, tool change and `--no-cache` regression tests pass; remaining cases pending |
 | Qualified execution identities | Direct/nested/same-name and caller/leaf matrix conformance, incomplete receipt rejected | Released act2.12; Clud receipt has 26 terminal jobs with zero unqualified entries; full adversarial/provider qualification remains pending |
-| Persistent local compiler objects | Two fresh engines, restored prior objects and retained new publications; classified residual misses | Pending |
+| Persistent local compiler objects | Two fresh engines, restored prior objects and retained new publications; classified residual misses | Cold build archive save and two fresh-engine restores proven; exact-hit delta publication, lint-only sharing and residual classification pending |
 | Hosted PR skip | Actual stamped PR head, verifier outputs, precisely skipped covered jobs, successful aggregator | Pending |
 | Hosted rejection and full runs | Wrong tree/parents, stale evidence, untrusted writer/fork, changed surfaces, audit and release | Pilot evidence pending |
 | Independent consumer | Same generic tool runs template-python-rust-cmd without clud code | Pending |
@@ -447,3 +447,49 @@ durations, after a focused two-failure regression and all 1163 selftests
 passed. The valid integer records above are unaffected. The Clud adoption
 currently pins `6b5433e`; final adoption must pin the fully qualified shared
 tool and rerun its changed source contract before claiming final rollout.
+
+### Publication hook and forced fresh engines, 2026-10-07
+
+Shared ci-lint `9f45190a0d68dc9309c92ebc36f1ba7f87408041` passed all 1178
+selftests and its stamped gate before publication. The Clud clone's pre-push
+hook now uses a durable `uvx` launcher pinned to that commit. An actual hook
+invocation accepted head `100ec0fc`. A synthetic commit with the same tree
+and parents and only a valid `Local-Gate:` trailer was refused, naming all
+seven missing gate attestations. That negative-control commit was never
+pushed. Tests also reproduce and close the CLI's former worktree-policy bypass:
+the hook reads policy from each outgoing SHA even when the worktree policy
+is missing or malformed. The generic PR publication command remains pending.
+
+Two unchanged executions used `local-gate run --no-cache --no-stamp` from the
+published `6b5433e` consumer, with one owned engine active at a time and the
+same four-CPU private Docker parent limit. Both proved all five lanes,
+completed 26/26 jobs with zero failures, removed their engines, and preserved
+head `100ec0fc` and tree `8c237bdb`.
+
+| Bosn run | Engine ID prefix | Front-door time | Producer wall time | Private parent CPU |
+| --- | --- | --- | --- | --- |
+| `2eebf4ca-f0fd-4b7f-8246-7d0eb566c571` | `0c5d1bce3047` | 573s | 570.965s | 1231.739s |
+| `1aca7a9e-4c35-4382-baef-a62ee06bf419` | `0c27aa4c8a05` | 601s | 599.333s | 1252.923s |
+
+The sampling wrappers took 580.051s and 610.057s; their ten-second polling
+interval includes observation delay. These are distinct fresh-engine runs,
+not local attestation hits. Evidence, original receipts, full event streams,
+engine identities and CPU samples are retained under
+`/tmp/ci-cpu-investigation/clud-362-forced-fresh-engine-*`.
+
+The earlier cold run `ec5d2819` reported a build-cache session with zero hits
+and 451 misses, then saved the compiler archive as cache ID 6. Its rejected
+execution receipt never qualified an attestation. Both fresh engines restored
+the same build-cache key and reported 451 hits and zero misses in that session.
+Archive ID 6 remains physically present in the private cache volume after
+engine teardown. Compiler-cache data and successful gate evidence are distinct:
+the cold archive can supply validated compiler objects without authorizing a
+gate skip.
+
+These session snapshots have `global-fallback` provenance and no journal;
+they are not whole-workflow hit-rate totals. They prove that this saved archive
+survives and serves compatible builds. They do not prove publication of new
+objects following an exact-hit restore, selected-lint writer sharing,
+concurrent publication, outage recovery or complete classification of residual
+non-cacheable compiles/materialization failures. Those controls and two real
+code edits remain required; this evidence does not complete the cache pilot.
