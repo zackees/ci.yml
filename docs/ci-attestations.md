@@ -90,6 +90,11 @@ failure and names the qualified commit already published. See the
    are false, even when HEAD already has attestations. The replay executes
    the checks that will create fresh proof, and cannot require that proof
    before it runs. Hosted verification and pre-push enforcement are unchanged.
+   Hosted PR verification also reads the missing-attestation requirement
+   (`mode` and `exempt-authors`) from the base declaration once enrolled.
+   Changing those fields on an unproved head cannot weaken that requirement.
+   A missing or unreadable PR base refuses verification. Initial enrollment
+   with a readable base but no declaration uses the head's declaration; local replay still executes checks before producing proof.
    - GATE-008's head-level policy applies first: base policy, surfaces, author, fork, `ci-full`, and the audit sample.
    - Then, per `[gate.trust].skip` job, it outputs **`skip_<job id>`**, which is `true` only when every gate the base definition maps to that job has a valid attestation.
    - Each skip job's `if:` consumes `needs.<verify>.outputs.skip_<job id>`.
