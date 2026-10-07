@@ -1543,3 +1543,67 @@ writes it to the final gate's `--default-branch-reuse` file. No artifact service
 second reuse decision or repository-specific serializer is needed. Transporting
 this document grants no skip authority: the existing gate consumer still checks
 the pushed SHA and independently verifies every proving live job.
+
+
+## Compiler archive relocation: failed qualification evidence
+
+The canonical eight-cell matrix on zccache source
+`e9b1741db15a2f1b9c4b47cd167a1a270547030d` with Soldr
+`4ead33e791044d509527acf4c428a3ea658b78dc` completed with four failures.
+The measured Soldr binary and execution image both use the GNU Linux ABI.
+All eight cells passed infrastructure checks; no abort, timeout or fallback
+was recorded. Existing timing thresholds were retained.
+
+| Fixture | Scenario | Cold/first (ms) | Warm/second (ms) | Speedup | Warm compiler hits/misses | Verdict |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| medium | cold-tar-untar-warm | 88084 | 74194 | 1.19 | 0 / 171 | Failed |
+| medium | restore-no-clean-warm | 83614 | 65222 | 1.28 | 0 / 171 | Failed |
+| medium | worktree-share | 123409 | 3423 | 36.05 | 0 / 0 | Passed |
+| medium | touch-no-change | 126530 | 3254 | 38.88 | 0 / 0 | Passed |
+| sqlite-link | cold-tar-untar-warm | 102112 | 71410 | 1.43 | 0 / 44 | Failed |
+| sqlite-link | restore-no-clean-warm | 86601 | 90378 | 0.96 | 0 / 44 | Failed |
+| sqlite-link | worktree-share | 77460 | 1133 | 68.37 | 0 / 0 | Passed |
+| sqlite-link | touch-no-change | 101211 | 1167 | 86.73 | 0 / 0 | Passed |
+
+The successful zero-invocation cells demonstrate Cargo fingerprint reuse.
+They do not demonstrate compiler-object reuse. Archive-restore cells
+performed compilation again. Session hit/miss reports use Soldr's legacy
+last-session fallback; they are not a whole-workflow rollup or a paired native
+compiler-journal diagnosis. This limits attribution of individual misses,
+without turning the failed restore timings into successful qualification.
+
+Total matrix wall time was 1601.884315 seconds. CPU consumption was
+2952.86032 seconds within the owned outer Docker cgroup, capped at four CPUs;
+this excludes the host frontend and does not establish a fleet-wide CPU cap.
+The complete log, all eight result trees, shutdown/save/load reports and
+daemon startup logs were retained under the investigating machine's
+`/tmp/ci-cpu-investigation/zccache-1935-perf-e9b1741db15a*` evidence prefix.
+These local files are provenance, not publicly downloadable artifacts.
+
+### Existing identity boundary and next proof
+
+Soldr's broker route currently hashes its canonical absolute product root,
+service version and daemon binary image. Its embedded compiler store uses
+`embedded-v1-<broker-route>` as its instance identity. Relocating an archive
+therefore changes the selected instance namespace. The existing legacy
+migration only recognizes the pre-#1651 32-hex identities, so it does not
+re-home current route-named stores. This is a source-proven mismatch and a
+lead for the measured restore failure; paired runtime namespace and native
+journal evidence must establish its contribution before declaring causality.
+
+The transport boundary must remain the backend-owned compiler snapshot API.
+Soldr's adapter should select its owned store and compatible context, then
+call the backend's export/import operations. Do not duplicate index decoding,
+object merging, writer leases or internal layout copying in Soldr, Bosn or
+ci-lint. Broker routing is an execution identity; it must not become the
+portable artifact compatibility identity. A transport snapshot cannot grant
+a test pass or attestation.
+
+A subsequent evidence-retention correction at zccache source
+`7df98ca18b822b43aa250f4864c3945a2a043a4a` makes the existing recursive
+collector retain native `compile_journal.jsonl` alongside daemon startup
+logs, preserving relative paths. Six regression cases reproduced the omission
+before the correction; all 85 harness tests passed afterward. The completed
+eight-cell matrix tested the earlier source and does not qualify this change.
+Backend publication remains held until changed-source full qualification and
+actual fresh-engine object reuse satisfy the pilot contract.
