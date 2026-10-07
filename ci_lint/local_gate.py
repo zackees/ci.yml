@@ -1030,7 +1030,8 @@ def _load_workflows(repo_root: Path) -> _Workflows:
 def check_gate_static(config: GateConfig, repo_root: Path) -> list[Finding]:  # noqa: C901
     from ci_lint.workflow_scan import jobs_of, steps_of  # noqa: PLC0415
 
-    findings: list[Finding] = check_isolation(config.isolation, config.run, repo_root, config.source)
+    findings: list[Finding] = check_isolation(config.isolation, config.run, repo_root, config.source,
+                                           replay=config.replay, lanes=config.lanes)
     if config.replay is not None:
         findings.extend(check_replay_static(config.replay, repo_root))
     findings.extend(_check_attestation_definition(config, repo_root))

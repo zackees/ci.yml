@@ -34,6 +34,17 @@ strict verifier used for the default `report-source = "file"` contract, whose
 runner writes `CI_LINT_GATE_REPLAY_REPORT`. Stderr remains diagnostic output.
 No consumer needs a script solely to copy stdout into the report file.
 
+An isolated gate may invoke Bosn directly. With qualified replay, a provider
+query and stdout receipt capture, the shared verifier checks the original
+receipt's source and execution profile; a repository receipt parser is not
+required. The declared test guard must still refuse developer-host execution,
+and `proves-tree = true` remains mandatory. Legacy replay, exit-code-only
+commands and file-forwarding wrappers do not establish this direct proof.
+Every declared gate lane must directly invoke the same isolated runner and
+be replay-covered before the shared verifier
+can replace the repository's isolation proof; an unmapped host command cannot
+inherit the exemption from another lane.
+
 ## Execution and portable evidence
 
 1. Load the consumer's gate declaration and validate coverage before scheduling.
@@ -191,9 +202,9 @@ transfer of compiler payloads between environments.
 
 | Requirement | Evidence required | Current pilot status |
 | --- | --- | --- |
-| Local unchanged invocation skips | Real generic invocation twice; same graph executed once, unchanged HEAD and original evidence age | Focused lane regression tests pass; Bosn pilot pending |
+| Local unchanged invocation skips | Real generic invocation twice; same graph executed once, unchanged HEAD and original evidence age | Proven for Clud head `100ec0fc`: full run 682s, unchanged repeat 0.924s, no new run/engine and original timestamp preserved |
 | Invalidated evidence reruns | Expired receipt, changed tools/inputs, explicit rerun, tampering and omitted/failed checks | Expiry, tool change and `--no-cache` regression tests pass; remaining cases pending |
-| Qualified execution identities | Direct/nested/same-name and caller/leaf matrix conformance, incomplete receipt rejected | Shared resolver/verifier fixture tests pass; act2 PR #30/#52 merged; release/provider qualification pending |
+| Qualified execution identities | Direct/nested/same-name and caller/leaf matrix conformance, incomplete receipt rejected | Released act2.12; Clud receipt has 26 terminal jobs with zero unqualified entries; full adversarial/provider qualification remains pending |
 | Persistent local compiler objects | Two fresh engines, restored prior objects and retained new publications; classified residual misses | Pending |
 | Hosted PR skip | Actual stamped PR head, verifier outputs, precisely skipped covered jobs, successful aggregator | Pending |
 | Hosted rejection and full runs | Wrong tree/parents, stale evidence, untrusted writer/fork, changed surfaces, audit and release | Pilot evidence pending |
@@ -375,3 +386,55 @@ The live Clud main branch reports `protected: false`, its protection endpoint
 returns 404, and its repository ruleset list is empty. The workflow's CI OK
 aggregator therefore is not currently a mechanically required merge check.
 The pilot must establish that required check before claiming remote enforcement.
+
+### Qualified Clud run and unchanged reuse, 2026-10-07
+
+The preceding qualification sections record successive experiments. The
+following actual run supersedes their pending act2 release and consumer
+enrollment status; it does not complete the other pilot acceptance criteria.
+
+Act2 `v0.2.89-act2.12` was published from merged commit
+`4849612c36b906208cf8e4b9826ec9b38f7d5c70` after its exact-commit full checks
+passed. Release run `37580974300` succeeded. The consumed Linux x86 archive
+hashes to `d4fcce22efe1f6d1ccfa1117fee1dba24690fee1e5c40ee020810226ed603990`;
+the extracted executable hashes to
+`0b8cd125773f4a0ea6f201b49942755053f09a3312db4333826d6d2e698d5420` and
+reported both required capabilities. Other platform executables were not
+executed in this qualification.
+
+Bosn candidate `7df49f2` pins those bytes and exposes the effective provider
+profile. Its owned isolated build passed formatting, all-target Clippy and
+six pin tests. It has not been published as a Bosn release. The pilot daemon
+used executable digest
+`216397a358c33e58b7860b0f4d6ac366ba462fa73fe4365a6c0a6431457ee1b2`.
+
+Published ci-lint `6b5433e` validated Clud run
+`01470562-faba-4e98-b133-dceac58b89e8` for source tree
+`8c237bdb7d9ab7eb60938a913470a1cd419a272e`. All 26 jobs completed, with zero
+failures, 17 qualified skips and zero unqualified terminal entries. The shared
+front door proved all five lanes in 682 seconds and stamped head
+`100ec0fc242b205d1612d0a3589aafa62f602f4d` with seven `Ci-Attestation:`
+records, retaining execution timestamp `1791355328`. The full command took
+683.528 wall seconds and consumed 1346.042 CPU seconds in the private Docker
+parent cgroup. Earlier runs had warmed its local compiler cache; this is the
+first qualified full run, not a clean cold-cache measurement.
+
+The identical command took 0.924 seconds, reused all five lanes, preserved
+HEAD and original timestamps, and created no new Bosn run or engine. Its
+private parent CPU delta was 0.000203 seconds. A separate negative control
+rejected an old provider missing execution pins before any build started.
+Original logs, receipts and CPU samples remain under
+`/tmp/ci-cpu-investigation/clud-362-act2-12-*`.
+
+The exact attested head is published in draft
+[Clud PR #1885](https://github.com/zackees/clud/pull/1885). Its policy/workflow
+changes require ordinary hosted fallback; this initial adoption PR cannot
+prove trusted hosted skipping. The Bosn release prerequisite, subsequent
+attested PR, required CI OK setting, second consumer, compiler-object
+persistence controls and aggregate production CPU admission remain pending.
+
+Shared ci-lint `39d42cb` additionally rejects Boolean schema versions and
+durations, after a focused two-failure regression and all 1163 selftests
+passed. The valid integer records above are unaffected. The Clud adoption
+currently pins `6b5433e`; final adoption must pin the fully qualified shared
+tool and rerun its changed source contract before claiming final rollout.

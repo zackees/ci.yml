@@ -485,6 +485,80 @@ class BosnCiRunnerTest(TempRepoCase):
     def test_missing_run_record_check(self) -> None:
         self.assertEqual(self._rules(self._repo("print('trust the exit code')\n")), ["GATE-009"])
 
+    def _direct(self, *, enrolled: bool = True) -> Path:
+        repo = self._repo("")
+        path = repo / "local-gate.toml"
+        text = path.read_text().replace('run = ["python3", "ci/gate.py"]',
+                                        'run = ["bosn", "ci", "run", "--wait", "--json"]')
+        if enrolled:
+            text += '''
+[gate.replay]
+repository = "zackees/tool"
+workflow = "ci.yml"
+mode = "minimal"
+qualified = true
+report-source = "stdout"
+provider-query = ["bosn", "ci", "runners", "list", "--json"]
+[[gate.replay.jobs]]
+source-job = "ci.yml:tests"
+'''
+        path.write_text(text)
+        return repo
+
+    def test_direct_shared_replay_satisfies_isolation(self) -> None:
+        self.assertEqual(self._rules(self._direct()), [])
+
+    def test_direct_exit_code_without_shared_proof_is_rejected(self) -> None:
+        self.assertEqual(self._rules(self._direct(enrolled=False)), ["GATE-005", "GATE-009"])
+
+    def test_direct_shared_replay_still_requires_host_guard(self) -> None:
+        repo = self._direct()
+        (repo / "scripts/test_wrapper.sh").write_text('exec "$@"\n')
+        self.assertEqual(self._rules(repo), ["GATE-005"])
+
+    def test_direct_incomplete_shared_enrollment_is_rejected(self) -> None:
+        for before, after in (
+            ('report-source = "stdout"', 'report-source = "file"'),
+            ('provider-query = ["bosn", "ci", "runners", "list", "--json"]', ''),
+            ('run = ["bosn", "ci", "run", "--wait", "--json"]',
+             'run = ["other-runner", "--wait", "--json"]'),
+        ):
+            with self.subTest(before=before):
+                repo = self._direct()
+                path = repo / "local-gate.toml"
+                path.write_text(path.read_text().replace(before, after))
+                self.assertEqual(self._rules(repo), ["GATE-005", "GATE-009"])
+
+    def test_direct_shared_replay_requires_tree_proof_declaration(self) -> None:
+        repo = self._direct()
+        path = repo / "local-gate.toml"
+        path.write_text(path.read_text().replace('proves-tree = true', 'proves-tree = false'))
+        self.assertEqual(self._rules(repo), ["GATE-009"])
+
+    def test_unmapped_host_lane_cannot_use_shared_isolation_exemption(self) -> None:
+        repo = self._direct()
+        path = repo / "local-gate.toml"
+        path.write_text(path.read_text() + '''
+lanes = ["covered"]
+[gate.lanes.covered]
+run = ["bosn", "ci", "run", "--wait", "--json"]
+tools = ["bosn"]
+[gate.lanes.host-tests]
+run = ["python3", "-m", "pytest"]
+tools = ["python3"]
+''')
+        self.assertEqual(self._rules(repo), ["GATE-005", "GATE-009"])
+
+        # Mapping a host command to replay still must not grant permission
+        # to launch the suite outside the declared isolated runner.
+        path.write_text(path.read_text().replace('lanes = ["covered"]',
+                                                'lanes = ["covered", "host-tests"]'))
+        self.assertEqual(self._rules(repo), ["GATE-005", "GATE-009"])
+
+        path.write_text(path.read_text().replace('run = ["python3", "-m", "pytest"]',
+                                                'run = ["bosn", "ci", "run", "--wait", "--json"]'))
+        self.assertEqual(self._rules(repo), [])
+
 
 class IsolationMountTest(TempRepoCase):
     """GATE-005/009 regressions from the zccache rollout: a non-/repo mount
