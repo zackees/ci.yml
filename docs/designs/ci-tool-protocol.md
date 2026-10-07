@@ -1535,3 +1535,11 @@ All five names match unique successful jobs in completed hosted Clud run
 [`37675379314`](https://github.com/zackees/clud/actions/runs/37675379314).
 That is hosted naming evidence, not execution through the new aggregator.
 Adopter rollout and hosted execution through this new path remain unqualified.
+
+The existing `reuse-check --github-output` producer also emits `evidence_json`:
+the same schema-1 document as `--json` and `--out`, compactly serialized on one
+output line. A workflow carries that value through its producer job output and
+writes it to the final gate's `--default-branch-reuse` file. No artifact service,
+second reuse decision or repository-specific serializer is needed. Transporting
+this document grants no skip authority: the existing gate consumer still checks
+the pushed SHA and independently verifies every proving live job.
