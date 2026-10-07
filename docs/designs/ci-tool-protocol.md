@@ -79,7 +79,8 @@ lease protects the remote branch independently. A transport failure or timeout
 reports the expected SHA and an unconfirmed publication outcome; failed
 confirmation after successful transport retains that SHA as well. Real
 bare-Git fixtures cover
-these boundaries; actual pilot PR publication remains to be qualified.
+these boundaries; actual pilot PR publication is recorded below. Hosted
+skip qualification remains pending.
 
 ## Execution and portable evidence
 
@@ -706,3 +707,41 @@ original successful job does not satisfy this boundary. The inventory is
 retained in `template-362-qualification-inventory.json` under the same
 local evidence directory. No second-consumer or hosted qualification is
 claimed from that inventory.
+
+
+## Clud publication qualification
+
+The updated Clud diagnostic verdict rejects incomplete and engine-error
+reports even when their job counts look complete. Its actual standalone
+local gate, using the shared verifier at `96ba9f2`, passed all five lanes
+through Bosn/act2 run `d2f6a42a-a294-4fc0-b7c6-2a56519bb4f3` in 613 seconds.
+The terminal receipt contains 26 completed jobs, zero failures and
+`cleanup=removed`. Its Rust unit log records the incomplete-report,
+engine-error and success-count regression tests passing. An identical
+invocation took 1.103 seconds, reused all five lanes and left every portable
+attestation unchanged.
+
+The published standalone tool at
+`153302bab78f1753677e94ed1d4e300821cf6019` then ran
+`ci-lint local-gate push --sha a5858913e44a3f88b3c46d1830866bd4b2203baf`.
+GitHub's PR and commit APIs confirm that [Clud PR #1885](https://github.com/zackees/clud/pull/1885)
+now names that exact stamped SHA, tree
+`ee58d4c97171ca06b0c98a84a4dcdfe8ad143f67`, parent `100ec0fc`, and an unchanged
+commit message containing seven gate trailers. No Clud-specific publishing
+or receipt parser was invoked. Detailed local evidence is retained in
+`/tmp/ci-cpu-investigation/clud-362-shared-publisher-evidence.json`, alongside
+the terminal receipt, event stream and repeat report.
+
+The pilot also configured and read back Clud main's actual branch protection:
+`CI OK` from GitHub Actions app id `15368` is required, including for admins;
+force pushes and deletions are disabled. `strict=false` avoids the unqueued
+base-update rerun mechanism governed by GEN-006. This establishes the merge
+boundary's required-check setting. It does not prove the aggregator accepted
+attested skips in a hosted run.
+
+[Hosted adoption run 37605738668](https://github.com/zackees/clud/actions/runs/37605738668)
+is the ordinary PR run for this published head. Because the adoption changes
+workflow and policy surfaces, its remote fallback is expected and cannot
+count as hosted attestation-skip proof. A later source-only head against the
+adopted base policy must prove those skips. The end-to-end pilot remains
+incomplete until that evidence and the remaining issue #362 controls exist.
