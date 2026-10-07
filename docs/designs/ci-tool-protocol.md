@@ -872,7 +872,7 @@ skipped job. The regression now refuses that skip using the shared parser.
 Independent hosted qualification remains pending.
 
 
-## Public output request transport (candidate, issue #362)
+## Public output request transport (implemented; adopter qualification pending)
 
 Each qualified `[gate.replay.jobs]` declaration may name `capture-outputs =
 ["matrix", "selection"]`: explicit nonsecret outputs already declared by that
@@ -895,3 +895,62 @@ preflight. A producer reachable only after a deferred dynamic expansion may
 need further transport work; missing evidence still refuses the final graph.
 The Template pilot requests only its already-discovered verifier and reusable
 precheck outputs. Actual adopter qualification remains pending.
+
+
+## Backend-neutral exact cache cleanup
+
+The consumer uses the same `ci-lint cache heal --key <exact-key>` command on
+both backends. The shared command selects the transport: under `ACT=true|1`,
+it uses the local Actions cache service; otherwise, it uses the existing
+GitHub cache transport. It must never fall back from a local failure to
+GitHub deletion or forward GitHub credentials to the local service.
+
+The local service exposes token-bound `DELETE
+/<server-token>/_apis/artifactcache/cache?key=<exact-key>`. Its schema-1 receipt
+names the requested key, deleted entry count and reclaimed archive bytes.
+An exact deletion preserves other keys, incomplete reservations and active
+transfers; a busy service refuses instead of pretending cleanup succeeded.
+The server uses its existing durable deletion journal. The shared client
+validates the bounded receipt, rejects redirects and unsupported URL/ref
+shapes, sanitizes errors and supports dry run without deletion. Neither a
+cleanup receipt nor a cache hit is evidence that a required test executed.
+
+The client is merged in [ci.yml PR #370](https://github.com/zackees/ci.yml/pull/370)
+at `7297e5aa20d5e60e57b2b3beeb9871f4c4bd1447`. The producer is merged in
+[act2 PR #55](https://github.com/zackees/act2/pull/55). Actual source conformance
+reserved, uploaded and committed two local entries, deleted only the requested
+entry, verified the other survived and repeated deletion with zero count and
+bytes. Evidence: `act2-362-exact-delete-actual-conformance.log` under
+`/tmp/ci-cpu-investigation`. This proves source interoperability, not a
+published-provider or adopter qualification.
+
+Bosn must require `cache-exact-delete-v1` before accepting the corresponding
+provider for workflow execution. Its isolated capability task has demonstrated
+RED to GREEN for that requirement. The production version and artifact digests
+must be updated only after the compatible act2 release is public and verified.
+The current public Bosn 0.1.16 uses act2.13, which lacks this cleanup API.
+
+### Independent pilot failure and release qualification
+
+Template replay `6f15a6a8-ce84-4499-bc63-a782f5393f61` completed all 21 jobs,
+with fast and its aggregator failing because the prior cleanup command required
+GitHub credentials after a local delta save. No successful attestation was
+issued. This is the production evidence motivating the shared transport fix;
+Template must not rerun its expensive graph against the incompatible provider.
+
+Act2 exact-main [run 37622724547](https://github.com/zackees/act2/actions/runs/37622724547)
+failed before release at `ce604b773b0843402734a0e957d0f0622b70c193`.
+The artifact v4 fixture copied a cached action while a sibling checked out
+that same directory, losing `jest.config.js` during the copy. The legacy Git
+cache gate protected mutations but did not protect readers. Lint, snapshots,
+Windows and macOS succeeded; that does not waive the Linux failure.
+
+[Act2 PR #56](https://github.com/zackees/act2/pull/56) extends the existing
+cancellation-aware gate to manifest reads, copying and deferred Docker context
+consumption. It records the manifest revision and refuses changed checkouts
+before consuming code. The gate ends before workflow action execution and
+coordinates jobs within one process; cross-process locking is not established.
+Two focused regressions demonstrated RED to GREEN; full hosted qualification
+and release remain pending. A passing PR run must be followed by full CI on
+the exact merged release SHA, then published artifact verification, Bosn
+rollout and the original Template frontend replay.
