@@ -85,6 +85,7 @@ from ci_lint.attestations import JobDecision
 from ci_lint.default_branch_reuse import SCHEMA_VERSION as REUSE_DOC_SCHEMA
 from ci_lint.finding import Finding, Status
 from ci_lint.github_api import FetchFn, GitHubApiError
+from ci_lint.workflow_job_names import WorkflowJobNames
 
 _TAG_REMOVES_RE = re.compile(r"tag '\[(?P<tag>[^\]]+)\]'.*removes")
 
@@ -337,6 +338,50 @@ def _default_branch_lane_digests(plan: dict[str, JsonValue]) -> tuple[str, ...]:
     return tuple(d for d in digests_raw.values() if isinstance(d, str) and d)
 
 
+def _default_branch_proving_jobs(
+    job_id: str, plan: dict[str, JsonValue], reuse: DefaultBranchReuse,
+    workflow_jobs: WorkflowJobNames | None,
+) -> tuple[DefaultBranchReuseJob, ...]:
+    if workflow_jobs is None:
+        job = reuse.job_for(job_id, _default_branch_lane_digests(plan))
+        return (job,) if job is not None else ()
+    if not reuse.pr_head_sha or reuse.run_id is None:
+        return ()
+    try:
+        names = workflow_jobs.for_job(job_id)
+    except ValueError:
+        return ()
+    selected: list[DefaultBranchReuseJob] = []
+    for name in names:
+        matches = [job for job in reuse.jobs if job.name == name]
+        if len(matches) != 1:
+            return ()
+        selected.append(matches[0])
+    if len({job.job_id for job in selected}) != len(selected):
+        return ()
+    return tuple(selected)
+
+
+def _verify_default_branch_job(
+    job: DefaultBranchReuseJob, reuse: DefaultBranchReuse, fetch: FetchFn,
+    token: str, repo: str, *, native: bool,
+) -> ReuseVerdict:
+    if job.job_id is None:
+        return ReuseVerdict(status="needs_review", run_id=reuse.run_id)
+    try:
+        job_payload = fetch(f"https://api.github.com/repos/{repo}/actions/jobs/{job.job_id}", token)
+    except GitHubApiError:
+        return ReuseVerdict(status="needs_review", run_id=reuse.run_id)
+    payload = job_payload if isinstance(job_payload, dict) else {}
+    if payload.get("conclusion") != "success" or payload.get("name") != job.name:
+        return ReuseVerdict(status="fail", run_id=reuse.run_id)
+    if reuse.pr_head_sha is not None and payload.get("head_sha") != reuse.pr_head_sha:
+        return ReuseVerdict(status="fail", run_id=reuse.run_id)
+    if native and payload.get("run_id") != reuse.run_id:
+        return ReuseVerdict(status="fail", run_id=reuse.run_id)
+    return ReuseVerdict(status="ok", run_id=reuse.run_id)
+
+
 def _verify_default_branch_reuse(
     job_id: str,
     plan: dict[str, JsonValue],
@@ -344,31 +389,19 @@ def _verify_default_branch_reuse(
     fetch: FetchFn | None,
     token: str | None,
     repo: str | None,
+    workflow_jobs: WorkflowJobNames | None = None,
 ) -> ReuseVerdict:
     if reuse is None:
         return ReuseVerdict(status="fail", run_id=None)
-    job = reuse.job_for(job_id, _default_branch_lane_digests(plan))
-    if job is None:
+    jobs = _default_branch_proving_jobs(job_id, plan, reuse, workflow_jobs)
+    if not jobs:
         return ReuseVerdict(status="fail", run_id=None)
     if fetch is None or token is None or repo is None:
         return ReuseVerdict(status="needs_review", run_id=reuse.run_id)
-    if job.job_id is None:
-        # A name match we cannot re-verify is not a proof.
-        return ReuseVerdict(status="needs_review", run_id=reuse.run_id)
-    try:
-        job_payload = fetch(f"https://api.github.com/repos/{repo}/actions/jobs/{job.job_id}", token)
-    except GitHubApiError:
-        return ReuseVerdict(status="needs_review", run_id=reuse.run_id)
-    payload = job_payload if isinstance(job_payload, dict) else {}
-    if payload.get("conclusion") != "success":
-        return ReuseVerdict(status="fail", run_id=reuse.run_id)
-    if payload.get("name") != job.name:
-        return ReuseVerdict(status="fail", run_id=reuse.run_id)
-    # The proving job must be the one that ran on the PR head the decision
-    # was made about -- a document replayed against a different head proves
-    # a different tree.
-    if reuse.pr_head_sha is not None and payload.get("head_sha") != reuse.pr_head_sha:
-        return ReuseVerdict(status="fail", run_id=reuse.run_id)
+    for job in jobs:
+        verdict = _verify_default_branch_job(job, reuse, fetch, token, repo, native=workflow_jobs is not None)
+        if verdict.status != "ok":
+            return verdict
     return ReuseVerdict(status="ok", run_id=reuse.run_id)
 
 
@@ -436,6 +469,7 @@ def _handle_skipped(
     fetch: FetchFn | None,
     token: str | None,
     repo: str | None,
+    workflow_jobs: WorkflowJobNames | None,
 ) -> _SkipOutcome:
     """Decide what a required job whose `needs` result is `skipped` means.
 
@@ -446,7 +480,7 @@ def _handle_skipped(
     """
 
     db_reuse = parsed_db_reuse.reuse
-    db_verdict = _verify_default_branch_reuse(job_id, plan, db_reuse, fetch, token, repo)
+    db_verdict = _verify_default_branch_reuse(job_id, plan, db_reuse, fetch, token, repo, workflow_jobs)
     if db_verdict.status == "ok":
         return _SkipOutcome(
             status=JobStatus(
@@ -515,6 +549,7 @@ def compute_gate(
     default_branch_reuse: JsonValue | None = None,
     push_sha: str | None = None,
     attested_jobs: tuple[JobDecision, ...] = (),
+    workflow_jobs: WorkflowJobNames | None = None,
 ) -> GateReport:
     """`reuse`/`head_sha`/`fetch`/`token`/`repo` are all optional and all
     default to "no reuse information available" -- a call with none of
@@ -568,6 +603,7 @@ def compute_gate(
                 fetch,
                 token,
                 repo,
+                workflow_jobs,
             )
             statuses.append(outcome.status)
             findings.extend(outcome.findings)
