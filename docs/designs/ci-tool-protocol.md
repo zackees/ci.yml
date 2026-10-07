@@ -629,3 +629,53 @@ the executable hashes to
 `48541dd9f8d579a6521dba02cbeec207c12359220c504ec3b2424dce8b79c5db` and reports
 all three capabilities offline. Bosn source pin adoption is isolated-tested;
 a deployed Bosn release and end-to-end hosted skip qualification remain pending.
+
+## Bosn's shared-gate qualification
+
+Bosn's source migration is locally qualified on tree
+`c52981190f8cd4aba12225986b5aa7aae6ce1088`. The published shared tool at
+`96ba9f2df5b6c16d4fc933ee9dc2dbab7c47b46e` invoked Bosn directly; the
+private deployed provider used the checksum-verified act2.13 release and
+reported actual binary and engine/runner image digests.
+
+| Lane | Durable Bosn run | Shared verdict | Execution time |
+| --- | --- | --- | --- |
+| Rust | `771eb114-d093-4cbc-b400-8aa3851e6b52` | Passed | 370 s |
+| Linux lint, policy, unit and Docker | `860765ca-7ffa-4db0-90f6-c08046ccae9b` | Passed | 610 s |
+
+Both terminal receipts say `state=done`, `conclusion=success` and
+`cleanup=removed`. The Rust receipt retains successful format/Clippy,
+boundary/locked-resolution and workspace test sections. Linux retains
+successful install, lint, shared policy validation and unit/Docker test
+sections, with the source-excluded minimal-tier placeholder explicitly
+skipped. The verifier stamped seven per-gate trailers on commit
+`21ddd4303c5174314af496c10353c0e595d502b7`.
+
+Repeating the same standalone command took 0.754 seconds and reused both
+lanes without submitting another expensive graph. The already-stamped head
+remained unchanged, and every original evidence timestamp and lane key was
+preserved. The retained repeat report is
+`/tmp/ci-cpu-investigation/bosn-362-qualified-repeat-evidence.json`; the
+original gate log is `bosn-362-qualified-full-gate.log` in the same directory.
+This proves local execution and result reuse on the migration candidate.
+Public Bosn deployment and hosted skip enforcement remain pending.
+
+### Second-consumer boundary still requiring implementation
+
+A source inventory of template-python-rust-cmd confirms that ordinary fast
+and Dylint selections also traverse the reusable precheck's cache-budget
+and cache-janitor jobs. Those jobs declare `CI_REMOTE_ONLY`; Bosn replaces
+only their steps with a diagnostic and reports `remote_only`. The shared
+verifier currently requires their original successful checks, so this
+consumer cannot yet qualify. A diagnostic cannot prove a remote audit.
+
+The protocol must distinguish required execution evidence from remote
+maintenance dependencies. Any future representation must retain qualified
+identity and source binding, prevent remote maintenance from producing gate
+attestations or planner outputs, and preserve hosted execution of those
+jobs. It must keep ordinary build, unit, installed-wheel smoke and Dylint
+checks mandatory. A reason-string waiver or treating the diagnostic as the
+original successful job does not satisfy this boundary. The inventory is
+retained in `template-362-qualification-inventory.json` under the same
+local evidence directory. No second-consumer or hosted qualification is
+claimed from that inventory.
