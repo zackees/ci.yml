@@ -1449,7 +1449,8 @@ and main-push reuse of each selected validation caller. Cache writers retain
 their current execution policy; releases retain complete validation. The
 new consumer must use the actual event and exact checked-out source and must
 continue to require the successful verification job. These are migration
-requirements, not a claim of implemented selection or name mapping.
+requirements; the native selection path below addresses selection, while
+proving display-name mapping and actual adopter qualification remain open.
 
 The shared default-branch consumer must also confirm that the fetched live
 job's name equals the proving name in the reuse record. A focused regression
@@ -1459,3 +1460,39 @@ consumer checks the exact live name in its existing verification path. Tests
 retain positive bare-ID and matrix-display-name cases and reject a missing
 live name, a renamed proof and a different head. This correction does not yet
 implement the native Clud display-name mapping described above.
+
+### Native workflow selection for the shared gate
+
+Repositories with native job IDs can invoke the same final verdict command:
+
+```sh
+ci-lint gate --workflow-plan ci.yml --gate-job ci-ok --needs needs.json \
+  --attested-workflow ci.yml --event "$GITHUB_EVENT_PATH"
+```
+
+`--workflow-plan` and the existing `--plan` are mutually exclusive. Native
+selection reads the checked-out workflow through the existing YAML owner,
+validates the aggregation job's dependency graph, and uses the existing finite
+condition evaluator. Same-run string outputs are considered only from a
+successful, nonmatrix producer whose source declares that output. Missing,
+failed or ambiguous producers leave dependent coverage required.
+
+Native planning requires a known event; an absent event cannot prove an event
+guard false. `trusted`, `skip_*`, `reuse` and `would_reuse` outputs do not
+remove required jobs. Output aliases originating from verification or reuse
+decision steps are also excluded, including bracket references and decision
+metadata. Detection reuses the existing command tokens. Independent selection
+step outputs from the same producer remain usable. The ordinary runtime
+gate still independently validates each skipped required result. An absent
+condition follows GitHub's implicit dependency-success behavior only when the
+dependency itself was excluded by source selection; an unexplained skipped
+dependency creates no exemption. Unknown expressions and explicit overrides
+are conservative. Failed/cancelled jobs in the aggregation dependency list
+remain required even when their mode normally excludes them. Missing source,
+empty selection, invalid dependencies and oversized graphs refuse planning.
+
+The first source inspection resolves Clud's actual minimal/extended/windows/full
+job sets without copying its shell lists into policy or adding a repository
+branch in the tool. This is selection evidence, not an executed adopter gate.
+Matrix leaf coverage remains the execution provider's responsibility; native
+main-push proof-name mapping must additionally account for every proving leaf.

@@ -589,23 +589,33 @@ def _attested_gate_jobs(args: argparse.Namespace, payload: dict[str, JsonValue],
         return ()
 
 
+def _gate_plan(args: argparse.Namespace, needs: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    if args.workflow_plan:
+        from ci_lint.workflow_gate import build_plan
+        return build_plan(Path(args.repo).resolve(), args.workflow_plan, args.gate_job,
+                          needs, event=os.environ.get("GITHUB_EVENT_NAME", ""))
+    with open(args.plan, encoding="utf-8") as fh:
+        plan = json.load(fh)
+    if not isinstance(plan, dict):
+        raise ValueError("--plan must be a JSON object")
+    return plan
+
+
 def _cmd_gate(args: argparse.Namespace) -> int:
-    try:
-        with open(args.plan, encoding="utf-8") as fh:
-            plan = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"ci-lint gate: cannot read --plan {args.plan!r}: {exc}", file=sys.stderr)
-        return 1
     try:
         with open(args.needs, encoding="utf-8") as fh:
             needs = json.load(fh)
     except (OSError, json.JSONDecodeError) as exc:
         print(f"ci-lint gate: cannot read --needs {args.needs!r}: {exc}", file=sys.stderr)
         return 1
-    if not isinstance(plan, dict) or not isinstance(needs, dict):
-        print("ci-lint gate: --plan and --needs must both be JSON objects", file=sys.stderr)
+    if not isinstance(needs, dict):
+        print("ci-lint gate: --needs must be a JSON object", file=sys.stderr)
         return 1
-
+    try:
+        plan = _gate_plan(args, needs)
+    except (OSError, ValueError) as exc:
+        print(f"ci-lint gate: cannot resolve required-job plan: {exc}", file=sys.stderr)
+        return 1
     reuse: dict[str, JsonValue] | None = None
     if args.reuse:
         try:
@@ -1308,7 +1318,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_gate = sub.add_parser("gate", help="CI OK aggregator: plan.json's required_jobs vs needs.json")
     p_gate.add_argument("--repo", default=".")
-    p_gate.add_argument("--plan", required=True)
+    gate_plan = p_gate.add_mutually_exclusive_group(required=True)
+    gate_plan.add_argument("--plan", help="planner's JSON required-job plan")
+    gate_plan.add_argument("--workflow-plan", help="derive native job selection from this workflow basename")
+    p_gate.add_argument("--gate-job", default="ci-ok", help="native aggregation job whose needs define coverage")
     p_gate.add_argument("--needs", required=True)
     p_gate.add_argument("--attested-workflow", default=None,
                         help="workflow basename whose skipped jobs must be reverified from the PR base policy and head attestations")
