@@ -111,3 +111,136 @@ class AttestedGateTest(unittest.TestCase):
                     code = main(argv)
                 self.assertEqual(code, expected, output.getvalue())
                 self.assertEqual(json.loads(output.getvalue())["statuses"][0]["locally_attested"], code == 0)
+
+    def test_pr_head_cannot_weaken_base_attestation_requirement(self):
+        import contextlib
+        import io
+        import json
+        import os
+        from ci_lint.cli import main
+        text = (self.repo / "local-gate.toml").read_text()
+        # The trusted base requires a local gate, while the unproved head
+        # changes only the head's requirement to shadow.
+        base_text = text.replace("[gate]\n", '[gate]\nmode = "enforce"\n', 1)
+        base = self.fixture.commit("require attestation", {"local-gate.toml": base_text}, lanes=None)
+        for head_text in (
+            base_text.replace('mode = "enforce"', 'mode = "shadow"', 1),
+            base_text.replace("[gate]\n", '[gate]\nexempt-authors = ["developer"]\n', 1),
+        ):
+            with self.subTest(head_policy=head_text):
+                head = self.fixture.commit("weaken requirement", {"local-gate.toml": head_text}, lanes=None)
+                payload = self.payload()
+                payload["pull_request"]["head"]["sha"] = head
+                payload["pull_request"]["base"]["sha"] = base
+                event_path = self.repo / ".git" / "test-event.json"
+                event_path.write_text(json.dumps(payload))
+                with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request",
+                                            "GITHUB_EVENT_PATH": str(event_path), "ACT": "false"}):
+                    output = io.StringIO()
+                    with contextlib.redirect_stdout(output):
+                        code = main(["local-gate", "verify", "--repo", str(self.repo), "--trust",
+                                     "--author", "developer"])
+                self.assertEqual(code, 1, output.getvalue())
+                self.assertNotIn("mode = shadow", output.getvalue())
+
+    def test_missing_or_unavailable_pr_base_cannot_use_head_shadow_policy(self):
+        import contextlib
+        import io
+        import json
+        import os
+        from ci_lint.cli import main
+        text = (self.repo / "local-gate.toml").read_text().replace(
+            "[gate]\n", '[gate]\nmode = "shadow"\n', 1)
+        head = self.fixture.commit("unproved shadow", {"local-gate.toml": text}, lanes=None)
+        for base in (None, "a" * 40):
+            with self.subTest(base=base):
+                payload = self.payload()
+                payload["pull_request"]["head"]["sha"] = head
+                payload["pull_request"]["base"]["sha"] = base
+                event_path = self.repo / ".git" / "test-event.json"
+                event_path.write_text(json.dumps(payload))
+                with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request",
+                                            "GITHUB_EVENT_PATH": str(event_path), "ACT": "false"}):
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        code = main(["local-gate", "verify", "--repo", str(self.repo), "--trust"])
+                self.assertEqual(code, 2)
+
+    def test_readable_base_without_declaration_preserves_initial_enrollment(self):
+        import contextlib
+        import io
+        import json
+        import os
+        from ci_lint.cli import main
+        text = (self.repo / "local-gate.toml").read_text().replace(
+            "[gate]\n", '[gate]\nmode = "shadow"\n', 1)
+        fixtures._git(self.repo, "rm", "-q", "local-gate.toml")
+        base = self.fixture.commit("before enrollment", {}, lanes=None)
+        head = self.fixture.commit("initial enrollment", {"local-gate.toml": text}, lanes=None)
+        payload = self.payload()
+        payload["pull_request"]["head"]["sha"] = head
+        payload["pull_request"]["base"]["sha"] = base
+        event_path = self.repo / ".git" / "test-event.json"
+        event_path.write_text(json.dumps(payload))
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request",
+                                    "GITHUB_EVENT_PATH": str(event_path), "ACT": "false"}):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = main(["local-gate", "verify", "--repo", str(self.repo), "--trust"])
+        self.assertEqual(code, 0, output.getvalue())
+        self.assertIn("not-opted-in", output.getvalue())
+
+    def test_unreadable_base_tree_or_declared_blob_cannot_bootstrap(self):
+        import contextlib
+        import io
+        import json
+        import os
+        from ci_lint.cli import main
+        from ci_lint.local_gate import _git
+        text = (self.repo / "local-gate.toml").read_text().replace(
+            "[gate]\n", '[gate]\nmode = "shadow"\n', 1)
+        head = self.fixture.commit("unproved shadow", {"local-gate.toml": text}, lanes=None)
+        missing = "a" * 40
+        blob_tree = _git(self.repo, "mktree", "--missing",
+                         stdin=f"100644 blob {missing}\tlocal-gate.toml\n").strip()
+        for tree in (missing, blob_tree):
+            with self.subTest(tree=tree):
+                base = _git(self.repo, "hash-object", "-w", "-t", "commit", "--stdin",
+                            stdin=f"tree {tree}\nauthor Test <test@example.com> 1 +0000\n"
+                                  "committer Test <test@example.com> 1 +0000\n\nunreadable policy\n").strip()
+                _git(self.repo, "cat-file", "-e", f"{base}^{{commit}}")
+                payload = self.payload()
+                payload["pull_request"]["head"]["sha"] = head
+                payload["pull_request"]["base"]["sha"] = base
+                event_path = self.repo / ".git" / "test-event.json"
+                event_path.write_text(json.dumps(payload))
+                with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request",
+                                            "GITHUB_EVENT_PATH": str(event_path), "ACT": "false"}):
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        code = main(["local-gate", "verify", "--repo", str(self.repo), "--trust"])
+                self.assertEqual(code, 2)
+
+    def test_malformed_base_policy_cannot_bootstrap_shadow_head(self):
+        import contextlib
+        import io
+        import json
+        import os
+        from ci_lint.cli import main
+        text = (self.repo / "local-gate.toml").read_text().replace(
+            "[gate]\n", '[gate]\nmode = "shadow"\n', 1)
+        fixtures._git(self.repo, "rm", "-q", "local-gate.toml")
+        base = self.fixture.commit("malformed base policy", {
+            "ci.toml": '[local.gate]\nmode = "enforce"\ninvalid = [\n',
+        }, lanes=None)
+        head = self.fixture.commit("unproved shadow", {
+            "ci.toml": "", "local-gate.toml": text,
+        }, lanes=None)
+        payload = self.payload()
+        payload["pull_request"]["head"]["sha"] = head
+        payload["pull_request"]["base"]["sha"] = base
+        event_path = self.repo / ".git" / "test-event.json"
+        event_path.write_text(json.dumps(payload))
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request",
+                                    "GITHUB_EVENT_PATH": str(event_path), "ACT": "false"}):
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = main(["local-gate", "verify", "--repo", str(self.repo), "--trust"])
+        self.assertEqual(code, 2)

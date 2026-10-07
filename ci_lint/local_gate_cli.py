@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import subprocess
 import time
@@ -39,12 +40,15 @@ from ci_lint.workflow_replay_runtime import query_execution_pins
 from ci_lint.gate_publish import publish
 from ci_lint.local_gate import (
     GateConfig,
+    GitError,
+    _git,
     VerifyOutcome,
     check_gate_static,
     check_push,
     default_launcher,
     install_hook,
     load_gate_config,
+    load_gate_config_at,
     run_gate,
     verify,
 )
@@ -90,6 +94,29 @@ def _cmd_push(args: argparse.Namespace) -> int:
     return outcome.exit_code
 
 
+def _verify_policy(repo: Path, config: GateConfig, inp: TrustInput, *,
+                   author: str | None, local_replay: bool) -> VerifyOutcome:
+    if local_replay:
+        return VerifyOutcome(0, False, "local-replay",
+                             "[GATE-003] local workflow replay: run checks before creating attestation")
+    if inp.event in ("pull_request", "pull_request_target"):
+        if inp.base_sha is None or re.fullmatch(r"[0-9a-f]{40}", inp.base_sha) is None:
+            return VerifyOutcome(2, False, "base-unavailable", "[GATE-003] a valid PR base commit is required")
+        try:
+            _git(repo, "cat-file", "-e", f"{inp.base_sha}^{{commit}}")
+        except GitError:
+            return VerifyOutcome(2, False, "base-unavailable",
+                                 "[GATE-003] PR base commit is unavailable; fetch full history")
+        base_policy = load_gate_config_at(repo, inp.base_sha)
+        if base_policy.findings:
+            return VerifyOutcome(2, False, "invalid-base-policy",
+                                 "\n".join(finding.render() for finding in base_policy.findings))
+        # Initial enrollment can have no base declaration. Once adopted, a
+        # head cannot weaken mode or exemptions; the base owns both policies.
+        config = base_policy.config or config
+    return verify(repo, config, sha=inp.head_sha, event=inp.event, author=author)
+
+
 def _cmd_verify(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     config = _config(repo, "verify")
@@ -109,17 +136,14 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     # ACT is the fleet's local-runner signal. A replay creates proof only
     # after its checks finish; a previous stamp must never skip those checks.
     local_replay = os.environ.get("ACT", "").strip().lower() == "true"
-    outcome = (
-        VerifyOutcome(0, False, "local-replay",
-                      "[GATE-003] local workflow replay: run checks before creating attestation")
-        if local_replay else verify(repo, config, sha=sha, event=event, author=author)
-    )
+    policy_input = _trust_input(args, payload, event, sha)
+    outcome = _verify_policy(repo, config, policy_input, author=author, local_replay=local_replay)
     print(outcome.message)
     if outcome.exit_code and os.environ.get("GITHUB_ACTIONS") == "true":
         print(f"::error title=GATE-003 local gate not run::{outcome.message.splitlines()[0]}")
     lines = [f"attested={'true' if outcome.attested else 'false'}", f"state={outcome.state}"]
     if args.trust:
-        trust_input = _trust_input(args, payload, event, sha)
+        trust_input = policy_input
         decision = (
             TrustDecision(False, False, "local-replay", "local execution never reuses a commit attestation")
             if local_replay else decide_trust(repo, trust_input)

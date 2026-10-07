@@ -285,13 +285,24 @@ def load_gate_config(repo_root: Path) -> GateLoad:
 def load_gate_config_at(repo: Path, rev: str) -> GateLoad:
     """The declaration as committed at `rev` (GATE-008 reads the PR's base)."""
 
+    findings: list[Finding] = []
+
     def read(name: str) -> str | None:
         try:
+            # Only a successfully read tree can prove a declaration is absent.
+            if not _git(repo, "ls-tree", rev, "--", name):
+                return None
             return _git(repo, "show", f"{rev}:{name}")
-        except GitError:
+        except GitError as exc:
+            findings.append(Finding(
+                rule="GATE-001", path=name,
+                message=f"cannot read committed gate policy at {rev}: {exc}",
+                fix="fetch the base commit, tree and policy blobs before verification",
+            ))
             return None
 
-    return _load_gate_config(read)
+    loaded = _load_gate_config(read)
+    return GateLoad(None, findings) if findings else loaded
 
 
 def _load_gate_config(read: Callable[[str], str | None]) -> GateLoad:
@@ -301,8 +312,10 @@ def _load_gate_config(read: Callable[[str], str | None]) -> GateLoad:
     if ci_text is not None:
         try:
             doc = tomllib.loads(ci_text)
-        except tomllib.TOMLDecodeError:
-            doc = {}  # load_ci_toml reports the parse error itself
+        except tomllib.TOMLDecodeError as exc:
+            findings.append(Finding(rule="GATE-001", path="ci.toml",
+                                    message=f"invalid TOML: {exc}", fix="fix the TOML syntax"))
+            doc = {}
         local = doc.get("local")
         gate = local.get("gate") if isinstance(local, dict) else None
         if isinstance(gate, dict):

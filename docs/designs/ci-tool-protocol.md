@@ -1393,3 +1393,15 @@ These results extend the retained execution-receipt controls to the portable
 commit and consumer boundary. They do not replace the original queued hosted
 Template run `37642365563`, establish remote cache warmth, or prove concurrent
 publication and interruption safety.
+
+## Base policy owns the attestation prerequisite
+
+Before promoting Clud's ordinary publication requirement from shadow to enforce,
+a focused CLI regression reproduced a policy gap: hosted skip authorization
+read the base, but missing-attestation enforcement read the head. An unproved
+head could change its own `mode` to shadow and return success. Verification now
+selects the base declaration through the existing configuration loader for both
+mode and author exemptions once enrolled. Missing or unreadable PR bases refuse verification. Initial enrollment with
+a readable base but no declaration retains its bootstrap path; local ACT replay executes checks before
+creating proof. This correction grants no additional skip authority. The
+regression covers weakening mode and adding an author exemption on the head.
