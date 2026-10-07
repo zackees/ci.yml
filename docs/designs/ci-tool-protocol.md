@@ -825,3 +825,32 @@ are retained as `clud-362-live-build-artifact-comparison.json`,
 directory. A fresh-engine behavioral control and durability repair remain
 required. This evidence does not establish aggregate production CPU
 attribution or justify treating compiler-cache hits as execution proof.
+
+
+## Shared CI OK consumer (candidate, issue #362)
+
+`ci-lint gate --attested-workflow ci.yml --event <event.json>` adds the
+local-attestation consumer to the standard required-check aggregator. It uses
+exactly the same immutable-base policy, head trailers, freshness checks and
+trust decision as `local-gate verify --trust`; consumers do not implement a
+second attestation parser or turn skipped jobs into success themselves.
+
+A skipped required job counts only when the PR-base policy names its workflow
+and verify job, that verify job completed successfully and emitted its exact
+`skip_<job> = "true"` output, and the aggregator independently recomputes the
+job's current attestation authorization. Outputs alone are insufficient. The
+reported status retains `result = "skipped"` and adds `locally_attested = true`.
+A failed, running or missing required job remains a failure; a nonmergeable
+plan remains nonmergeable. Maintenance jobs and reusable callers containing
+maintenance remain ineligible through the shared immutable-base exclusion.
+
+This consumer operates only on ordinary `pull_request` events. Local replay,
+pushes, release dispatches, forks, unauthorized authors, audit samples,
+changed trust surfaces and expired or incomplete attestations receive no
+local skip credit. Existing remote-run reuse mechanisms retain their own
+proofs. The opt-in flag adds no new serialized attestation format.
+
+Validation includes an actual Git head with valid trailers reproducing the
+previous TEST-001 aggregator rejection, and adversarial consumer/CLI fixtures.
+Independent Template and hosted qualification of this candidate is pending;
+fixture results are not evidence of an actual hosted skipped job.

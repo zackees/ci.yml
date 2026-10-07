@@ -81,6 +81,7 @@ import re
 from dataclasses import dataclass
 
 from ci_lint.cargo_messages import JsonValue
+from ci_lint.attestations import JobDecision
 from ci_lint.default_branch_reuse import SCHEMA_VERSION as REUSE_DOC_SCHEMA
 from ci_lint.finding import Finding, Status
 from ci_lint.github_api import FetchFn, GitHubApiError
@@ -376,6 +377,7 @@ class JobStatus:
     ok: bool
     reused_from_run: int | None = None
     reused_from_pr: int | None = None
+    locally_attested: bool = False
 
 
 @dataclass(frozen=True)
@@ -510,6 +512,7 @@ def compute_gate(
     repo: str | None = None,
     default_branch_reuse: JsonValue | None = None,
     push_sha: str | None = None,
+    attested_jobs: tuple[JobDecision, ...] = (),
 ) -> GateReport:
     """`reuse`/`head_sha`/`fetch`/`token`/`repo` are all optional and all
     default to "no reuse information available" -- a call with none of
@@ -551,6 +554,9 @@ def compute_gate(
         result_str = result if isinstance(result, str) else "unknown"
 
         if result_str == "skipped":
+            if any(item.job == job_id and item.skip for item in attested_jobs):
+                statuses.append(JobStatus(job_id, result_str, True, locally_attested=True))
+                continue
             outcome = _handle_skipped(
                 job_id,
                 plan,
@@ -600,7 +606,8 @@ def to_json_dict(report: GateReport) -> dict[str, object]:
     return {
         "required_jobs": list(report.required_jobs),
         "statuses": [
-            {"job_id": s.job_id, "result": s.result, "ok": s.ok, "reused_from_run": s.reused_from_run, "reused_from_pr": s.reused_from_pr}
+            {"job_id": s.job_id, "result": s.result, "ok": s.ok, "reused_from_run": s.reused_from_run, "reused_from_pr": s.reused_from_pr,
+             "locally_attested": s.locally_attested}
             for s in report.statuses
         ],
         "findings": [
@@ -616,7 +623,7 @@ def to_json_dict(report: GateReport) -> dict[str, object]:
 def render_text(report: GateReport) -> str:
     lines = ["ci-lint gate:", f"{'job':<30} {'result':<12} {'ok':<5} note"]
     for s in report.statuses:
-        note = ""
+        note = "verified local attestation" if s.locally_attested else ""
         if s.reused_from_run is not None:
             note = (
                 f"reused from PR #{s.reused_from_pr} run {s.reused_from_run}"

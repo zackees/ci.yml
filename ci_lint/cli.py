@@ -12,6 +12,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from ci_lint.act_audit import audit as run_act_audit
+from ci_lint.hosted_attestations import verified_jobs
+from ci_lint.attestations import JobDecision
 from ci_lint.act_audit import render as render_act_audit_text
 from ci_lint.act_audit import to_json_dict as act_audit_to_json_dict
 from ci_lint.cache.audit import AuditError, run_audit
@@ -572,6 +574,21 @@ def _cmd_wheel_installed(args: argparse.Namespace) -> int:
     return 1 if any(f.status == Status.VIOLATION for f in report.findings) else 0
 
 
+def _attested_gate_jobs(args: argparse.Namespace, payload: dict[str, JsonValue],
+                        needs: dict[str, JsonValue]) -> tuple[JobDecision, ...]:
+    if not getattr(args, "attested_workflow", None):
+        return ()
+    try:
+        return verified_jobs(
+            Path(args.repo).resolve(), args.attested_workflow, payload,
+            event=os.environ.get("GITHUB_EVENT_NAME", ""), needs=needs,
+            local_replay=os.environ.get("ACT", "").strip().lower() == "true",
+        )
+    except (OSError, ValueError) as exc:
+        print(f"ci-lint gate: local attestation unavailable: {exc}", file=sys.stderr)
+        return ()
+
+
 def _cmd_gate(args: argparse.Namespace) -> int:
     try:
         with open(args.plan, encoding="utf-8") as fh:
@@ -623,6 +640,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
     repo_slug = os.environ.get("GITHUB_REPOSITORY")
     fetch = default_fetch if token and repo_slug else None
 
+
     report = compute_gate(
         plan,
         needs,
@@ -633,6 +651,7 @@ def _cmd_gate(args: argparse.Namespace) -> int:
         repo=repo_slug,
         default_branch_reuse=db_reuse,
         push_sha=push_sha,
+        attested_jobs=_attested_gate_jobs(args, event, needs),
     )
     print(json.dumps(gate_to_json_dict(report), indent=2) if args.json else render_gate_text(report))
     if report.not_mergeable_message:
@@ -1281,6 +1300,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_gate.add_argument("--repo", default=".")
     p_gate.add_argument("--plan", required=True)
     p_gate.add_argument("--needs", required=True)
+    p_gate.add_argument("--attested-workflow", default=None,
+                        help="workflow basename whose skipped jobs must be reverified from the PR base policy and head attestations")
     p_gate.add_argument(
         "--reuse",
         default=None,
