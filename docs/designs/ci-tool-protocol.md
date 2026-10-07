@@ -544,8 +544,8 @@ aggregation, unsupported expressions, duplicate JSON keys, oversized expansion
 and missing or refused evidence reject proof. A producer-provided empty matrix
 cannot remove coverage without proving the source policy that permits it.
 The bounded runtime extension below implements this resolution for supported
-expressions. Broader output-based conditions and end-to-end hosted
-qualification remain pending.
+expressions. Guard-only output deferral, pre-matrix job exclusions and
+end-to-end hosted qualification remain pending.
 
 
 The shared matrix expander now accepts already-proved dependency outputs for
@@ -581,6 +581,23 @@ never yields a pass or attestation. A queried provider predating act2.13 refuses
 this path before execution; receipts containing selected outputs require the
 qualified act2.13 contract. Fixture tests include a real child process and
 missing/skipped planner and matrix checks, rather than simulated attestations.
+
+The same condition interpreter now accepts proved
+`needs.<declared-dependency>.outputs.<name>` values within the consumer's caller
+scope. It supports string/boolean conditions and bounded
+`contains(fromJSON(<output>), '<suite>')` membership in string arrays, using
+ASCII case-insensitive exact element matching. Arrays are not compared by
+structural equality. Missing, foreign, ambiguous or matrix-producer outputs
+remain unknown and cannot excuse checks. Unsupported JSON types and embedded
+expressions also remain unknown. The source-derived check contract snapshots
+only outputs already accepted by dependency execution proof. Every excluded
+step still requires an explicit completed/skipped Main section in the receipt;
+omission, failure, success, another stage or an unfinished section rejects.
+This is implemented on the existing deferred matrix runtime path and exercised
+by a child-process receipt fixture. Jobs with output guards but no dynamic
+matrix still need a deferred preflight path; a false job guard must be proved
+before permitting an empty dynamic matrix. Neither adopter nor hosted skip
+qualification is claimed by these fixtures.
 
 [Act2 release .13](https://github.com/zackees/act2/releases/tag/v0.2.89-act2.13)
 is now published after exact merged-commit full CI

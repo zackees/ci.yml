@@ -23,6 +23,7 @@ class ExpandedJob:
     job: YamlValue
     inputs: tuple[BoundInput, ...] = ()
     identity: tuple[JobIdentity, ...] = ()
+    outputs: tuple[ReplayOutput, ...] = ()
 
 
 OutputProver = Callable[[ExpandedJob], tuple[ReplayOutput, ...]]
@@ -85,6 +86,7 @@ class _ExpansionState:
 
 
 def _record(state: _ExpansionState, resolved: ExpandedJob) -> None:
+    resolved = replace(resolved, outputs=state.outputs + tuple(state.mapped_outputs))
     if state.qualified:
         if not any(job.identity == resolved.identity for job in state.jobs):
             if len(state.jobs) >= 512:

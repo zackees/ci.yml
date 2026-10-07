@@ -6,7 +6,7 @@ import math
 import re
 
 from ci_lint.workflow_replay_identity import JobIdentity, matrix_json
-from ci_lint.workflow_replay_outputs import ReplayOutput, PendingOutput, unique_json_object
+from ci_lint.workflow_replay_outputs import ReplayOutput, dependency_output, unique_json_object
 from ci_lint.workflow_replay_dependencies import _needs
 from ci_lint.yaml_io import YamlValue
 
@@ -73,16 +73,11 @@ def _resolved(value: YamlValue, job: dict[str, YamlValue], outputs: tuple[Replay
         flags=re.IGNORECASE)
     if match is None or match[1] not in _needs(job):
         raise ValueError("dynamic matrix requires a declared dependency output")
-    candidates = [item for item in outputs if item.name == match[2] and item.identity
-                  and item.identity[:-1] == scope and item.identity[-1].job_id == match[1]]
-    if not candidates:
-        raise PendingOutput("dynamic matrix requires proved dependency output")
-    if len(candidates) != 1 or candidates[0].identity[-1].matrix != "null":
-        raise ValueError("dynamic matrix output is missing or has ambiguous producer identity")
-    if len(candidates[0].value.encode("utf-8")) > 65536:
+    output = dependency_output(outputs, scope, match[1], match[2])
+    if len(output.value.encode("utf-8")) > 65536:
         raise ValueError("dynamic matrix output exceeds 64 KiB")
     try:
-        resolved = json.loads(candidates[0].value, object_pairs_hook=unique_json_object)
+        resolved = json.loads(output.value, object_pairs_hook=unique_json_object)
         _literal(resolved)
     except (ValueError, RecursionError) as exc:
         raise ValueError("dynamic matrix output is not bounded literal JSON") from exc

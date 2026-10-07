@@ -23,7 +23,9 @@ class ReplayRuntimeTest(WorkflowReplayTest):
             "    steps: [{name: Plan, run: plan}]\n"
             "  tests:\n    needs: plan\n    strategy:\n"
             "      matrix: '${{ fromJSON(needs.plan.outputs.matrix) }}'\n"
-            "    steps: [{name: Run tests, run: tests}]\n")
+            "    steps:\n      - {name: Run tests, run: tests}\n"
+            "      - name: Integration\n        run: integration\n"
+            "        if: contains(fromJSON(needs.plan.outputs.suites), 'integration')\n")
         config = replace(self.config(), qualified=True, report_source="stdout", jobs=(
             DeclaredReplayJob("ci.yml:plan", self.expected.required_jobs[0], ("tests",), True),
             DeclaredReplayJob("ci.yml:tests", self.expected.required_jobs[0], ("tests",), True)))
@@ -35,9 +37,13 @@ class ReplayRuntimeTest(WorkflowReplayTest):
             job.update(key=identity+str(matrix), job_id=identity, matrix=matrix,
                        identity=[{"jobID": identity, "matrix": matrix}])
             job["sections"][0]["name"] = name
+            if identity == "tests":
+                job["sections"].append({"name": "Integration", "stage": "Main", "status": "completed",
+                                        "conclusion": "skipped", "first_seq": None, "last_seq": None})
             jobs.append(job)
         jobs[0]["output_evidence"] = {"schema_version": 1, "seq": 21,
-                                       "values": {"matrix": '{"lane":["left","right"]}'}, "error": None}
+                                       "values": {"matrix": '{"lane":["left","right"]}',
+                                                  "suites": '["unit"]'}, "error": None}
         self.raw["tree"]["groups"][0]["jobs"] = jobs
         fixture = self.workspace / "matrix.json"
         command = self.command(f"print(pathlib.Path({str(fixture)!r}).read_text())\n")
@@ -45,6 +51,21 @@ class ReplayRuntimeTest(WorkflowReplayTest):
         outcome = run_checked_command(self.workspace, command, config,
                                       head=self.expected.sha, tree=self.expected.git_tree)
         self.assertEqual(outcome.returncode, 0, outcome.error)
+        skipped = copy.deepcopy(jobs[1]["sections"][-1])
+        for change in ({"conclusion": "failure"}, {"conclusion": "success"},
+                       {"stage": "Post"}, {"status": "queued"}):
+            jobs[1]["sections"][-1].update(change)
+            fixture.write_text(json.dumps(self.raw))
+            rejected = run_checked_command(self.workspace, command, config,
+                                           head=self.expected.sha, tree=self.expected.git_tree)
+            self.assertEqual(rejected.returncode, 1)
+            jobs[1]["sections"][-1] = copy.deepcopy(skipped)
+        jobs[1]["sections"].pop()
+        fixture.write_text(json.dumps(self.raw))
+        rejected = run_checked_command(self.workspace, command, config,
+                                       head=self.expected.sha, tree=self.expected.git_tree)
+        self.assertEqual(rejected.returncode, 1)
+        jobs[1]["sections"].append(skipped)
         for index in (0, 1, 2):
             jobs[index]["sections"][0]["conclusion"] = "skipped"
             fixture.write_text(json.dumps(self.raw))

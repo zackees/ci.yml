@@ -24,6 +24,18 @@ class PendingOutput(ValueError):
     """A supported source expression needs output evidence after execution."""
 
 
+def dependency_output(outputs: tuple[ReplayOutput, ...], scope: tuple[JobIdentity, ...],
+                      producer: str, name: str) -> ReplayOutput:
+    """Resolve one proved nonmatrix producer within the consumer's caller scope."""
+    candidates = [item for item in outputs if item.name == name and item.identity
+                  and item.identity[:-1] == scope and item.identity[-1].job_id == producer]
+    if not candidates:
+        raise PendingOutput("source expression requires proved dependency output")
+    if len(candidates) != 1 or candidates[0].identity[-1].matrix != "null":
+        raise ValueError("dependency output has ambiguous producer identity")
+    return candidates[0]
+
+
 def require_output_producer(version: str) -> None:
     match = re.fullmatch(r"\d+\.\d+\.\d+-act2\.(\d+)", version)
     if match is None or int(match[1]) < 13:

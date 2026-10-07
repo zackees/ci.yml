@@ -4,6 +4,8 @@ import unittest
 
 from ci_lint.workflow_replay_conditions import condition_excludes
 from ci_lint.workflow_replay_inputs import BoundInput
+from ci_lint.workflow_replay_identity import JobIdentity
+from ci_lint.workflow_replay_outputs import ReplayOutput
 
 
 class ConditionProofTest(unittest.TestCase):
@@ -78,3 +80,52 @@ class ConditionProofTest(unittest.TestCase):
         inputs = (BoundInput("text", "it's && fine"),)
         self.assertFalse(condition_excludes("inputs.text == 'it''s && fine'", inputs, set()))
         self.assertTrue(condition_excludes("inputs.text != 'it''s && fine'", inputs, set()))
+
+    def test_proved_dependency_output_guards(self):
+        outputs = (ReplayOutput((JobIdentity("planner"),), "suites", '["integration"]', 21),)
+        guard = "contains(fromJSON(needs.planner.outputs.suites), 'unit')"
+        self.assertTrue(condition_excludes(guard, (), set(), outputs=outputs, dependencies=("planner",)))
+        for absent in ((), ("foreign",)):
+            self.assertFalse(condition_excludes(guard, (), set(), outputs=outputs, dependencies=absent))
+        self.assertFalse(condition_excludes(guard, (), set(), dependencies=("planner",)))
+
+    def test_output_membership_is_exact_and_ascii_case_insensitive(self):
+        guard = "contains(fromJSON(needs.planner.outputs.suites), 'unit')"
+        for value, excluded in (('["unittest"]', True), ('["UNIT"]', False), ('[]', True),
+                                ('[1]', False), ('{}', False), ('null', False),
+                                ('["λ"]', False), ('["${{ inputs.x }}"]', False)):
+            with self.subTest(value=value):
+                outputs = (ReplayOutput((JobIdentity("planner"),), "suites", value, 21),)
+                self.assertEqual(condition_excludes(guard, (), set(), outputs=outputs,
+                                                   dependencies=("planner",)), excluded)
+
+    def test_output_guard_rejects_foreign_matrix_and_duplicate_producers(self):
+        guard = "needs.planner.outputs.test != 'true'"
+        good = ReplayOutput((JobIdentity("planner"),), "test", "true", 21)
+        for outputs in ((good, good),
+                        (ReplayOutput((JobIdentity("caller"), JobIdentity("planner")), "test", "true", 21),),
+                        (ReplayOutput((JobIdentity("planner", '{"lane":"a"}'),), "test", "true", 21),)):
+            self.assertFalse(condition_excludes(guard, (), set(), outputs=outputs, dependencies=("planner",)))
+        self.assertTrue(condition_excludes(guard, (), set(), outputs=(good,), dependencies=("planner",)))
+
+    def test_array_identity_is_not_structural_equality(self):
+        guard = "fromJSON(needs.planner.outputs.suites) != fromJSON(needs.planner.outputs.suites)"
+        output = ReplayOutput((JobIdentity("planner"),), "suites", '["unit"]', 21)
+        self.assertFalse(condition_excludes(guard, (), set(), outputs=(output,), dependencies=("planner",)))
+
+    def test_output_guard_binds_to_nested_consumer_scope(self):
+        caller = (JobIdentity("linux"),)
+        output = ReplayOutput(caller + (JobIdentity("planner"),), "test", "true", 21)
+        guard = "needs.planner.outputs.test != 'true'"
+        self.assertTrue(condition_excludes(guard, (), set(), outputs=(output,),
+                                           dependencies=("planner",), scope=caller))
+        self.assertFalse(condition_excludes(guard, (), set(), outputs=(output,),
+                                            dependencies=("planner",), scope=(JobIdentity("windows"),)))
+
+    def test_output_array_limits_never_waive_a_check(self):
+        import json
+        guard = "contains(fromJSON(needs.planner.outputs.suites), 'unit')"
+        for value in (json.dumps(["integration"] * 257), json.dumps(["x" * 65536]),
+                      "[" * 1000 + "]" * 1000):
+            output = ReplayOutput((JobIdentity("planner"),), "suites", value, 21)
+            self.assertFalse(condition_excludes(guard, (), set(), outputs=(output,), dependencies=("planner",)))

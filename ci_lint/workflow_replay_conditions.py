@@ -6,14 +6,21 @@ import re
 from dataclasses import dataclass
 
 from ci_lint.workflow_replay_inputs import BoundInput
+from ci_lint.workflow_replay_identity import JobIdentity
+from ci_lint.workflow_replay_outputs import ReplayOutput, dependency_output
 from ci_lint.yaml_io import YamlValue
 
 _TOKEN = re.compile(r"\s+|'(?:[^']|'')*'|[A-Za-z_][A-Za-z0-9_.-]*|&&|\|\||==|!=|[!(),]")
 
 
 @dataclass(frozen=True)
+class GuardArray:
+    values: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class GuardValue:
-    value: str | bool | None = None
+    value: str | bool | GuardArray | None = None
     truth: bool | None = None
     bound: bool = False
 
@@ -31,6 +38,9 @@ class GuardContext:
     references: tuple[GuardReference, ...]
     successful: bool
     event: str | None
+    outputs: tuple[ReplayOutput, ...]
+    dependencies: tuple[str, ...]
+    scope: tuple[JobIdentity, ...]
 
 
 @dataclass(frozen=True)
@@ -90,6 +100,13 @@ def _reference(reference: str, context: GuardContext) -> GuardValue:
     match = re.fullmatch(r"steps\.([A-Za-z0-9_-]+)\.outcome", reference)
     if match and match[1] in context.producers:
         return _scalar("skipped", bound=True)
+    match = re.fullmatch(r"needs\.([A-Za-z_][A-Za-z0-9_-]*)\.outputs\.([A-Za-z_][A-Za-z0-9_-]*)", reference)
+    if match and match[1] in context.dependencies:
+        try:
+            output = dependency_output(context.outputs, context.scope, match[1], match[2])
+        except ValueError:
+            return GuardValue()
+        return _scalar(output.value, bound=True)
     return GuardValue()
 
 
@@ -111,7 +128,7 @@ def _compare(node: ast.Compare, context: GuardContext) -> GuardValue:
         return GuardValue()
     left = _value(node.left, context)
     right = _value(node.comparators[0], context)
-    if left.value is None or type(left.value) is not type(right.value):
+    if not isinstance(left.value, (str, bool)) or type(left.value) is not type(right.value):
         return GuardValue()
     a, b = left.value, right.value
     if isinstance(a, str) and isinstance(b, str):
@@ -120,6 +137,32 @@ def _compare(node: ast.Compare, context: GuardContext) -> GuardValue:
         a, b = a.lower(), b.lower()
     equal = a == b
     return _scalar(equal if isinstance(node.ops[0], ast.Eq) else not equal, bound=left.bound or right.bound)
+
+
+def _json_array(value: GuardValue) -> GuardValue:
+    if not isinstance(value.value, str) or len(value.value.encode("utf-8")) > 65536:
+        return GuardValue()
+    try:
+        raw = json.loads(value.value)
+    except (ValueError, RecursionError):
+        return GuardValue()
+    if not isinstance(raw, list) or len(raw) > 256:
+        return GuardValue()
+    if any(not isinstance(item, str) or not item.isascii() or "${{" in item for item in raw):
+        return GuardValue()
+    return GuardValue(GuardArray(tuple(raw)), True, value.bound)
+
+
+def _contains(left: GuardValue, right: GuardValue) -> GuardValue:
+    if not isinstance(right.value, str) or not right.value.isascii():
+        return GuardValue()
+    if isinstance(left.value, GuardArray):
+        found = right.value.lower() in (item.lower() for item in left.value.values)
+    elif isinstance(left.value, str) and left.value.isascii():
+        found = right.value.lower() in left.value.lower()
+    else:
+        return GuardValue()
+    return _scalar(found, bound=left.bound or right.bound)
 
 
 def _call(node: ast.Call, context: GuardContext) -> GuardValue:
@@ -131,10 +174,9 @@ def _call(node: ast.Call, context: GuardContext) -> GuardValue:
             return _scalar(True)
         return _scalar(name == "success", bound=True) if context.successful else GuardValue()
     if name == "contains" and len(node.args) == 2:
-        values = tuple(_value(arg, context) for arg in node.args)
-        if all(isinstance(item.value, str) and item.value.isascii() for item in values):
-            return _scalar(str(values[1].value).lower() in str(values[0].value).lower(),
-                           bound=any(item.bound for item in values))
+        return _contains(_value(node.args[0], context), _value(node.args[1], context))
+    if name.lower() == "fromjson" and len(node.args) == 1:
+        return _json_array(_value(node.args[0], context))
     return GuardValue()
 
 
@@ -160,7 +202,9 @@ def _value(node: ast.AST, context: GuardContext) -> GuardValue:
 
 
 def condition_excludes(expression: YamlValue, inputs: tuple[BoundInput, ...],
-                       producers: set[str], *, successful: bool = False, event: str | None = None) -> bool:
+                       producers: set[str], *, successful: bool = False, event: str | None = None,
+                       outputs: tuple[ReplayOutput, ...] = (), dependencies: tuple[str, ...] = (),
+                       scope: tuple[JobIdentity, ...] = ()) -> bool:
     """A bound source condition must prove false; constants alone never waive.
 
     `successful` is permitted only for proof requiring success for every
@@ -174,7 +218,8 @@ def condition_excludes(expression: YamlValue, inputs: tuple[BoundInput, ...],
         expression = expression[3:-2].strip()
     try:
         parsed = _parse(expression)
-        context = GuardContext(inputs, frozenset(producers), parsed.references, successful, event)
+        context = GuardContext(inputs, frozenset(producers), parsed.references, successful, event,
+                               outputs, dependencies, scope)
         result = _value(parsed.node.body, context)
     except (SyntaxError, ValueError, RecursionError):
         return False
