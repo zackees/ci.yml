@@ -194,3 +194,23 @@ transfer of compiler payloads between environments.
 Policy status tables must continue to distinguish implemented enforcement from
 candidate rules. Existing workflows are the integration surface; this design
 does not require adding another workflow or replacing the original test coverage.
+
+## Second consumer qualification gaps
+
+The independent template checkout is based on `68c580c` (main). A read-only
+source audit resolves the `fast` and `dylint` prerequisite closures, including
+the reusable ci-pre jobs and cache maintenance. It exposed two additional
+contracts to implement before claiming portability: event-excluded prerequisite
+jobs need source-proved explicit skipped-job evidence (never a missing-job
+waiver), and `ci-ok` depends on planner-driven dynamic platform matrices which
+the current bounded resolver refuses. `reuse-decision` also has an unnamed
+checkout step. Preserve the original checks and dynamic native/full lanes;
+do not bypass the aggregator or silently narrow the selected graph to make
+this consumer pass. The generic resolver/verifier owns these proof mechanisms;
+the consumer contributes declarations and step names.
+
+Bosn's current scheduler limit is held in one daemon's in-memory scheduler;
+its per-engine CPU ceiling is sized separately. The clone-wide front-door
+lock does not prove aggregate admission across independent state roots or
+spares. Machine-wide CPU admission remains a required producer implementation
+and pilot measurement, including the previously observed oversubscription.
