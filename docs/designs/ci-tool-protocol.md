@@ -1425,8 +1425,8 @@ must be resolved together before replacing that aggregation:
 2. **Default-branch reuse must retain independently verified identity.** Clud's
    existing reuse decision records GitHub display names, such as `Static
    checks` and `Clippy linux-x64 / x86_64-unknown-linux-gnu`. The shared
-   default-branch consumer currently matches a job ID or its plan-digest
-   qualified form. Consequently those native names do not match
+   default-branch consumer initially matched a job ID or its plan-digest
+   qualified form. Consequently those native names did not match
    `static-checks` or `lint-linux-x64`; replacing the shell consumer without
    resolving that mapping would reject legitimate main-push reuse. The unit
    caller additionally needs all three proving shard jobs, not one arbitrary
@@ -1449,8 +1449,8 @@ and main-push reuse of each selected validation caller. Cache writers retain
 their current execution policy; releases retain complete validation. The
 new consumer must use the actual event and exact checked-out source and must
 continue to require the successful verification job. These are migration
-requirements; the native selection path below addresses selection, while
-proving display-name mapping and actual adopter qualification remain open.
+requirements; the native selection and hosted name paths below address their
+respective source contracts. Actual adopter qualification remains open.
 
 The shared default-branch consumer must also confirm that the fetched live
 job's name equals the proving name in the reuse record. A focused regression
@@ -1458,8 +1458,9 @@ substituted another successful job ID on the same PR head while retaining
 the required job's name; the prior consumer accepted that skip. The corrected
 consumer checks the exact live name in its existing verification path. Tests
 retain positive bare-ID and matrix-display-name cases and reject a missing
-live name, a renamed proof and a different head. This correction does not yet
-implement the native Clud display-name mapping described above.
+live name, a renamed proof and a different head. This live-name correction alone
+did not implement the native display-name mapping; the later native path below
+adds that source-derived projection.
 
 ### Native workflow selection for the shared gate
 
@@ -1496,3 +1497,41 @@ job sets without copying its shell lists into policy or adding a repository
 branch in the tool. This is selection evidence, not an executed adopter gate.
 Matrix leaf coverage remains the execution provider's responsibility; native
 main-push proof-name mapping must additionally account for every proving leaf.
+
+### Native hosted proof names and complete caller coverage
+
+The native `--workflow-plan` path derives hosted proving names from the tracked
+workflow source through the existing qualified reusable-workflow expansion,
+input binding and matrix owners. `WorkflowJobNames` renders that graph's display
+names; the existing default-branch reuse verifier remains the sole owner of
+live proof acceptance. The CLI accepts no native alias table from a plan or
+reuse document.
+
+For a skipped native caller, every selected PR validation leaf must have exactly
+one proving record. Distinct leaves require distinct GitHub job IDs. Each live
+job must be successful and match its exact source-derived name, PR head SHA and
+proving run ID. A three-shard caller requires three successful live proofs;
+one matching shard cannot prove the caller. Missing records, duplicate names or
+IDs, unknown name expressions, unresolved expansion and display-name collisions
+in the source workflow refuse reuse. There is no fallback to matching a bare
+caller ID on this source-derived path.
+
+Literal names, bound string/boolean inputs and bound scalar matrix references
+are supported. Automatic matrix name suffixes preserve the declared axis order
+for literal axes with string, boolean or integer values. Unsupported naming
+shapes, including automatic suffixes for dynamic/include matrices, refuse reuse
+until their exact hosted identity can be established. This limits proof
+acceptance; it never removes a required job from selection. Diagnostic leaves
+proved excluded on a successful PR are omitted by the existing condition owner.
+
+The original planner's ID/digest matching remains its existing path. Native
+selection, source name derivation and live acceptance have separate owners;
+attested PR skips continue through the independent hosted attestation verifier.
+Focused conformance covers three-shard success, missing/duplicate/substituted
+proofs, live name/head/run/conclusion mismatches, source collisions outside the
+gate dependency closure, and the actual native CLI. Clud's actual source
+derives its existing `Static checks`, Clippy and three unit-shard proving names.
+All five names match unique successful jobs in completed hosted Clud run
+[`37675379314`](https://github.com/zackees/clud/actions/runs/37675379314).
+That is hosted naming evidence, not execution through the new aggregator.
+Adopter rollout and hosted execution through this new path remain unqualified.

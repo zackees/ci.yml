@@ -59,15 +59,16 @@ def _context_expression(value: YamlValue) -> bool:
             re.fullmatch(r"\s*\$\{\{\s*(?:inputs|matrix)\.[A-Za-z0-9_-]+\s*\}\}\s*", value) is None)
 
 
-def bound_name(value: YamlValue, inputs: tuple[BoundInput, ...]) -> str:
+def bound_name(value: YamlValue, inputs: tuple[BoundInput, ...], matrix: YamlValue = None) -> str:
     if not isinstance(value, str):
         raise ValueError("execution identity has a nonliteral workflow or job name")
     def substitute(match: re.Match[str]) -> str:
-        found = next((item.value for item in inputs if item.name == match[1]), None)
-        if found is None:
-            raise ValueError(f"execution identity depends on unknown input {match[1]}")
-        return str(found).lower() if isinstance(found, bool) else found
-    resolved = re.sub(r"\$\{\{\s*inputs\.([A-Za-z0-9_-]+)\s*\}\}", substitute, value)
+        found = (next((item.value for item in inputs if item.name == match[2]), None)
+                 if match[1] == "inputs" else as_dict(matrix).get(match[2]))
+        if not isinstance(found, (str, bool, int)):
+            raise ValueError(f"execution identity depends on unknown {match[1]} {match[2]}")
+        return str(found).lower() if isinstance(found, bool) else str(found)
+    resolved = re.sub(r"\$\{\{\s*(inputs|matrix)\.([A-Za-z0-9_-]+)\s*\}\}", substitute, value)
     if not resolved.strip() or "${{" in resolved:
         raise ValueError("execution identity has a nonliteral workflow or job name")
     return resolved

@@ -662,11 +662,19 @@ def _cmd_gate(args: argparse.Namespace) -> int:
         default_branch_reuse=db_reuse,
         push_sha=push_sha,
         attested_jobs=_attested_gate_jobs(args, event, needs),
+        workflow_jobs=_native_gate_jobs(args, needs),
     )
     print(json.dumps(gate_to_json_dict(report), indent=2) if args.json else render_gate_text(report))
     if report.not_mergeable_message:
         print(report.not_mergeable_message, file=sys.stderr)
     return 0 if report.ok else 1
+
+
+def _native_gate_jobs(args: argparse.Namespace, needs: dict[str, JsonValue]):
+    from ci_lint.workflow_job_names import WorkflowJobNames
+    if not args.workflow_plan:
+        return None
+    return WorkflowJobNames.from_gate(Path(args.repo).resolve(), args.workflow_plan, args.gate_job, needs)
 
 
 def _cmd_selftest(_args: argparse.Namespace) -> int:
