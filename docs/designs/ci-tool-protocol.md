@@ -258,3 +258,36 @@ read-only query inside that engine independently confirmed the installed act
 binary digest above and both act2.11 execution capabilities. Qualified static
 job events are now present. Full coverage, valid stamping, unchanged-repeat
 reuse, fresh-engine compiler warmth and hosted skips are still unproven.
+
+### Measurement and remaining provider identity gaps
+
+During the same private Clud run, Linux cgroup inspection confirmed the outer
+Docker container's aggregate `cpu.max = "400000 100000"`: at most four CPUs
+for its whole descendant tree, including every nested engine and job. The
+`/init` subgroup contains only the Docker daemon and is **not** an aggregate
+measurement; sample the parent container scope. At Unix time
+`1791350109.07902`, that scope reported `usage_usec = 1920587159` and
+`memory.peak = 8672198656`. These are cumulative since the corrected outer
+Docker startup, including infrastructure initialization and the smoke check;
+there was no initial per-run CPU counter sample. They cannot establish an
+exact application-only cold CPU total. Subsequent warm/reuse measurements
+must take before/after counters at that same parent scope. This bounds the
+pilot; it does not establish a global budget for unrelated production daemons.
+
+Source inspection during this run found two distinct facts:
+
+- Clud's lint caller deliberately sets `save-cache = "false"` while sharing
+  the build caller's namespace; the build caller retains the `auto` writer.
+  This does not prove that all local PR writes are suppressed. Actual completed
+  save and fresh-engine restore evidence must decide compiler persistence.
+- Bosn's production planner still selects `CacheRoute::Legacy`; the coordinated
+  cohort route has explicit live fixtures but is not admitted by that planner.
+  A published act2 capability alone does not enroll a store into that route.
+
+The shared lane cache currently fingerprints each declared tool with
+`<tool> --version` (`ci_lint.lane_cache.ToolVersions`). For Bosn this identifies
+its CLI, not the running daemon's effective act/runner pins. Replacing a daemon
+with changed pins while keeping the CLI version can therefore leave the local
+lane key unchanged. Binding the actual provider profile into reuse and comparing
+it with the executed receipt remains required before claiming the tool/ABI
+negative controls or production end-to-end qualification complete.
