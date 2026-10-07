@@ -4,7 +4,6 @@
     "ci_lint/act_audit.py": 5,
     "ci_lint/cache/audit.py": 7,
     "ci_lint/cache/budget.py": 1,
-    "ci_lint/cache/delta.py": 7,
     "ci_lint/cache/github_cache.py": 1,
     "ci_lint/cache/ops.py": 9,
     "ci_lint/cache/payload_classify.py": 1,

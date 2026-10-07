@@ -954,3 +954,24 @@ Two focused regressions demonstrated RED to GREEN; full hosted qualification
 and release remain pending. A passing PR run must be followed by full CI on
 the exact merged release SHA, then published artifact verification, Bosn
 rollout and the original Template frontend replay.
+
+
+## Delta content identity (candidate implementation)
+
+Source inspection of zccache's staged-v2 store shows that a fixed-length
+`<key>.current` file selects a generation directory. The previous delta packer
+compared only file size: a changed pointer could be omitted while the new
+payload was packed. Its base digest also could not distinguish same-size
+content changes. Focused regressions reproduced both omissions, independent
+of the pending public-provider rollout.
+
+The shared delta mechanism must use content identities for every file, without
+a zccache-specific path branch. A schema-2 manifest records sorted path, size
+and SHA-256 rows and binds their list with its digest. Packing includes changed
+contents; applying refuses a different content base. Regenerate old local
+manifests; old archive base digests become ordinary stale-base misses.
+Hashing reads the cache contents and its cost must be measured in the pilot.
+This is filesystem transport evidence, not proof of a real compiler hit or
+atomic import into a concurrently written compiler store. The pilot continues
+to restore into private engines before compilation rather than introducing
+a shared writable artifact directory.
