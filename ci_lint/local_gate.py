@@ -57,6 +57,7 @@ from ci_lint.attestations import load_definition as load_attestation_definition
 from ci_lint.attestations import make as make_attestation
 from ci_lint.attestations import strip_trailers as strip_attestation_trailers
 from ci_lint.finding import Finding, Status
+from ci_lint.gate_run_lock import hold as hold_gate_run_lock
 from ci_lint.workflow_replay_config import ReplayConfig, parse_replay
 from ci_lint.workflow_replay_runtime import CheckedCommand, run_checked_command
 from ci_lint.workflow_replay_static import check_replay_static
@@ -68,6 +69,7 @@ from ci_lint.lane_cache import (
     LaneConfig,
     ToolVersions,
     check_lanes_static,
+    cache_dir,
     lane_key,
     lane_log_dir,
     lookup,
@@ -747,7 +749,17 @@ def _replay_coverage_problem(config: GateConfig, repo: Path) -> str | None:
     return "local-gate run: replay coverage is unproven:\n  " + "\n  ".join(item.message for item in findings)
 
 
-def run_gate(  # noqa: C901
+def run_gate(
+    repo: Path, config: GateConfig, *, stamp: bool = True, force: bool = False, use_cache: bool = True
+) -> RunOutcome:
+    try:
+        with hold_gate_run_lock(cache_dir(repo).parent / "run.lock"):
+            return _run_gate(repo, config, stamp=stamp, force=force, use_cache=use_cache)
+    except (OSError, GitError, subprocess.CalledProcessError) as error:
+        return RunOutcome(2, f"local-gate run: {error}")
+
+
+def _run_gate(  # noqa: C901
     repo: Path, config: GateConfig, *, stamp: bool = True, force: bool = False, use_cache: bool = True
 ) -> RunOutcome:
     try:

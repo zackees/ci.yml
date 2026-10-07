@@ -18,6 +18,15 @@ it must not implement another receipt parser or turn incomplete evidence into
 success. The existing ci-lint replay verifier is the validation implementation
 to extend, rather than duplicating it in a new package.
 
+The standalone runner holds an OS file lock at
+`<git common dir>/ci-lint/run.lock` from cache lookup through execution and
+commit stamping. Concurrent invocations, including sibling worktrees, refuse
+before running a gate and may retry after the owner finishes. The lock file
+persists; the kernel releases ownership on process exit, including a crash.
+This prevents concurrent duplicate expensive graphs through the front door.
+It does not impose a machine-wide CPU budget on independent clones or daemons;
+Bosn resource admission remains responsible for that boundary.
+
 The replay declaration accepts `report-source = "stdout"` for a command such
 as `bosn ci run ... --wait --json`. Its stdout must be one terminal JSON
 document. Ci-lint captures it in a private temporary file and applies the same
