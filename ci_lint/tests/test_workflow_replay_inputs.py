@@ -10,6 +10,7 @@ from ci_lint.workflow_replay import ReplayJob
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig, ReplaySelection
 from ci_lint.workflow_replay_expansion import expand_selection
 from ci_lint.workflow_replay_static import check_replay_static
+from ci_lint.workflow_replay_inputs import BoundInput, bind_call_inputs
 
 
 class ReplayInputIdentityTest(unittest.TestCase):
@@ -28,6 +29,34 @@ class ReplayInputIdentityTest(unittest.TestCase):
         proof = self.proof()
         self.assertIsNone(proof.problem)
         self.assertEqual(proof.jobs[0].key, "linux/Check/Test (linux-x64)")
+
+    def test_boolean_profiles_preserve_false_defaults_and_forwarding(self):
+        self.called.document["on"]["workflow_call"]["inputs"]["compile"] = {"type": "boolean"}
+        bound = bind_call_inputs(self.called.document, self.entry.document["jobs"]["linux"], ())
+        self.assertIn(BoundInput("compile", False), bound)
+        caller = self.entry.document["jobs"]["linux"]
+        caller["with"]["compile"] = "${{ inputs.compile }}"
+        bound = bind_call_inputs(self.called.document, caller, (BoundInput("compile", True),))
+        self.assertIn(BoundInput("compile", True), bound)
+        for value in ("false", 0, "${{ inputs.missing }}"):
+            caller["with"]["compile"] = value
+            with self.assertRaises(ValueError):
+                bind_call_inputs(self.called.document, caller, ())
+        caller["with"]["compile"] = "${{ github.ref }}"
+        self.assertNotIn("compile", {item.name for item in bind_call_inputs(self.called.document, caller, ())})
+
+    def test_qualified_caller_matrix_binds_each_reusable_profile(self):
+        caller = self.entry.document["jobs"]["linux"]
+        caller["strategy"] = {"matrix": {"target": ["linux-x64", "linux-arm64"], "compile": [False, True]}}
+        caller["with"] = {"target": "${{ matrix.target }}", "compile": "${{ matrix.compile }}"}
+        self.called.document["on"]["workflow_call"]["inputs"]["compile"] = {"type": "boolean"}
+        proof = expand_selection((self.entry, self.called), self.entry.path, "linux", qualified=True)
+        self.assertIsNone(proof.problem)
+        self.assertEqual(len(proof.jobs), 4)
+        self.assertEqual({tuple(item.value for item in job.inputs) for job in proof.jobs}, {
+            ("linux-x64", False), ("linux-x64", True), ("linux-arm64", False), ("linux-arm64", True)})
+        caller["with"]["compile"] = "${{ matrix.absent }}"
+        self.assertIsNotNone(expand_selection((self.entry, self.called), self.entry.path, "linux", qualified=True).problem)
 
     def test_default_and_explicit_empty_override_are_distinct(self):
         self.entry.document["jobs"]["linux"]["with"] = {}

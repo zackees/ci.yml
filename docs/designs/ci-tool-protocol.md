@@ -61,6 +61,15 @@ literal matrix leg. Literal products, exclusions and includes are supported;
 expressions, duplicate legs and graphs exceeding the bounds reject before
 execution. Legacy display-name declarations retain their existing behavior.
 
+Reusable calls bind declared string and boolean inputs from typed literals,
+defaults, exact parent-input references and, in qualified mode, exact caller
+matrix references. Each caller leg gets its own binding. Boolean `false` stays
+false; the string `"false"` is not coerced into a boolean. Missing exact input
+or matrix references and type mismatches reject before running the selected
+graph. Other runner-context expressions remain unknown and cannot establish
+an execution identity or justify a skipped check. This binding
+does not yet interpret compound step conditions or derive per-profile checks.
+
 The terminal Bosn job document carries `identity`, an ordered list of
 `{jobID, matrix}` components from root caller to leaf. `matrix` is an object or
 null; an empty object normalizes to null. Object key order is irrelevant.
@@ -72,8 +81,8 @@ are identical. Bounds are 32 identity components, 64 KiB per identity,
 Current implementation proof is fixture conformance, including the runtime
 adapter reading real temporary workflow files. Runner capability negotiation
 and deployed Bosn/act2 qualification are still pending. The clud source audit
-also found unnamed steps and boolean/conditional profiles that need source
-binding before the generic verifier can replace its private gate script;
+also found unnamed steps and conditional profiles that need source-derived
+checks before the generic verifier can replace its private gate script;
 these findings do not justify accepting arbitrary skipped checks.
 
 The existing trailer stamp is a content checksum, not a digital signature.

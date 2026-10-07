@@ -134,7 +134,7 @@ def _called(state: _ExpansionState, current: str, job: dict[str, YamlValue],
     jobs = jobs_of(document)
     if "workflow_call" not in get_on_section(document) or not jobs:
         raise ValueError("called workflow has no workflow_call contract or executable jobs")
-    bound = bind_call_inputs(document, job, inputs)
+    bound = bind_call_inputs(document, job, inputs, json.loads(callers[-1].matrix) if callers else None)
     caller_name = job_id if state.qualified else bound_name(job.get("name", job_id), inputs)
     caller_prefix = prefix + caller_name + "/"
     if not state.qualified and caller_prefix in state.caller_prefixes:
