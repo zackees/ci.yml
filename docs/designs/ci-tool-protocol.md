@@ -852,8 +852,11 @@ proofs. The opt-in flag adds no new serialized attestation format.
 
 Validation includes an actual Git head with valid trailers reproducing the
 previous TEST-001 aggregator rejection, and adversarial consumer/CLI fixtures.
-Independent Template and hosted qualification of this candidate is pending;
-fixture results are not evidence of an actual hosted skipped job.
+Clud's hosted qualification is recorded below the publication section:
+[run 37609104548](https://github.com/zackees/clud/actions/runs/37609104548)
+skipped five attested jobs and passed required `CI OK` on the exact published
+head. Independent Template qualification remains pending; fixture results
+alone are not evidence of an actual hosted skipped job.
 
 
 ### PR title selection guard (candidate, issue #362)
@@ -950,13 +953,44 @@ cancellation-aware gate to manifest reads, copying and deferred Docker context
 consumption. It records the manifest revision and refuses changed checkouts
 before consuming code. The gate ends before workflow action execution and
 coordinates jobs within one process; cross-process locking is not established.
-Two focused regressions demonstrated RED to GREEN; full hosted qualification
-and release remain pending. A passing PR run must be followed by full CI on
-the exact merged release SHA, then published artifact verification, Bosn
-rollout and the original Template frontend replay.
+Two focused regressions demonstrated RED to GREEN. Full exact-main
+[qualification 37627801434](https://github.com/zackees/act2/actions/runs/37627801434)
+passed all five jobs on `6ec60ce6f3de3fa1fe827d2ccf5b00b1b20294db`, followed by
+successful [publication 37629524141](https://github.com/zackees/act2/actions/runs/37629524141)
+of [act2.14](https://github.com/zackees/act2/releases/tag/v0.2.89-act2.14).
+The downloaded Linux x86_64 archive matches the published checksum
+`8549dea52bccef8784754ab8f1ca3ef917ecae710b0adbe0b71d4aa5e58a27aa`;
+the executable hashes to
+`ec6aeb07022ad055e852066e4591e8fd399750a6426f51a5ce8987831c43cfcf`.
+Its actual public capability response supplies qualified jobs, step results,
+selected outputs and exact deletion. Capability availability does not prove
+execution or compiler-cache durability.
+
+[Bosn PR #541](https://github.com/zackees/bosn/pull/541) pins that public artifact,
+requires exact deletion before ordinary execution and prepares version 0.1.17.
+Its complete source gate passed in 637 seconds (Rust 307s, Python/Linux 330s)
+through released Bosn 0.1.16/act2.13. The shared verifier issued seven
+attestations; the exact publisher preserved head
+`2ca54d59c8a02d97404b0554efb57c432f3ddce0`, tree
+`d3754136893209bda6863cae5fcf0037ce879e2d` and its trailers. An unchanged
+invocation reused both lane passes in 0.685 seconds without changing the head
+or original execution timestamps. Source qualification through the old provider
+does not qualify execution through the new provider.
+
+The ordinary [PR run 37633213256](https://github.com/zackees/bosn/actions/runs/37633213256)
+passed, and the PR merged normally at
+`3da3ecc76d6a006fdaa1ac1b5659d83dd7010c1e`. Exact-main full release
+[qualification 37634017015](https://github.com/zackees/bosn/actions/runs/37634017015)
+is in progress. The pretag dry run, public Bosn release, public wheel
+verification and original Template frontend replay remain pending.
+
+Bosn's queue is per daemon/state. The owned pilot has one slot, four CPUs and
+no spares; its CLI reports queue, provider pins and cache accounting with the
+widget absent. This does not bound aggregate CPU across independent roots.
+Those admission and measurement requirements remain open.
 
 
-## Delta content identity (candidate implementation)
+## Delta content identity (implemented; compiler durability pending)
 
 Source inspection of zccache's staged-v2 store shows that a fixed-length
 `<key>.current` file selects a generation directory. The previous delta packer
@@ -971,6 +1005,10 @@ and SHA-256 rows and binds their list with its digest. Packing includes changed
 contents; applying refuses a different content base. Regenerate old local
 manifests; old archive base digests become ordinary stale-base misses.
 Hashing reads the cache contents and its cost must be measured in the pilot.
+This implementation merged in [PR #372](https://github.com/zackees/ci.yml/pull/372)
+at `5be5f3a5e4543c09b93c432f06e37608ee399438`. Focused RED to GREEN
+regressions cover equal-size changed pointers, distinct equal-size bases,
+legacy manifests and old empty-base archives; the full gate passed 1263 tests.
 This is filesystem transport evidence, not proof of a real compiler hit or
 atomic import into a concurrently written compiler store. The pilot continues
 to restore into private engines before compilation rather than introducing
