@@ -1172,7 +1172,7 @@ to restore into private engines before compilation rather than introducing
 a shared writable artifact directory.
 
 
-## Writer-path integrity follow-ups (qualification in progress)
+## Writer-path integrity follow-ups (provider fixes merged; rollout pending)
 
 A supported local `push` replay selected the cache writer (`cache_save=true`)
 but failed before compilation. This adds two provider defects to the compiler
@@ -1180,13 +1180,17 @@ payload lifecycle work; neither changes the attestation trust rules.
 
 - Bosn's frozen depth-1 checkout omitted `HEAD^`, so the existing lockfile
   comparison conservatively reported a changed lockfile for an ordinary source
-  edit. Candidate `4caf7752a6cfa08742314bcfabf9b32f81a02eda` requests depth 2
+  edit. [Bosn PR #542](https://github.com/zackees/bosn/pull/542) requests depth 2
   for both head and base, retaining deeper PR merge-base history when needed.
   Initial or shallow sources retain only available history. The isolated
   regression failed on missing `HEAD^`; 14 focused tests then passed with one
   ignored, including unchanged lockfiles and a base equal to head. Its complete
-  Rust replay passed; the Linux lane is still running. No shipped snapshot fix
-  or successful local writer is claimed by these results.
+  Rust and Linux replay passed in 608 seconds. An unchanged repeat reused both
+  lanes in 0.999 seconds. The exact published head retained all seven commit
+  attestations; hosted run `37650279564` accepted them, skipped Rust and policy,
+  and passed. The fix merged at `68ad9b1e0ae9fe7ed6819f3ba8b0090b146617a5`.
+  Public Bosn 0.1.17 still lacks this fix; successful local writer replay on
+  the upcoming runtime remains unproven.
 - The stock upload-artifact client's query handling discarded an unescaped
   trailing base64 signature `=`. [Act2 PR #57](https://github.com/zackees/act2/pull/57)
   URL-encodes that value while preserving strict signature verification. The
@@ -1194,7 +1198,23 @@ payload lifecycle work; neither changes the attestation trust rules.
   encoding. Artifact package tests and all PR checks passed. The merged commit
   is `73c1eea4d868bb38a84c3050db395f6f21f4c6e7`; exact-main
   [qualification 37648485379](https://github.com/zackees/act2/actions/runs/37648485379)
-  is running before release.
+  passed. Release run `37650187671` published
+  [act2.15](https://github.com/zackees/act2/releases/tag/v0.2.89-act2.15).
+  The consumed Linux archive SHA-256 is
+  `e21535decdac2c6ed8429b8662825b4c1fca606301e0da54e37b180ad2517e6d`;
+  extracted binary SHA-256 is
+  `b4be8d7ef98729ad16a9a6ddba331f1d2b0feb8abd52eb9e5f3a93155fb4f1df`.
+  The public binary reports act2.15 and all four protocol capabilities.
+
+[Bosn PR #543](https://github.com/zackees/bosn/pull/543) adopts those verified
+pins and prepares 0.1.18. Its full source-bound local gate passed in 666 seconds
+through the existing public 0.1.17/act2.14 provider. The publisher retained the
+exact head `c9d8b751111a37976b49ff8ccb3c6da4d327ce03`, tree, parent, message and
+seven attestations. Hosted run `37653335444` passed. This changes a gate surface,
+so hosted Rust and Linux jobs appropriately ran rather than being skipped.
+The merged candidate is `391c8e35f8b16afccfe73c79276dbb0c645cf3c7`.
+Exact-main full CI was requested; pretag dry run, publication, four public wheel
+checks, and execution of the new provider remain pending.
 
 Payload integrity has a separate narrow correction in
 [setup-soldr PR #572](https://github.com/zackees/setup-soldr/pull/572), head
@@ -1206,10 +1226,40 @@ those files while excluding standalone daemon sidecars and logs; namespace
 and version identities remain backend-owned. All 15 payload tests, typecheck
 and the full npm suite passed (916 passed, one skipped). The four regenerated
 bundles each contain only the intended semantic classifier change after
-module-ID mapping. Hosted qualification and the existing exact-SHA downstream
-canary required for floating-tag promotion remain pending.
+module-ID mapping. PR #572 was subsequently closed without merging or a stated
+reason; its fix is absent from main. Keep it unpromoted pending clarification.
 
 These fixes do not establish pre-cook baseline capture, a complete backend
 export/import contract, exact-hit publication of new objects, interruption-safe
 generations, or fresh-engine compiler hits. The independent local and hosted
 cache acceptance requirements remain unchanged.
+
+## Backend-owned compiler snapshot API (unpublished draft)
+
+Zccache's artifact crate owns the new snapshot API; Bosn, act2 and `ci-lint`
+do not parse its compiler index or staged layout. The draft is committed locally
+as `1005fd31` on `feat/362-compiler-snapshot`; it has not been pushed or qualified
+by the full repository gate. Its RED test compiled and failed on unimplemented
+export inside the isolated Bosn gate stack. Seven snapshot tests now pass,
+along with all 123 artifact tests (one ignored) and warnings-denied artifact
+Clippy in the same isolated stack.
+
+Export uses the live authoritative index and existing staged resolver/read
+guard. It retains output names, modes, streams and Rust verdicts; copies the
+captured generation independently without re-reading its mutable pointer;
+preserves payload timestamps; verifies copied bytes; and publishes a completed
+temporary sibling using the canonical native generation rename. Import checks
+schema, an opaque caller-provided compatibility identity, index digest and all
+payloads before installing a fresh private store. Both operations share the
+same validation/copy path. These cache snapshots are separate from test evidence.
+
+Tests cover multi-output metadata/verdicts, wrong compatibility, modified index,
+corrupt payload import, corrupt export preserving a usable prior snapshot,
+missing payload refusal, empty stores, and read-only payload/timestamp retention.
+The current API handles staged-v2 only and fails on unsupported legacy payloads.
+Caller-controlled parents and immutable source snapshots are required; hostile
+filesystem races and exclusive reservation of empty destinations are not proved.
+Legacy pack/flat support, CLI/daemon integration, transport hooks, pre-cook base
+capture, exact-hit new-object publication, and actual fresh-engine compiler hits
+are still required. No cache warmth, reduced misses, or complete durability
+acceptance is claimed from these crate tests.
