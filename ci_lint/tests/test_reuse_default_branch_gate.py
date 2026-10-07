@@ -70,7 +70,8 @@ def _doc(**overrides: JsonValue) -> dict[str, JsonValue]:
 
 def _matrix_fetch(url: str, token: str) -> JsonValue:
     assert token
-    return {"conclusion": "success", "head_sha": HEAD_SHA, "name": "platform-build"}
+    return {"conclusion": "success", "head_sha": HEAD_SHA,
+            "name": "platform-build (linux-x64) (on ubuntu-24.04, soldr) [pb01]"}
 
 
 def _good_fetch(url: str, token: str) -> JsonValue:
@@ -165,7 +166,10 @@ class GateDefaultBranchReuseTest(unittest.TestCase):
     def test_matching_a_bare_job_id_also_works(self) -> None:
         """A workflow whose display name *is* its id needs no digest."""
 
-        report = _gate(_doc(jobs=[{"name": "fast", "job_id": 9001}]))
+        report = _gate(
+            _doc(jobs=[{"name": "fast", "job_id": 9001}]),
+            fetch=lambda url, token: {"conclusion": "success", "head_sha": HEAD_SHA, "name": "fast"},
+        )
         self.assertTrue(_skipped_ok(report, "fast"))
 
     def test_matching_the_matrix_display_name_shape(self) -> None:
@@ -204,6 +208,19 @@ class GateDefaultBranchReuseTest(unittest.TestCase):
 
         report = _gate(_doc(jobs=[{"name": "fast-extra [abc123]", "job_id": 9001}]))
         self.assertFalse(_skipped_ok(report, "fast"))
+
+    def test_proving_id_of_another_successful_job_is_rejected(self) -> None:
+        """#362: the transport's matching name cannot rename the live job."""
+        report = _gate(_doc(jobs=[{"name": "fast [abc123]", "job_id": 9002}]))
+        self.assertFalse(_skipped_ok(report, "fast"))
+        self.assertFalse(report.ok)
+
+    def test_live_job_without_name_cannot_prove_a_required_skip(self) -> None:
+        report = _gate(
+            _doc(), fetch=lambda url, token: {"conclusion": "success", "head_sha": HEAD_SHA}
+        )
+        self.assertFalse(_skipped_ok(report, "fast"))
+        self.assertFalse(report.ok)
 
     def test_a_wrong_lane_digest_is_not_a_proof(self) -> None:
         """The digest is the "same tier" proof. A document naming a digest
@@ -246,7 +263,8 @@ class GateDefaultBranchReuseTest(unittest.TestCase):
     def test_a_job_on_another_head_is_rejected(self) -> None:
         report = _gate(
             _doc(),
-            fetch=lambda url, token: {"conclusion": "success", "head_sha": "2" * 40},
+            fetch=lambda url, token: {"conclusion": "success", "head_sha": "2" * 40,
+                                      "name": "fast [abc123]"},
         )
         self.assertFalse(_skipped_ok(report, "fast"))
 

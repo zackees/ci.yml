@@ -1405,3 +1405,57 @@ mode and author exemptions once enrolled. Missing or unreadable PR bases refuse 
 a readable base but no declaration retains its bootstrap path; local ACT replay executes checks before
 creating proof. This correction grants no additional skip authority. The
 regression covers weakening mode and adding an author exemption on the head.
+
+## Clud shared-aggregator migration: selection and identity requirements
+
+The first enforced Clud adopter proof used its existing `CI OK` shell
+aggregation. It has not yet qualified Clud through the shared `ci-lint gate`
+consumer. Inspection of the adopted workflow identifies two requirements that
+must be resolved together before replacing that aggregation:
+
+1. **Required-job selection must preserve the native workflow.** Clud resolves
+   `minimal`, `extended`, `windows` and `full` through `ci/ci_matrix.py`; its
+   `ci.toml` currently describes cache policy and does not generate those native
+   job IDs. The standard planner's `precheck`, `fast`, `platform-build` and
+   `platform-run` IDs cannot substitute for Clud's required jobs. A routine
+   minimal run requires `static`, `static-checks`, `dylint`, `lint-linux-x64`,
+   `build-linux-x64` and `test-linux-x64-unit`. Each higher mode adds its
+   existing required cells. Preserve the unit caller's three selected shards
+   and the selected platform callers' suites.
+2. **Default-branch reuse must retain independently verified identity.** Clud's
+   existing reuse decision records GitHub display names, such as `Static
+   checks` and `Clippy linux-x64 / x86_64-unknown-linux-gnu`. The shared
+   default-branch consumer currently matches a job ID or its plan-digest
+   qualified form. Consequently those native names do not match
+   `static-checks` or `lint-linux-x64`; replacing the shell consumer without
+   resolving that mapping would reject legitimate main-push reuse. The unit
+   caller additionally needs all three proving shard jobs, not one arbitrary
+   successful display-name match.
+
+The implementation should derive required selection and proving identities
+from the tracked workflow and its resolved inputs/producer outputs, using the
+existing workflow parser, condition evaluator, matrix expansion and caller
+identity owners. Unsupported or ambiguous expressions must retain required
+coverage or refuse qualification. A skip output must not remove a job from
+the required selection: accept that skipped result only after the independent
+local-attestation or default-branch-reuse verifier proves it. Do not add a
+Clud-specific verifier, copy its shell mode lists into a second checker, or
+accept an arbitrary head-supplied alias table as authority.
+
+Before adopter rollout, conformance must cover every native mode, absent or
+failed mode producer, an unexplained required skip, a failed required job
+beside valid attestations, incomplete/ambiguous reusable or matrix proofs,
+and main-push reuse of each selected validation caller. Cache writers retain
+their current execution policy; releases retain complete validation. The
+new consumer must use the actual event and exact checked-out source and must
+continue to require the successful verification job. These are migration
+requirements, not a claim of implemented selection or name mapping.
+
+The shared default-branch consumer must also confirm that the fetched live
+job's name equals the proving name in the reuse record. A focused regression
+substituted another successful job ID on the same PR head while retaining
+the required job's name; the prior consumer accepted that skip. The corrected
+consumer checks the exact live name in its existing verification path. Tests
+retain positive bare-ID and matrix-display-name cases and reject a missing
+live name, a renamed proof and a different head. This correction does not yet
+implement the native Clud display-name mapping described above.
