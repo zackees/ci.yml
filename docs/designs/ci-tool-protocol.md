@@ -870,3 +870,28 @@ The Template enrollment probe reproduced the missing title guard: a valid
 ordinary local proof plus `[ci-full]` was still credited for its required
 skipped job. The regression now refuses that skip using the shared parser.
 Independent hosted qualification remains pending.
+
+
+## Public output request transport (candidate, issue #362)
+
+Each qualified `[gate.replay.jobs]` declaration may name `capture-outputs =
+["matrix", "selection"]`: explicit nonsecret outputs already declared by that
+source job. The shared planner binds names to the original qualified caller
+path, merges duplicate selectors across selections and appends Bosn's
+`--ci-output <caller/job>:<name>` arguments once. Lane commands contain no
+copies of these request flags. Outputs stay opt-in; the tool never requests
+all job outputs or scans logs for inferred values.
+
+A missing source output, invalid name, conflicting manually supplied selector,
+unsupported command shape or bounded transport overflow refuses before
+execution. The provider must support the act2.13 selected-output contract.
+Every executed selected producer must subsequently provide the requested
+qualified evidence; a declaration is not evidence. Source-excluded jobs and
+remote-maintenance dependencies never gain executed-check credit. The
+existing complete graph and producer-output verifier remain the authority.
+
+Initial request compilation uses the source identities discovered during
+preflight. A producer reachable only after a deferred dynamic expansion may
+need further transport work; missing evidence still refuses the final graph.
+The Template pilot requests only its already-discovered verifier and reusable
+precheck outputs. Actual adopter qualification remains pending.
