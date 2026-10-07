@@ -37,6 +37,10 @@ class WorkflowReplayTest(unittest.TestCase):
         self.assertEqual(proof.outputs[0].identity, expected.required_jobs[0].identity)
         self.assertEqual(proof.outputs[0].name, "matrix")
         self.assertEqual(proof.outputs[0].value, "[]")
+        self.raw["act_version"] = "0.2.89-act2.12"
+        with self.assertRaises(ValueError):
+            prove_replay(self.raw, expected)
+        self.raw["act_version"] = "0.2.89-act2.13"
         job["sections"][0]["conclusion"] = "skipped"
         with self.assertRaises(ValueError):
             prove_replay(self.raw, expected)
@@ -123,7 +127,7 @@ class WorkflowReplayTest(unittest.TestCase):
             "workflow": ".github/workflows/ci.yml", "job": None,
             "trigger": "pr", "event": "pull_request", "mode": "minimal", "state": "done",
             "conclusion": "success", "exit_code": 0, "act_exit_code": 0,
-            "cleanup": "removed", "act_version": "0.2.89-act2.4",
+            "cleanup": "removed", "act_version": "0.2.89-act2.13",
             "tree": {"malformed_lines": 0, "groups": [{"jobs": [{
                 "key": "CI/Tests", "status": "completed", "conclusion": "success",
                 "sections": [{"name": "Run tests", "stage": "Main", "status": "completed",

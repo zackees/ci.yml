@@ -243,7 +243,8 @@ list and matching qualified identity, and an entirely excluded selection
 cannot prove a lane. Unknown or constant-only guards still require execution.
 Fixture tests cover the decision; producer event qualification remains
 pending. Also, `ci-ok` depends on planner-driven dynamic platform matrices which
-the current bounded resolver refuses. `reuse-decision` also has an unnamed
+the bounded resolver originally refused; the runtime extension below now
+resolves supported expressions from proved output evidence. `reuse-decision` also has an unnamed
 checkout step. Preserve the original checks and dynamic native/full lanes;
 do not bypass the aggregator or silently narrow the selected graph to make
 this consumer pass. The generic resolver/verifier owns these proof mechanisms;
@@ -506,9 +507,8 @@ non-secret outputs needed by the selected source graph, using repeated
 `--ci-output <qualified/job/path>:<output>` arguments. Every path component and
 output name is a workflow identifier; matrix legs share a selector but emit
 separate concrete identities. Bosn includes these requests in run identity and
-requires the capability before workflow execution. Its published `.12` pin
-cannot supply this contract and must refuse requests until a qualified release
-is adopted.
+requires the capability before workflow execution. An older `.12` pin cannot supply this contract and must refuse requests;
+the published `.13` qualification is recorded below.
 
 A successful producer emits one event per requested concrete job with
 `msg = "CI output evidence"`, `ciOutputSchema = 1`, the existing `jobIdentity`,
@@ -543,9 +543,9 @@ leg and original native/full/release lane. Cycles, ambiguous matrix output
 aggregation, unsupported expressions, duplicate JSON keys, oversized expansion
 and missing or refused evidence reject proof. A producer-provided empty matrix
 cannot remove coverage without proving the source policy that permits it.
-Current shared expansion rejects dynamic matrices before execution; this
-section specifies the next verifier change and does not claim implementation
-or end-to-end hosted qualification.
+The bounded runtime extension below implements this resolution for supported
+expressions. Broader output-based conditions and end-to-end hosted
+qualification remain pending.
 
 
 The shared matrix expander now accepts already-proved dependency outputs for
@@ -555,8 +555,8 @@ producer dependency and every concrete leg. Matching requires the same caller
 scope and an unambiguous non-matrix producer. Duplicate JSON fields, nonfinite
 values, excessive depth/size, embedded expressions and empty dynamic expansion
 reject. Static callers with no output evidence continue to reject expressions.
-This is a graph-resolution primitive: runtime two-stage orchestration and
-reusable workflow public-output mapping remain pending. No new attestation
+Runtime orchestration and reusable public-output mapping are implemented
+below; actual adopter qualification remains pending. No new attestation
 eligibility follows from passing this primitive's conformance fixtures.
 
 
@@ -567,5 +567,29 @@ its original qualified executed-leaf identity and sequence. Missing mappings,
 undeclared jobs/outputs, malformed definitions, foreign caller scope and
 ambiguous matrix producers refuse the dependent graph. Unrequested public
 outputs do not become evidence. Fixture conformance covers this binding;
-receipt-driven runtime orchestration and actual second-adopter qualification
-remain pending.
+the runtime extension below uses this mapping; actual second-adopter
+qualification remains pending.
+
+
+Runtime verification now has an explicit deferred-output state. Preflight can
+defer a supported matrix expression awaiting evidence; ordinary static errors
+still reject execution. The verifier freezes workflow definitions before
+execution. After the terminal receipt, the same source-derived job proof
+admits each producer's outputs in dependency order, then rebuilds the complete
+selected graph and validates every required concrete job. Deferred state itself
+never yields a pass or attestation. A queried provider predating act2.13 refuses
+this path before execution; receipts containing selected outputs require the
+qualified act2.13 contract. Fixture tests include a real child process and
+missing/skipped planner and matrix checks, rather than simulated attestations.
+
+[Act2 release .13](https://github.com/zackees/act2/releases/tag/v0.2.89-act2.13)
+is now published after exact merged-commit full CI
+([37593921290](https://github.com/zackees/act2/actions/runs/37593921290)) and the
+existing release workflow
+([37595328315](https://github.com/zackees/act2/actions/runs/37595328315)). Its
+consumed Linux x86_64 archive matches publisher checksums
+(`a219d5539358d0df0088ca59f7e2aafde2f7d9701f92fda402c63b19116496c7`);
+the executable hashes to
+`48541dd9f8d579a6521dba02cbeec207c12359220c504ec3b2424dce8b79c5db` and reports
+all three capabilities offline. Bosn source pin adoption is isolated-tested;
+a deployed Bosn release and end-to-end hosted skip qualification remain pending.

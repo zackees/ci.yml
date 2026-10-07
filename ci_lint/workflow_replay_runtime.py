@@ -16,9 +16,11 @@ from typing import BinaryIO
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.execution_pins import ExecutionPins, parse_execution_pins
 from ci_lint.workflow_replay import ReplayExpectation, prove_replay
-from ci_lint.workflow_replay_outputs import unique_json_object
+from ci_lint.workflow_replay_outputs import ReplayOutput, unique_json_object, require_output_producer
+from ci_lint.workflow_replay_expansion import ExpandedJob, OutputProver
+from ci_lint.workflow_scan import load_workflows
 from ci_lint.workflow_replay_config import ReplayConfig
-from ci_lint.workflow_replay_plan import build_plan
+from ci_lint.workflow_replay_plan import build_plan, declared_check
 from ci_lint.full_run_receipt import FullRunEvidence, ReceiptPass
 
 REPORT_ENV = "CI_LINT_GATE_REPLAY_REPORT"
@@ -80,12 +82,28 @@ def _execute(repo: Path, argv: tuple[str, ...], report: Path, *, report_source: 
     return process.returncode
 
 
+
+def _receipt_prover(raw: JsonValue, config: ReplayConfig, expectation: ReplayExpectation) -> OutputProver:
+    def prove(expanded: ExpandedJob) -> tuple[ReplayOutput, ...]:
+        declarations = tuple(item for item in config.jobs if item.source_job == expanded.source_job)
+        if len(declarations) != 1:
+            raise ValueError("dynamic replay producer lacks an unambiguous source declaration")
+        check = declared_check(declarations[0], expanded, mode=config.mode, event=expectation.event)
+        if check.excluded:
+            return ()  # The final complete proof still validates the explicit skip.
+        return prove_replay(raw, replace(expectation, required_jobs=(check,))).outputs
+    return prove
+
+
 def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig, *,
                         head: str, tree: str, lane: str | None = None,
                         env: dict[str, str] | None = None, stdout: BinaryIO | None = None) -> CheckedCommand:
     try:
         config = bind_execution_pins(repo, config)
-        plan = build_plan(repo, config, lane=lane)
+        files = tuple(load_workflows(repo)) if config.qualified else ()
+        plan = build_plan(repo, config, lane=lane, defer_outputs=True, files=files)
+        if plan.deferred_outputs and config.execution_pins is not None:
+            require_output_producer(config.execution_pins.act_version)
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         return CheckedCommand(1, f"workflow replay proof rejected before execution: {exc}")
     expectation = ReplayExpectation(config.repository, repo, head, tree, plan.workflow,
@@ -102,7 +120,12 @@ def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig,
                                   env=child_env, stdout=stdout)
             if returncode != 0:
                 return CheckedCommand(returncode)
-            prove_replay(_read_report(report), expectation)
+            raw = _read_report(report)
+            if plan.deferred_outputs:
+                plan = build_plan(repo, config, lane=lane, files=files,
+                                  prove_outputs=_receipt_prover(raw, config, expectation))
+                expectation = replace(expectation, required_jobs=plan.required)
+            prove_replay(raw, expectation)
             bind_execution_pins(repo, config)
         except (OSError, UnicodeError, ValueError, subprocess.TimeoutExpired) as exc:
             return CheckedCommand(1, f"workflow replay proof rejected: {exc}")

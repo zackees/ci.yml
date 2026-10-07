@@ -2,13 +2,14 @@
 
 import re
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 from ci_lint.workflow_replay_dependencies import _needs
 from ci_lint.workflow_replay_inputs import BoundInput, bind_call_inputs, bound_name
 from ci_lint.workflow_replay_identity import JobIdentity, identity_part, bounded_identity
 from ci_lint.workflow_replay_matrix import job_matrices
-from ci_lint.workflow_replay_outputs import ReplayOutput, valid_output_name
+from ci_lint.workflow_replay_outputs import ReplayOutput, PendingOutput, valid_output_name
 from ci_lint.workflow_scan import ParsedYamlFile, get_on_section, jobs_of
 from ci_lint.yaml_io import YamlValue
 
@@ -24,10 +25,14 @@ class ExpandedJob:
     identity: tuple[JobIdentity, ...] = ()
 
 
+OutputProver = Callable[[ExpandedJob], tuple[ReplayOutput, ...]]
+
+
 @dataclass(frozen=True)
 class ReplayExpansion:
     jobs: tuple[ExpandedJob, ...]
     problem: str | None = None
+    pending: bool = False
     outputs: tuple[ReplayOutput, ...] = ()
 
 
@@ -76,6 +81,7 @@ class _ExpansionState:
     qualified: bool = False
     outputs: tuple[ReplayOutput, ...] = ()
     mapped_outputs: list[ReplayOutput] = field(default_factory=list)
+    prove_outputs: OutputProver | None = None
 
 
 def _record(state: _ExpansionState, resolved: ExpandedJob) -> None:
@@ -83,6 +89,8 @@ def _record(state: _ExpansionState, resolved: ExpandedJob) -> None:
         if not any(job.identity == resolved.identity for job in state.jobs):
             if len(state.jobs) >= 512:
                 raise ValueError("reusable expansion exceeds the bounded graph limit")
+            if state.prove_outputs is not None:
+                state.mapped_outputs.extend(state.prove_outputs(resolved))
             state.jobs.append(resolved)
         return
     previous = next((job for job in state.jobs if job.source_job == resolved.source_job), None)
@@ -183,20 +191,23 @@ def _called(state: _ExpansionState, current: str, job: dict[str, YamlValue],
 
 def expand_selection(files: tuple[ParsedYamlFile, ...], path: str, selected: str | None, *,
                      qualified: bool = False, inputs: tuple[BoundInput, ...] = (),
-                     outputs: tuple[ReplayOutput, ...] = ()) -> ReplayExpansion:
+                     outputs: tuple[ReplayOutput, ...] = (),
+                     prove_outputs: OutputProver | None = None) -> ReplayExpansion:
     """Exclude virtual callers; require all their concrete jobs and prerequisites.
 
     Qualified mode derives caller IDs and every literal matrix leg from the
     source, optionally resolving matrices from previously proved outputs.
     Legacy display-name mode cannot disambiguate repeated callers.
     """
-    state = _ExpansionState(files, [], set(), set(), set(), qualified, outputs)
+    state = _ExpansionState(files, [], set(), set(), set(), qualified, outputs, prove_outputs=prove_outputs)
     try:
         roots = (selected,) if selected is not None else tuple(jobs_of(_document(files, path)))
         if not roots:
             raise ValueError("workflow has no executable jobs")
         for root in roots:
             _visit(state, path, root, "", (), inputs)
+    except PendingOutput as exc:
+        return ReplayExpansion((), str(exc), pending=True)
     except ValueError as exc:
         return ReplayExpansion((), str(exc))
     return ReplayExpansion(tuple(sorted(state.jobs, key=lambda job: job.source_job)),

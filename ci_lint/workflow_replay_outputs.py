@@ -20,6 +20,16 @@ class ReplayOutput:
     origin: tuple[JobIdentity, ...] = ()
 
 
+class PendingOutput(ValueError):
+    """A supported source expression needs output evidence after execution."""
+
+
+def require_output_producer(version: str) -> None:
+    match = re.fullmatch(r"\d+\.\d+\.\d+-act2\.(\d+)", version)
+    if match is None or int(match[1]) < 13:
+        raise ValueError("selected output evidence requires the qualified act2.13 contract")
+
+
 def valid_output_name(name: str) -> bool:
     return _NAME.fullmatch(name) is not None
 

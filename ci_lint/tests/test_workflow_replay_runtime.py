@@ -15,6 +15,58 @@ from ci_lint.workflow_replay_runtime import _read_report, run_checked_command
 
 class ReplayRuntimeTest(WorkflowReplayTest):
     @requires_yaml_tooling
+    def test_runtime_proves_planner_before_resolving_all_matrix_checks(self) -> None:
+        workflows = self.workspace / ".github" / "workflows"
+        workflows.mkdir(parents=True)
+        (workflows / "ci.yml").write_text(
+            "jobs:\n  plan:\n    outputs: {matrix: '${{ steps.plan.outputs.matrix }}'}\n"
+            "    steps: [{name: Plan, run: plan}]\n"
+            "  tests:\n    needs: plan\n    strategy:\n"
+            "      matrix: '${{ fromJSON(needs.plan.outputs.matrix) }}'\n"
+            "    steps: [{name: Run tests, run: tests}]\n")
+        config = replace(self.config(), qualified=True, report_source="stdout", jobs=(
+            DeclaredReplayJob("ci.yml:plan", self.expected.required_jobs[0], ("tests",), True),
+            DeclaredReplayJob("ci.yml:tests", self.expected.required_jobs[0], ("tests",), True)))
+        original = self.raw["tree"]["groups"][0]["jobs"][0]
+        jobs = []
+        for identity, matrix, name in (("plan", None, "Plan"), ("tests", {"lane": "left"}, "Run tests"),
+                                       ("tests", {"lane": "right"}, "Run tests")):
+            job = copy.deepcopy(original)
+            job.update(key=identity+str(matrix), job_id=identity, matrix=matrix,
+                       identity=[{"jobID": identity, "matrix": matrix}])
+            job["sections"][0]["name"] = name
+            jobs.append(job)
+        jobs[0]["output_evidence"] = {"schema_version": 1, "seq": 21,
+                                       "values": {"matrix": '{"lane":["left","right"]}'}, "error": None}
+        self.raw["tree"]["groups"][0]["jobs"] = jobs
+        fixture = self.workspace / "matrix.json"
+        command = self.command(f"print(pathlib.Path({str(fixture)!r}).read_text())\n")
+        fixture.write_text(json.dumps(self.raw))
+        outcome = run_checked_command(self.workspace, command, config,
+                                      head=self.expected.sha, tree=self.expected.git_tree)
+        self.assertEqual(outcome.returncode, 0, outcome.error)
+        for index in (0, 1, 2):
+            jobs[index]["sections"][0]["conclusion"] = "skipped"
+            fixture.write_text(json.dumps(self.raw))
+            rejected = run_checked_command(self.workspace, command, config,
+                                           head=self.expected.sha, tree=self.expected.git_tree)
+            self.assertEqual(rejected.returncode, 1)
+            jobs[index]["sections"][0]["conclusion"] = "success"
+        jobs.pop()
+        fixture.write_text(json.dumps(self.raw))
+        rejected = run_checked_command(self.workspace, command, config,
+                                       head=self.expected.sha, tree=self.expected.git_tree)
+        self.assertEqual(rejected.returncode, 1)
+        source = workflows / "ci.yml"
+        source.write_text(source.read_text().replace("name: Plan", "id: plan"))
+        marker = self.workspace / "unexpected-execution"
+        command = self.command(f"pathlib.Path({str(marker)!r}).write_text('ran')\nprint(pathlib.Path({str(fixture)!r}).read_text())\n")
+        rejected = run_checked_command(self.workspace, command, config,
+                                       head=self.expected.sha, tree=self.expected.git_tree)
+        self.assertEqual(rejected.returncode, 1)
+        self.assertFalse(marker.exists(), "invalid producer definition must refuse before execution")
+
+    @requires_yaml_tooling
     def test_source_derived_runtime_requires_each_bound_profile(self) -> None:
         workflows = self.workspace / ".github" / "workflows"
         workflows.mkdir(parents=True)

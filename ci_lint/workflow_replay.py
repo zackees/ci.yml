@@ -13,7 +13,7 @@ from pathlib import Path
 from ci_lint.cargo_messages import JsonValue
 from ci_lint.execution_pins import ExecutionPins, parse_execution_pins
 from ci_lint.workflow_replay_identity import JobIdentity, matrix_json, parse_identity
-from ci_lint.workflow_replay_outputs import ReplayOutput, proved_outputs
+from ci_lint.workflow_replay_outputs import ReplayOutput, proved_outputs, require_output_producer
 
 
 @dataclass(frozen=True)
@@ -236,6 +236,8 @@ def prove_replay(raw: JsonValue, expected: ReplayExpectation) -> ReplayProof:
     _inputs(raw, expected)
     _metadata(raw, expected)
     jobs = _jobs(raw.get("tree"), qualified=qualified)
+    if any(item.raw.get("output_evidence") is not None for item in jobs):
+        require_output_producer(str(raw["act_version"]))
     by_identity = {item.identity: item for item in jobs}
     by_key = {item.key: item for item in jobs}
     outputs: list[ReplayOutput] = []
