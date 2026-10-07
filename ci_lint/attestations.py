@@ -280,9 +280,10 @@ def _record(raw: dict[str, JsonValue]) -> GateAttestation:
     secs = raw.get("secs")
     fields = (raw.get("gate"), raw.get("tree"), raw.get("lane"), raw.get("key"), raw.get("via"), raw.get("host"),
               raw.get("stamp"))
-    if raw.get("v") != VERSION or not all(isinstance(f, str) for f in fields) or not isinstance(parents, list) \
+    if type(raw.get("v")) is not int or raw.get("v") != VERSION \
+            or not all(isinstance(f, str) for f in fields) or not isinstance(parents, list) \
             or not all(isinstance(p, str) for p in parents) or type(raw.get("at")) is not int \
-            or not (secs is None or isinstance(secs, int)):
+            or not (secs is None or type(secs) is int):
         raise ValueError("missing or mistyped field")
     gate, tree, lane, key, via, host, stamp = (str(f) for f in fields)
     at = raw.get("at")

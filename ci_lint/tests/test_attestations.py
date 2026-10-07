@@ -216,6 +216,17 @@ class VerifyTest(GitCase):
         self.assertIsNone(parsed[0].attestation)
         self.assertIsNotNone(parsed[0].error)
 
+    def test_boolean_schema_and_duration_are_malformed(self) -> None:
+        self.commit("base")
+        line = self.attest("rust/all/fmt", "rust")
+        for field in ("v", "secs"):
+            with self.subTest(field=field):
+                raw = json.loads(line.split(": ", 1)[1])
+                raw[field] = True
+                parsed = parse_trailers("Ci-Attestation: " + json.dumps(raw))
+                self.assertIsNone(parsed[0].attestation)
+                self.assertIsNotNone(parsed[0].error)
+
 
 class KeysPriorityTest(GitCase):
     def test_job_mapped_gates_are_published_first_and_overflow_is_reported(self) -> None:
