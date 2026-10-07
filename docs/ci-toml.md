@@ -1417,3 +1417,16 @@ printed either way; the command only exits 1 (instead of 0) when gating is
 active and at least one benchmark regressed past the threshold. The
 printed/`--json` report itself carries a `schema_version` field
 (`PERF_SCHEMA_VERSION`).
+
+
+### Qualified replay public outputs (candidate pilot, #362)
+
+A `[[local.gate.replay.jobs]]` entry (or `[[gate.replay.jobs]]` in
+`local-gate.toml`) accepts `capture-outputs = ["matrix"]` when qualified
+replay is enabled. Names must be distinct, valid identifiers and declared
+in that source job's `outputs`. Declare only public, nonsecret values needed
+for replay proof. The shared tool compiles qualified Bosn request flags and
+checks the actual output evidence; do not repeat `--ci-output` flags in lane
+commands. Absence means request nothing and preserves existing consumers.
+See [the transport design](designs/ci-tool-protocol.md#public-output-request-transport-candidate-issue-362)
+for bounds and pending pilot qualification.

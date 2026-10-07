@@ -9,6 +9,7 @@ from ci_lint.finding import Finding
 from ci_lint.execution_pins import ExecutionPins
 from ci_lint.toml_cursor import Cursor, TomlValue
 from ci_lint.workflow_replay import ReplayInput, ReplayJob
+from ci_lint.workflow_replay_outputs import valid_output_name
 
 WORKFLOW = r"[A-Za-z0-9_.-]+\.ya?ml"
 JOB_REF = rf"{WORKFLOW}:[A-Za-z0-9_-]+"
@@ -20,6 +21,7 @@ class DeclaredReplayJob:
     proof: ReplayJob
     lanes: tuple[str, ...]
     derive_checks: bool = False
+    capture_outputs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,15 @@ def _bad(findings: list[Finding], source: str, path: str, message: str) -> None:
                             fix="declare the exact workflow jobs, executed check names and covered lanes"))
 
 
+def _capture(cursor: Cursor, *, qualified: bool, source: str, path: str,
+             findings: list[Finding]) -> tuple[str, ...]:
+    capture = cursor.list_str("capture-outputs", required=False)
+    if capture and (not qualified or len(capture) > 256 or len(set(capture)) != len(capture)
+                    or any(not valid_output_name(name) for name in capture)):
+        _bad(findings, source, path, "capture-outputs requires distinct public output names and qualified replay")
+    return tuple(capture)
+
+
 def _job(raw: dict[str, TomlValue], *, source: str, path: str,
          findings: list[Finding], qualified: bool = False) -> DeclaredReplayJob | None:
     start = len(findings)
@@ -65,6 +76,7 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     pr_saves = cursor.list_str("pr-cache-save-steps", required=False)
     input_skips = cursor.list_str("input-skip-steps", required=False)
     lanes = cursor.list_str("lanes", required=False)
+    capture = _capture(cursor, qualified=qualified, source=source, path=path, findings=findings)
     cursor.finish()
     if ref is None or re.fullmatch(JOB_REF, ref) is None:
         _bad(findings, source, path, "source-job must be a workflow basename and job id")
@@ -88,7 +100,7 @@ def _job(raw: dict[str, TomlValue], *, source: str, path: str,
     if len(findings) != start or ref is None or key is None:
         return None
     return DeclaredReplayJob(ref, ReplayJob(key, tuple(steps), tuple(cache_saves), tuple(minimal_skips), mode_step,
-                                          tuple(pr_saves), tuple(input_skips)), tuple(lanes), derive_checks)
+                                          tuple(pr_saves), tuple(input_skips)), tuple(lanes), derive_checks, tuple(capture))
 
 
 def _selected_job(cursor: Cursor, source: str, path: str,

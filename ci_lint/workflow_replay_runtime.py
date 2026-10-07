@@ -20,6 +20,7 @@ from ci_lint.workflow_replay_outputs import ReplayOutput, unique_json_object, re
 from ci_lint.workflow_replay_expansion import ExpandedJob, OutputProver
 from ci_lint.workflow_scan import load_workflows
 from ci_lint.workflow_replay_config import ReplayConfig
+from ci_lint.workflow_replay_capture import request_arguments, require_captured_outputs
 from ci_lint.workflow_replay_plan import build_plan, declared_check
 from ci_lint.full_run_receipt import FullRunEvidence, ReceiptPass
 
@@ -102,7 +103,8 @@ def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig,
         config = bind_execution_pins(repo, config)
         files = tuple(load_workflows(repo)) if config.qualified else ()
         plan = build_plan(repo, config, lane=lane, defer_outputs=True, files=files)
-        if plan.deferred_outputs and config.execution_pins is not None:
+        argv = request_arguments(argv, plan.capture_requests)
+        if (plan.deferred_outputs or plan.capture_requests) and config.execution_pins is not None:
             require_output_producer(config.execution_pins.act_version)
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         return CheckedCommand(1, f"workflow replay proof rejected before execution: {exc}")
@@ -125,7 +127,8 @@ def run_checked_command(repo: Path, argv: tuple[str, ...], config: ReplayConfig,
                 plan = build_plan(repo, config, lane=lane, files=files,
                                   prove_outputs=_receipt_prover(raw, config, expectation))
                 expectation = replace(expectation, required_jobs=plan.required)
-            prove_replay(raw, expectation)
+            proof = prove_replay(raw, expectation)
+            require_captured_outputs(plan.required, proof.outputs, plan.capture_requests)
             bind_execution_pins(repo, config)
         except (OSError, UnicodeError, ValueError, subprocess.TimeoutExpired) as exc:
             return CheckedCommand(1, f"workflow replay proof rejected: {exc}")

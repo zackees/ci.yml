@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ci_lint.workflow_replay import ReplayInput, ReplayJob
 from ci_lint.workflow_replay_checks import derive_checks
+from ci_lint.workflow_replay_capture import capture_requests
 from ci_lint.workflow_replay_conditions import condition_output_references
 from ci_lint.workflow_replay_dependencies import _needs
 from ci_lint.workflow_replay_config import DeclaredReplayJob, ReplayConfig, ReplaySelection
@@ -24,12 +25,14 @@ class ReplayPlan:
     required: tuple[ReplayJob, ...]
     lanes: tuple[str, ...] = ()
     deferred_outputs: bool = False
+    capture_requests: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class ReplayRequirements:
     jobs: tuple[ReplayJob, ...]
     pending: bool = False
+    capture_requests: tuple[str, ...] = ()
 
 
 def _declared(config: ReplayConfig, lane: str | None) -> tuple[DeclaredReplayJob, ...]:
@@ -70,6 +73,7 @@ def _required(files: tuple[ParsedYamlFile, ...], config: ReplayConfig,
     if len(declarations) != len(jobs):
         raise ValueError("qualified replay has duplicate source-job declarations")
     pending_guards = False
+    requested: set[str] = set()
 
     def preflight(expanded: ExpandedJob) -> tuple[ReplayOutput, ...]:
         nonlocal pending_guards
@@ -77,6 +81,7 @@ def _required(files: tuple[ParsedYamlFile, ...], config: ReplayConfig,
         if declared is None:
             raise ValueError("qualified replay producer has no source declaration")
         declared_check(declared, expanded, mode=config.mode, event=selection.event)
+        requested.update(capture_requests(declared, expanded))
         pending_guards = pending_guards or (declared.derive_checks and _pending_guards(expanded))
         return ()
 
@@ -85,7 +90,7 @@ def _required(files: tuple[ParsedYamlFile, ...], config: ReplayConfig,
                                 prove_outputs=prove_outputs or (preflight if defer_outputs else None),
                                 event=selection.event)
     if expanded.pending and defer_outputs:
-        return ReplayRequirements((), pending=True)
+        return ReplayRequirements((), pending=True, capture_requests=tuple(sorted(requested)))
     if expanded.problem:
         raise ValueError(expanded.problem)
     if set(declarations) != {job.source_job for job in expanded.jobs}:
@@ -94,7 +99,8 @@ def _required(files: tuple[ParsedYamlFile, ...], config: ReplayConfig,
                    for job in expanded.jobs)
     if all(proof.excluded or proof.remote_maintenance for proof in proofs):
         raise ValueError("qualified replay selection has no required executed job")
-    return ReplayRequirements(proofs, pending=pending_guards)
+    requested.update(request for job in expanded.jobs for request in capture_requests(declarations[job.source_job], job))
+    return ReplayRequirements(proofs, pending=pending_guards, capture_requests=tuple(sorted(requested)))
 
 
 def _full(config: ReplayConfig, files: tuple[ParsedYamlFile, ...], *,
@@ -111,16 +117,18 @@ def _full(config: ReplayConfig, files: tuple[ParsedYamlFile, ...], *,
         raise ValueError("full replay selections must account for every declared proof lane exactly once")
     required: dict[tuple[JobIdentity, ...], ReplayJob] = {}
     pending = False
+    requested: set[str] = set()
     for selection in config.selections:
         requirements = _required(files, config, selection, _declared(config, selection.lane),
                                  defer_outputs=defer_outputs, prove_outputs=prove_outputs)
         pending = pending or requirements.pending
+        requested.update(requirements.capture_requests)
         for job in requirements.jobs:
             previous = required.get(job.identity)
             if previous is not None and previous != job:
                 raise ValueError("shared replay execution has inconsistent check declarations")
             required[job.identity] = job
-    return ReplayPlan(workflow, None, first.event, first.inputs, tuple(required.values()), lanes, pending)
+    return ReplayPlan(workflow, None, first.event, first.inputs, tuple(required.values()), lanes, pending, tuple(sorted(requested)))
 
 
 def build_plan(repo: Path, config: ReplayConfig, *, lane: str | None = None,
@@ -137,4 +145,4 @@ def build_plan(repo: Path, config: ReplayConfig, *, lane: str | None = None,
     selection = next((item for item in config.selections if item.lane == lane), fallback)
     requirements = _required(files, config, selection, jobs, defer_outputs=defer_outputs, prove_outputs=prove_outputs)
     return ReplayPlan(selection.workflow or config.workflow, selection.selected_job, selection.event, selection.inputs,
-                      requirements.jobs, deferred_outputs=requirements.pending)
+                      requirements.jobs, deferred_outputs=requirements.pending, capture_requests=requirements.capture_requests)
