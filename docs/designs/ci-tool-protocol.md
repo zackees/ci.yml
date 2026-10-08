@@ -63,6 +63,12 @@ statement records that stage, rather than overriding this current summary.
 - The backend's corrected full gate passed all six lanes on source `a6bc0686`
   in 1491.809 seconds (1479.672 owned outer CPU seconds). That qualifies its
   freshness and native-journal collector, not the failed archive-restore matrix.
+- Soldr's unpublished thin adapter now passes its existing real-compiler
+  relocation test with the recorded backend development overlay. The retained
+  native events show a cold miss and restored hit with an identical compiler
+  context key; the archive carries a portable index rather than a broker route.
+  Same-root/base-plus-delta imports, fresh private-engine qualification and
+  released dependency adoption remain unfinished; details are below.
 - Compiler-object durability, cache failure/cancellation controls, aggregate
   CPU admission across independent state roots, and final binding policy
   promotion remain incomplete. Successful attestation is not compiler warmth.
@@ -1683,3 +1689,63 @@ failure log still present in the checkout is historical evidence, not an a6
 failure. Current Python evidence is the successful full gate's lane verdict
 and subprocess exit. Backend publication remains held until actual
 fresh-engine object reuse satisfies the pilot contract.
+
+### Thin adapter: focused compiler relocation proof
+
+[Soldr #3604's retained runtime proof](https://github.com/zackees/soldr/issues/3604#issuecomment-6049564539)
+records the existing ignored `save_ci_load_preserves_real_warm_rustc_hits`
+test passing on source `34a933568cb6c293b0fe510a51f4794da2e16bef` through
+Bosn's managed isolated task runner. The adapter selects the owned store,
+calls backend snapshot export/import, and uses the existing full/delta archive
+writers to project immutable contents under `zccache/compiler-snapshot-v1`.
+The backend still owns index decoding, staged payloads and writer exclusion.
+Broker routing remains an execution identity.
+
+The archive's sole compiler index is now
+`zccache/compiler-snapshot-v1/index.bin`. Export and import each reported two
+entries and five outputs. Save checkpointed and gracefully quiesced its exact
+acknowledged daemon generation. The archive was 228045 bytes; load restored
+20 cache files and applied four source mtimes. Actual selected cold and warm
+private stores have different broker routes. Their native library events have
+identical context key
+`56bd7a31dc32e4078a8cf6672bb428ed4111775859fb5adb8dfcac93080dfc19`:
+one cold `context_not_found` miss and one restored hit. The test forced the
+warm compiler invocation by retaining cold Cargo outputs outside its target
+path; it did not substitute Cargo fingerprint reuse for a compiler hit.
+
+The retained task completed in 13.832150 seconds with 13.962682 CPU seconds
+in the owned four-CPU outer cgroup. Nextest reported one passed test and 89
+unselected skips; test execution including both builds, daemon operations and
+transport took 4.23 seconds. Native per-invocation latencies were 57.690 ms
+cold and 26.821 ms warm. These are scoped observations, not workflow speedup
+promises or a global CPU cap. Nextest's captured success output retains the
+paired journals and save/load receipts without changing test selection.
+
+Review also caught two draft hazards. Actual regressions at `cfa3e08d`
+failed when the outer Cook profile pruned extensionless snapshot outputs,
+and when migration deltas emitted private-store tombstones from a legacy
+base. The fixes preserve the complete opaque producer snapshot and protect
+excluded private files and symlinks from deletion instructions. All four
+projection tests passed at `72930e72`; the existing primary review confirmed
+both fixes.
+
+This is a development composition, not released-tool qualification: Soldr
+uses backend `9cdcc63876818c9140c68e7f49e1169a8ca03d13` through recorded
+workspace/configuration overlays, with kernal-api 0.1.26 and running-process
+4.10.16 aligned in those overlays. Its production manifests remain unchanged.
+Two initial attempts stopped before compilation on workspace inheritance and
+dependency-pin conflicts; neither is a compiler replay failure or baseline.
+The source archives and every overlay are hashed in the retained result.
+
+Backend import still refuses existing destination stores. Repeated same-root
+and base-plus-delta restores therefore need backend-owned generation handling
+with writer exclusion and preservation before publication. This test also
+uses one managed task; it does not prove the required two fresh private CI
+engines. The original full source gate, canonical eight-cell matrix, released
+dependency adoption, interruption/cancellation controls, and aggregate CPU
+admission remain open. No acceptance checkbox or binding rule is promoted.
+
+Machine-local provenance prefix:
+`/tmp/ci-cpu-investigation/soldr-362-cache-snapshot-acceptance-34a93356-copied-source-retained-success-proof`
+(`.log`, `-result.json`, `-native-events.json`, `-compiler-proof.json`). These
+are retained on the investigating machine, not downloadable GitHub artifacts.
