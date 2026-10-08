@@ -1737,9 +1737,9 @@ Two initial attempts stopped before compilation on workspace inheritance and
 dependency-pin conflicts; neither is a compiler replay failure or baseline.
 The source archives and every overlay are hashed in the retained result.
 
-Backend import still refuses existing destination stores. Repeated same-root
-and base-plus-delta restores therefore need backend-owned generation handling
-with writer exclusion and preservation before publication. This test also
+At this first relocation-proof revision, backend import still refused existing
+destination stores. The populated-store follow-up below resolves that blocker
+in the unpublished backend draft. This first test also
 uses one managed task; it does not prove the required two fresh private CI
 engines. The original full source gate, canonical eight-cell matrix, released
 dependency adoption, interruption/cancellation controls, and aggregate CPU
@@ -1749,3 +1749,55 @@ Machine-local provenance prefix:
 `/tmp/ci-cpu-investigation/soldr-362-cache-snapshot-acceptance-34a93356-copied-source-retained-success-proof`
 (`.log`, `-result.json`, `-native-events.json`, `-compiler-proof.json`). These
 are retained on the investigating machine, not downloadable GitHub artifacts.
+
+### Populated-store import: preservation and real repeated-restore proof
+
+The transport contract accepts a new or populated **quiesced** private store.
+Repeated hydration must preserve locally retained objects and contexts while
+adding incoming objects; it must not discard newer state because an archive is
+an exact hit. The backend owns this operation. Immutable export destinations
+remain separate from mutable import destinations, and cache receipts remain
+separate from test-pass attestations.
+
+[The follow-up evidence](https://github.com/zackees/ci.yml/issues/362#issuecomment-6049930863)
+records backend code `af875412e93a28558880db896a73214b448f4999` passing its
+managed checks: 133 artifact tests, two context-merge tests, six writer-lock
+tests, one CLI snapshot test, and both declared clippy checks. Documentation is
+committed at `7255d8b2` with no subsequent Rust changes. The backend's
+`docs/architecture/artifact-store.md` owns detailed publication semantics:
+validate incoming data first, retain the existing root writer lease, publish
+complete missing generations, atomically replace the union graph, and commit
+the union index last. Existing duplicate rows and contexts win. Interruption
+can leave unindexed additions; retry validates and reuses published read-only
+generations. This is not one atomic swap of the whole store.
+
+Actual negative controls preceded their fixes: interrupted read-only retry
+failed with `Permission denied`; an imported conflicting scan authorized a hit
+when marked Stale; and an unresolved destination parent component escaped the
+overlap check. Final controls prove retry, Cold verdicts across ordinary,
+diagnostic and fast paths, and refusal before creating directories inside the
+immutable source. Existing source snapshots are not rewritten.
+
+The **same Soldr test source** `b041547e975f4ab7925a8f8485e79e56a292704b`
+failed with backend `9cdcc638` on its second load (`snapshot already exists`),
+then passed with the explicit `af875412` development overlay. Native evidence
+records a cold `context_not_found` miss and a warm hit with the identical
+compiler context `5f59e0630ddd84ae8ec66fee0eb0332cfd9ee32db279a0eb815dfe7944149cf5`;
+a second load into the populated warm root succeeds. Export/import carry two
+entries and five outputs. Nextest reports one passed test and 89 unselected
+tests; the fixture took 6.34 seconds, outer task 77.488 seconds, and owned
+four-CPU outer cgroup 101.842 CPU seconds. This is still **one managed task**,
+not two fresh private CI engines or a workflow speedup measurement. Production
+pins and releases remain unchanged.
+
+Full backend qualification is a separate gate, running at `7255d8b2` when this
+evidence was recorded. Fresh-private-engine recovery, the unchanged canonical
+performance matrix, release/adoption, wider outage/cancellation controls,
+aggregate CPU admission across independent state roots, and binding policy
+updates remain open. No acceptance checkbox is promoted by this focused proof.
+
+Local provenance prefixes are
+`/tmp/ci-cpu-investigation/zccache-362-existing-store-final-green` and
+`/tmp/ci-cpu-investigation/soldr-362-cache-snapshot-acceptance-b041547e-copied-source-repeated-load-green`
+(logs, source/result hashes, and native/structured compiler proof). They are
+investigating-machine provenance, not publicly downloadable artifacts.
