@@ -22,7 +22,9 @@ Static (`ci-lint remote-only`, and folded into `precheck`/`local-gate lint`):
 - A workflow/composite-action step or a `ci/` script waits on or polls for a
   GitHub App check (a wait-on-check action naming one, or a `run:`/script
   that polls statuses or check runs and names one): a violation. Naming one
-  without a polling signal is `needs_review`. A same-line
+  without a polling signal is `needs_review`. A run/script line names a
+  check only when it also speaks of checks, statuses, contexts, waiting or
+  polling; a bare mention (log group, cache path, comment) does not. A same-line
   `# ci-lint: allow GATE-012 <reason>` excuses one line.
 
 Live (`ci-lint audit`, reusing the branch-protection and rulesets payloads
@@ -321,11 +323,30 @@ def check_pr_workflows(repo_root: Path) -> list[Finding]:
 # ── waiting on an app check ────────────────────────────────────────────────
 
 
+# A line names an app *check* only when it also speaks of checks or
+# statuses (or polls). A bare mention -- a log group, a tool-cache path to
+# clean, a comment -- is not a check name (obs-rust/obs-studio#13).
+_CHECK_CONTEXT = re.compile(
+    r"(?<![a-z])(checks?|check[-_ ]?(runs?|suites?|names?)|status(es)?|statusCheckRollup|contexts?|required"
+    r"|conclusion)(?![a-z])|(?<![a-z])(wait|poll)",
+    re.IGNORECASE,
+)
+
+
+def _names_check(line: str) -> str | None:
+    stripped = line.lstrip()
+    if stripped.startswith(("#", "//")):
+        return None
+    if _CHECK_CONTEXT.search(line) is None and _POLLING.search(line) is None:
+        return None
+    return _app_check(line, WAIT_CHECK_NAMES)
+
+
 def _text_findings(text: str, path: str, where: str, raw_lines: list[str]) -> list[Finding]:
     polls = _POLLING.search(text) is not None
     findings: list[Finding] = []
     for lineno, line in enumerate(text.splitlines(), 1):
-        name = _app_check(line, WAIT_CHECK_NAMES)
+        name = _names_check(line)
         if name is None or allowed(with_yaml_comment(line, raw_lines), RULE):
             continue
         status = Status.VIOLATION if polls else Status.NEEDS_REVIEW
