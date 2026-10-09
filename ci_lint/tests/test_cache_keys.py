@@ -28,6 +28,19 @@ class BuildFamilyKeyTest(unittest.TestCase):
         self.assertEqual(expected_hash, fk.components[2])
         self.assertEqual(f"uv-v1-linux-x64-3.11-{expected_hash}", fk.key)
 
+    def test_ccache_family_key_is_family_owned_with_components(self) -> None:
+        # zackees/ci.yml#393: ccache/zccache write no keys of their own, so
+        # ci-lint builds `<family>-v1-<components>` exactly as for via=ci-lint.
+        from ci_lint.cache.families import resolve_prefix
+        from ci_lint.schema import load_ci_toml
+        from ci_lint.tests.helpers import FIXTURES
+        ci, findings = load_ci_toml(FIXTURES / "CACHE-004" / "green-cpp")
+        assert ci is not None, findings
+        self.assertEqual("zccache-v1-", resolve_prefix("zccache", "zccache"))
+        fk = build_family_key(ci, "ccache", platform_id="linux-x64", repo_root=FIXTURES / "CACHE-004" / "green-cpp")
+        self.assertTrue(fk.key.startswith("ccache-v1-"), fk.key)
+        self.assertEqual(1, len(fk.components))
+
     def test_key_is_deterministic(self) -> None:
         a = build_family_key(self.ci, "uv", platform_id="linux-x64", repo_root=REPO)
         b = build_family_key(self.ci, "uv", platform_id="linux-x64", repo_root=REPO)

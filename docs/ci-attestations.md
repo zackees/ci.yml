@@ -29,7 +29,7 @@ jobs:
     - rust/x86_64-unknown-linux-gnu/test
 ```
 
-- **Gate path:** `<ecosystem>/<platform>/<check>`. The ecosystem is `rust`, `python` or `general`. For Rust, the platform is a target triple or `all`.
+- **Gate path:** `<ecosystem>/<platform>/<check>`. The ecosystem is `rust`, `python`, `cpp` or `general`. For Rust, the platform is a target triple or `all`. For C/C++ (`cpp`, #393, [policy-cpp.md](policy-cpp.md)), it is `all`, `<os>-<arch>` (e.g. `linux-x64`) or a target triple.
 - **`lane`:** the local-gate lane (GATE-007) whose pass proves the gate.
 - **`fidelity`** (GATE-011): `native` (default), `vm` (the real OS in a local VM) or `emulation` (Wine, Darling). Only `native`/`vm` lanes may prove a `test` check; an emulation lane attests a scoped check such as `unit`.
 - **`jobs`:** maps a remote job (`<workflow>:<job id>`) to the gates it runs. A job can be skipped only when every one of its gates is attested.

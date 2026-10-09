@@ -1,7 +1,8 @@
 """CACHE-007 (round M2-20, zackees/ci.yml#44 part A): classify a cache
 payload's declared/actual paths against `[cache].never`'s forbidden content
 classes -- linked test binaries, nextest archives, `incremental/`, and a
-whole `target/` directory (zackees/zccache#1525, soldr#2931-#2938).
+whole `target/` directory (zackees/zccache#1525, soldr#2931-#2938), and a
+CMake build tree (zackees/ci.yml#393).
 
 `ci.toml` schema 3 already accepts `[cache].never` as a *declaration*
 (policy-general.md's Cache policy); this module is the first place that
@@ -37,7 +38,27 @@ _NEVER_CLASS_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "whole target/ directory",
         re.compile(r"(?:^|/)target/?$"),
     ),
+    # zackees/ci.yml#393 (docs/policy-cpp.md): a CMake build tree is per-run
+    # output keyed on absolute paths and configure state; the compiler's
+    # object cache (ccache/zccache) is the reusable part. A whole build
+    # directory (`build/`, `build-<x>/`, `build_<x>/`, `cmake-build-<x>/`,
+    # `out/build/<preset>/`), or any path inside CMake's own `CMakeFiles/` or
+    # `CMakeCache.txt`, is the build tree.
+    (
+        "CMake build tree",
+        re.compile(
+            r"(?:^|/)(?:_?build|build[-_][A-Za-z0-9._-]+|cmake-build-[A-Za-z0-9._-]+|out/build(?:/[^/]+)?)/?$"
+            r"|(?:^|/)CMakeFiles(?:/|$)|(?:^|/)CMakeCache\.txt$"
+        ),
+    ),
 )
+
+
+def is_cmake_build_tree(path: str) -> bool:
+    """True when `path` is (or is inside the metadata of) a CMake build tree."""
+
+    pattern = dict(_NEVER_CLASS_PATTERNS)["CMake build tree"]
+    return pattern.search(path.strip().replace("\\", "/")) is not None
 
 
 @dataclass(frozen=True)

@@ -34,9 +34,10 @@ def _findings_for_paths(paths: list[str], *, location: str) -> list[Finding]:
                 rule="CACHE-007",
                 path=location,
                 message=f"cached path '{violation.path}' {violation.render().split(': ', 1)[1]}",
-                fix="remove the forbidden path from the cache payload; linked test binaries, "
-                "nextest archives, incremental/ output, and a whole target/ directory are "
-                "per-run outputs -- publish them as a short-retention artifact instead, never a "
+                fix="remove the forbidden path from the cache payload (cache the ccache/zccache object store, "
+                "not the build tree); linked test binaries, "
+                "nextest archives, incremental/ output, a whole target/ directory and a CMake "
+                "build tree (build/, CMakeFiles/, CMakeCache.txt) are per-run outputs -- publish them as a short-retention artifact instead, never a "
                 "cross-run cache ([cache].never; zackees/zccache#1525, soldr#2931-#2938)",
             )
         )

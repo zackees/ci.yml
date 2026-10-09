@@ -107,6 +107,36 @@ class CacheStaticFixtureTest(unittest.TestCase):
         ci, _ = load_ci_toml(repo)
         self.assertNotIn("CACHE-010", [f.rule for f in check_cache_010(ci, repo)])
 
+    @requires_yaml_tooling
+    def test_cache_010_ccache_disable_only_contradicts_a_ccache_family(self) -> None:
+        """zackees/ci.yml#393: CCACHE_DISABLE=1 beside a declared `via =
+        "ccache"` family is CACHE-010; beside setup-soldr families only, it
+        contradicts nothing ci.toml declares."""
+
+        repo = fixture("CACHE-010", "red-ccache")
+        ci, findings = load_ci_toml(repo)
+        assert ci is not None, findings
+        self.assertEqual(["CACHE-010"], [f.rule for f in check_cache_010(ci, repo)])
+
+        repo = fixture("CACHE-010", "green-ccache")
+        ci, _ = load_ci_toml(repo)
+        self.assertEqual([], check_cache_010(ci, repo))
+
+    def test_cache_004_budgets_ccache_and_zccache_families(self) -> None:
+        # zackees/ci.yml#393: C/C++ object-cache families count toward the
+        # declared budget like any other family.
+        ci, findings = load_ci_toml(fixture("CACHE-004", "green-cpp"))
+        assert ci is not None, findings
+        self.assertEqual([], [f for f in findings if f.rule == "CT-002"])
+        found, arithmetic = check_cache_004(ci)
+        self.assertNotIn("CACHE-004", [f.rule for f in found], msg=arithmetic)
+        self.assertIn("ccache", arithmetic)
+
+        ci, _ = load_ci_toml(fixture("CACHE-004", "red-cpp"))
+        assert ci is not None
+        found, arithmetic = check_cache_004(ci)
+        self.assertIn("CACHE-004", [f.rule for f in found], msg=arithmetic)
+
     def test_cache_004_budget_exceeded_without_pre_prune(self) -> None:
         ci, _ = load_ci_toml(fixture("CACHE-004", "red"))
         findings, arithmetic = check_cache_004(ci)

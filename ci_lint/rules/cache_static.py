@@ -62,8 +62,11 @@ CACHE_ACTION_SLUGS_PREFIX = "actions/cache"
 # setup-soldr as a machine-readable manifest") -- not yet true, so this
 # starts as ci-lint's own reserved list, extend it as more are found.
 KILL_SWITCH_ENV_VARS: frozenset[str] = frozenset(
-    {"ZCCACHE_DISABLE", "SOLDR_NO_CACHE", "SOLDR_CACHE_DISABLE", "SOLDR_DYLINT_NO_CACHE"}
+    {"ZCCACHE_DISABLE", "SOLDR_NO_CACHE", "SOLDR_CACHE_DISABLE", "SOLDR_DYLINT_NO_CACHE", "CCACHE_DISABLE"}
 )
+# `CCACHE_DISABLE` (zackees/ci.yml#393) only contradicts a declared `via =
+# "ccache"` family; every other switch contradicts a setup-soldr/zccache one.
+_CCACHE_SWITCHES: frozenset[str] = frozenset({"CCACHE_DISABLE"})
 _TRUTHY_STRINGS: frozenset[str] = frozenset({"1", "true", "yes", "on"})
 
 
@@ -443,22 +446,23 @@ def check_cache_010(ci: CiToml, repo_root: Path) -> list[Finding]:
     contradiction on its own (see KILL_SWITCH_ENV_VARS above for the
     zackees/clud evidence this codifies)."""
 
-    declared_active = any(
-        fam.via.startswith("setup-soldr:") or fam.via.startswith("zccache") for fam in ci.cache.family.values()
-    )
-    if not declared_active:
+    vias = [fam.via for fam in ci.cache.family.values()]
+    soldr_active = any(v.startswith("setup-soldr:") or v.startswith("zccache") for v in vias)
+    ccache_active = "ccache" in vias
+    if not (soldr_active or ccache_active):
         return []
 
     findings: list[Finding] = []
     for path, _is_composite, doc in _loaded_files(repo_root):
         for name, value, loc in _iter_env_entries(doc):
-            if name in KILL_SWITCH_ENV_VARS and _is_truthy(value):
+            applies = ccache_active if name in _CCACHE_SWITCHES else soldr_active
+            if name in KILL_SWITCH_ENV_VARS and applies and _is_truthy(value):
                 findings.append(
                     Finding(
                         rule="CACHE-010",
                         path=path,
                         message=f"{loc}.{name} = {value!r} disables a cache layer while ci.toml declares "
-                        "a [cache.family] via a matching setup-soldr/zccache backend",
+                        "a [cache.family] via a matching setup-soldr/zccache/ccache backend",
                         fix=f"remove '{name}' (or set it falsy) at {loc} in {path} so the declared layer "
                         "is actually written; if it is intentionally disabled here, retire the matching "
                         "[cache.family] entry instead of leaving ci.toml claim it active",

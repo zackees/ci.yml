@@ -425,6 +425,60 @@ class KeyTest(LanedRepo):
             rs = lane(tools)
             self.assertNotEqual(lane_key(before, rs, **base).key, lane_key(after, rs, **base).key)
 
+    def test_cpp_pins_are_lane_inputs_for_cpp_tools(self) -> None:
+        # zackees/ci.yml#393: a CMake lane cannot exclude its configure inputs
+        # (presets, CMakeLists.txt, cmake/**, *.cmake, dependency manifests,
+        # submodules, format/tidy configs); a Python-only lane is not
+        # invalidated by them.
+        cfg = self.config()
+        tools = ("uv", "cmake", "cc", "c++")
+        base = dict(gate_run=cfg.run, gate_source=cfg.source,
+                    versions=ToolVersions([ToolVersion(t, "1") for t in tools]))
+        pins = {
+            "CMakePresets.json": "{}\n", "CMakeLists.txt": "project(x)\n", "cmake/common/helpers.cmake": "# a\n",
+            "src/toolchain/arm.cmake": "# t\n", "deps/buildspec.json": "{}\n", "vcpkg.json": "{}\n",
+            "conanfile.txt": "[requires]\n", ".gitmodules": "", ".clang-format": "BasedOnStyle: LLVM\n",
+            ".clang-tidy": "Checks: '-*'\n",
+        }
+        for rel, text in pins.items():
+            self.write(rel, text)
+        self.commit("pins")
+        exclude = (*pins, "cmake/**", "**/*.cmake", "deps/**")
+
+        def lane(lane_tools: tuple[str, ...]) -> LaneConfig:
+            return LaneConfig("x", cfg.run, exclude=exclude, tools=lane_tools)
+
+        for rel in pins:
+            before = tree_entries(self.repo, "HEAD")
+            self.write(rel, (self.repo / rel).read_text(encoding="utf-8") + "# changed\n")
+            self.commit(f"edit {rel}")
+            after = tree_entries(self.repo, "HEAD")
+            cpp = lane(("cmake",))
+            self.assertNotEqual(lane_key(before, cpp, **base).key, lane_key(after, cpp, **base).key, rel)
+            py = lane(("uv",))
+            self.assertEqual(lane_key(before, py, **base).key, lane_key(after, py, **base).key, rel)
+
+    def test_cpp_lane_key_covers_the_compiler_identity(self) -> None:
+        # #393: a CMake lane resolves `cc`/`c++` without declaring them; a
+        # compiler upgrade must invalidate it. Non-C/C++ lanes do not probe it.
+        cfg = self.config()
+        entries = tree_entries(self.repo, "HEAD")
+        base = dict(gate_run=cfg.run, gate_source=cfg.source)
+
+        def versions(cc: str) -> ToolVersions:
+            return ToolVersions([ToolVersion("cmake", "cmake 3.31"), ToolVersion("ninja", "1.12"),
+                                 ToolVersion("cc", cc), ToolVersion("c++", cc), ToolVersion("uv", "1")])
+
+        cpp = LaneConfig("x", cfg.run, tools=("cmake", "ninja"))
+        k14, k15 = (lane_key(entries, cpp, versions=versions(v), **base) for v in ("gcc 14", "gcc 15"))
+        self.assertNotEqual(k14.key, k15.key)
+        self.assertEqual([t.tool for t in k14.tools], ["c++", "cc", "cmake", "ninja"])
+        py = LaneConfig("x", cfg.run, tools=("uv",))
+        self.assertEqual(lane_key(entries, py, versions=versions("gcc 14"), **base).key,
+                         lane_key(entries, py, versions=versions("gcc 15"), **base).key)
+        fmt = LaneConfig("x", cfg.run, tools=("clang-format",))
+        self.assertEqual(["clang-format"], [t.tool for t in lane_key(entries, fmt, versions=versions("gcc 14"), **base).tools])
+
     def test_expired_entry_is_ignored(self) -> None:
         lane = LaneConfig("lint", ("x",), max_age_hours=1.0)
         record(self.repo, lane, "k" * 64, secs=3, head="h", tree="t")

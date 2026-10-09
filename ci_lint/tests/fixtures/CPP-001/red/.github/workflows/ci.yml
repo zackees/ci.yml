@@ -1,0 +1,18 @@
+name: ci
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: ctest --test-dir build --output-on-failure
+      - run: ctest --test-dir build -j1
+      - run: ctest --test-dir build --parallel 1
+      - run: ctest --preset serial
+  serial-env:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CTEST_PARALLEL_LEVEL: "1"
+    steps:
+      - run: ctest --test-dir build

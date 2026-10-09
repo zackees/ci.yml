@@ -1,0 +1,10 @@
+name: ci
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: python3 ci/test.py
+      - run: ctest --preset missing -j0
+      - run: ctest --preset nowhere

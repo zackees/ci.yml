@@ -1,0 +1,22 @@
+name: ci
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - run: ctest --test-dir build -j --output-on-failure
+      - run: ctest --test-dir build --parallel 8
+      - run: ctest --test-dir build -j8
+      - run: CTEST_PARALLEL_LEVEL=8 ctest --test-dir build
+      - run: ctest --test-dir build -N
+      - run: ctest --preset ci
+      - run: ctest --test-dir build  # ci-lint: allow CPP-001 tests share one X display
+  env-job:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CTEST_PARALLEL_LEVEL: "4"
+    steps:
+      - run: ctest --test-dir build
+      - run: python3 ci/test.py

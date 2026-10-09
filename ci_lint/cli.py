@@ -923,6 +923,7 @@ def _cmd_cache_save_ok(args: argparse.Namespace) -> int:
         lockfile_changed=args.lockfile_changed,
         tags=_parse_tags_arg(args.tags),
         rerun_saved=args.rerun_saved,
+        paths=tuple(args.path or ()),
     )
     try:
         result = evaluate_save_ok(ci, req)
@@ -1390,6 +1391,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_cache_save_ok.add_argument("--lockfile-changed", action="store_true")
     p_cache_save_ok.add_argument("--tags", default=None)
     p_cache_save_ok.add_argument("--rerun-saved", action="store_true")
+    p_cache_save_ok.add_argument(
+        "--path", action="append", default=None,
+        help="a path the save would archive (repeatable); rule 11 refuses a CMake build tree",
+    )
     p_cache_save_ok.add_argument("--json", action="store_true")
     p_cache_save_ok.set_defaults(func=_cmd_cache_save_ok)
 

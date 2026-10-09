@@ -1,5 +1,6 @@
 """`ci-lint cache save-ok <family>`: issue #6 §6's "when we do NOT save"
-table, rule ID CACHE-008, evaluated in order 1-10 (round-4A brief,
+table, rule ID CACHE-008, evaluated in order 1-11 (11: a CMake build tree,
+zackees/ci.yml#393) (round-4A brief,
 deliverable 3). Prints the first rule that blocks the save, or "save:
 yes"; a skipped save is always explainable by its rule number.
 """
@@ -8,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ci_lint.cache.payload_classify import is_cmake_build_tree
 from ci_lint.rules.cache_static import parse_size
 from ci_lint.schema import CiToml
 
@@ -37,6 +39,9 @@ class SaveOkRequest:
     lockfile_changed: bool = False
     tags: tuple[str, ...] = ()
     rerun_saved: bool = False
+    # The paths the save would archive (`--path`, repeatable). Only rule 11
+    # reads them; empty means "not supplied", never "an empty payload".
+    paths: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -156,4 +161,16 @@ def evaluate_save_ok(ci: CiToml, req: SaveOkRequest) -> SaveOkResult:  # noqa: C
     if req.rerun_saved:
         return SaveOkResult(False, 10, "this exact key was already saved by a previous attempt this run")
 
-    return SaveOkResult(True, None, "no rule 1-10 applies")
+    # Rule 11 (zackees/ci.yml#393, docs/policy-cpp.md): the payload is a CMake build tree.
+    # The compiler's object cache (a ccache/zccache directory) is the reusable layer; the build
+    # tree is per-run configure/link output bound to absolute paths -- never a cross-run cache.
+    tree = [p for p in req.paths if is_cmake_build_tree(p)]
+    if tree:
+        return SaveOkResult(
+            False,
+            11,
+            f"the payload includes a CMake build tree ({', '.join(tree)}); save the ccache/zccache "
+            "object store instead",
+        )
+
+    return SaveOkResult(True, None, "no rule 1-11 applies")
