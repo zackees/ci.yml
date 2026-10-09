@@ -359,6 +359,26 @@ class StaticTest(TrustCase):
         self.assertTrue(any(f"GATE-008:{Status.VIOLATION.value}:ci.yml has no push trigger" in f for f in self.findings()),
                         self.findings())
 
+    def _reusable_called_from(self, caller_on: str) -> None:
+        """ci.yml becomes `on: workflow_call` only, invoked by a caller
+        workflow (obs-rust/obs-studio#13 item 4: build-project.yaml)."""
+        wf = self.repo / ".github/workflows/ci.yml"
+        wf.write_text(wf.read_text(encoding="utf-8").replace(
+            "on:\n  push:\n    branches: [main]\n  pull_request:\n", "on:\n  workflow_call:\n"), encoding="utf-8")
+        (self.repo / ".github/workflows/caller.yml").write_text(
+            f"name: Caller\non:\n{caller_on}jobs:\n  build:\n    uses: ./.github/workflows/ci.yml\n    secrets: inherit\n",
+            encoding="utf-8")
+
+    def test_reusable_workflow_inherits_push_trigger_from_its_caller(self) -> None:
+        self._reusable_called_from("  push:\n    branches: [main]\n")
+        found = self.findings()
+        self.assertFalse(any("no push trigger" in f for f in found), found)
+
+    def test_reusable_workflow_called_only_from_pull_requests_has_no_post_merge_catch(self) -> None:
+        self._reusable_called_from("  pull_request:\n")
+        found = self.findings()
+        self.assertTrue(any(f"GATE-008:{Status.VIOLATION.value}:ci.yml has no push trigger" in f for f in found), found)
+
     def _two_workflows(self, *, integration_verify: bool) -> None:
         verify = (
             "  verify-int:\n    runs-on: ubuntu-24.04\n    outputs:\n      skip_smoke: ${{ steps.v.outputs.skip_smoke }}\n"

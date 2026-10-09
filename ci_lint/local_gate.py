@@ -1324,8 +1324,33 @@ def _check_attestation_definition(config: GateConfig, repo_root: Path) -> list[F
     return findings
 
 
-def _check_trust(config: GateConfig, wfs: _Workflows) -> list[Finding]:
+def _push_triggered(wfs: _Workflows) -> frozenset[str]:
+    """Workflow files that run on a push: an `on: push` trigger, or an
+    `on: workflow_call` reusable workflow a push-triggered workflow calls
+    with `uses: ./.github/workflows/<file>` (it runs inside that push run,
+    so it inherits the post-merge catch; obs-rust/obs-studio#13)."""
     from ci_lint.workflow_scan import get_on_section, jobs_of  # noqa: PLC0415
+
+    triggered = {wf.name for wf in wfs.parsed if "push" in get_on_section(wf.doc)}
+    reusable = {wf.name for wf in wfs.parsed if "workflow_call" in get_on_section(wf.doc)}
+    callees: dict[str, frozenset[str]] = {}
+    for wf in wfs.parsed:
+        called: set[str] = set()
+        for job in jobs_of(wf.doc).values():
+            uses = job.get("uses")
+            if isinstance(uses, str) and uses.startswith("./.github/workflows/"):
+                called.add(uses.split("@", 1)[0].rsplit("/", 1)[-1])
+        callees[wf.name] = frozenset(called & reusable)
+    pending = list(triggered)
+    while pending:
+        for callee in callees.get(pending.pop(), frozenset()) - triggered:
+            triggered.add(callee)
+            pending.append(callee)
+    return frozenset(triggered)
+
+
+def _check_trust(config: GateConfig, wfs: _Workflows) -> list[Finding]:
+    from ci_lint.workflow_scan import jobs_of  # noqa: PLC0415
 
     if config.trust is None:
         return []
@@ -1341,7 +1366,7 @@ def _check_trust(config: GateConfig, wfs: _Workflows) -> list[Finding]:
             jobs.append(WorkflowJob(wf.name, job_id, cond if isinstance(cond, str) else None, runs_verify))
     facts = WorkflowFacts(
         jobs=tuple(jobs),
-        push_triggered=frozenset(wf.name for wf in wfs.parsed if "push" in get_on_section(wf.doc)),
+        push_triggered=_push_triggered(wfs),
     )
     return check_trust_static(
         config.trust,

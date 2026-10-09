@@ -171,8 +171,21 @@ class WaitTest(_Repo):
         findings = check_waits(self.tmp)
         self.assertEqual([(f.status, f.line) for f in findings], [(Status.VIOLATION, 3)])
 
-    def test_mention_without_polling_is_needs_review(self) -> None:
+    def test_mention_without_check_context_is_not_a_check_name(self) -> None:
         self.write("ci/notes.sh", "echo 'CodeRabbit is advisory only'\n")
+        self.assertEqual(check_waits(self.tmp), [])
+
+    def test_mentions_outside_a_check_context_are_not_check_names(self) -> None:
+        # obs-rust/obs-studio#13 item 5: Flatpak disk cleanup and a shell
+        # comment mention CodeQL but never name its check.
+        self.write(".github/workflows/build.yml", "on: [push]\njobs:\n  flatpak-build:\n    runs-on: ubuntu-24.04\n"
+                   "    steps:\n      - run: |\n          echo ::group::Remove CodeQL stuff\n"
+                   "          rm -rf /to_clean/codeql/*\n          echo ::endgroup::\n"
+                   "          # requirements of the codeql-action's upload job.\n          jq -s . *.sarif\n")
+        self.assertEqual(check_waits(self.tmp), [])
+
+    def test_check_name_without_polling_is_needs_review(self) -> None:
+        self.write("ci/notes.sh", "REQUIRED_CHECKS='CodeQL'\n")
         self.assertEqual(self.statuses(check_waits(self.tmp)), [Status.NEEDS_REVIEW])
 
     def test_clean_repo(self) -> None:
