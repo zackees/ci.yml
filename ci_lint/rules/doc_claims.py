@@ -1,5 +1,5 @@
 """GEN-010 (issue #5, renumbered from the clud-ci-cost.md case study's
-original `GEN-005` candidate -- see AGENTS.md item 6): a repository's own
+original `GEN-005` candidate -- see AGENTS.md item 7): a repository's own
 docs/instruction files assert CI enforcement that its settings or
 workflows don't actually have. Split across two check surfaces because
 only part of it is checkable offline:

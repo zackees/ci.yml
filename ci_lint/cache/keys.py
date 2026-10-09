@@ -21,7 +21,7 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from ci_lint.cache.families import CI_LINT_VIA, DELTA_KEY_VERSION, resolve_prefix
+from ci_lint.cache.families import DELTA_KEY_VERSION, is_ci_lint_keyed, resolve_prefix
 from ci_lint.schema import CiToml
 
 # Components a [cache.family.<id>].key entry may name besides a literal
@@ -91,7 +91,7 @@ def build_family_key(ci: CiToml, family_id: str, *, platform_id: str | None, rep
         raise CacheKeyError(
             f"[cache.family.{family_id}].via = {fam.via!r} is not a recognized via value"
         )
-    if fam.via != CI_LINT_VIA:
+    if not is_ci_lint_keyed(fam.via):
         return FamilyKey(family=family_id, prefix=prefix, components=())
     components = tuple(
         _resolve_component(c, ci=ci, platform_id=platform_id, repo_root=repo_root) for c in (fam.key or ())

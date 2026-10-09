@@ -180,7 +180,24 @@ DELTA_PREFIX = f"delta-{DELTA_KEY_VERSION}-pr"
 # setup-soldr:dylint to the schema's allowed via values"; amended same
 # round to add "setup-uv" (astral-sh/setup-uv's own built-in cache is a
 # real, declarable family -- not a permanent CACHE-001 finding).
-ALLOWED_VIA_VALUES: frozenset[str] = frozenset({CI_LINT_VIA, *EXTERNAL_SHAPES_BY_VIA})
+# C/C++ compiler object caches (zackees/ci.yml#393, docs/policy-cpp.md):
+# `ccache`'s and `zccache`'s own cache directories (CCACHE_DIR /
+# ZCCACHE_DIR), saved through the sanctioned actions/cache wrapper. Neither
+# tool writes GitHub cache keys itself, so the key is ci-lint's own
+# convention exactly like `via = "ci-lint"`: `<family>-v1-<components>`,
+# built by `ci-lint cache key`. Writer rules are the same as every base
+# layer (CACHE-008 rule 2: saved only on a `[cache].write-on` flow,
+# restored on PRs; CACHE-027 for a family no writer ever saves).
+TOOL_OWNED_VIA: frozenset[str] = frozenset({"ccache", "zccache"})
+
+ALLOWED_VIA_VALUES: frozenset[str] = frozenset({CI_LINT_VIA, *TOOL_OWNED_VIA, *EXTERNAL_SHAPES_BY_VIA})
+
+
+def is_ci_lint_keyed(via: str) -> bool:
+    """True when ci-lint builds the family's whole key (`ci-lint` or a
+    tool-owned object cache), so its declared `key` components apply."""
+
+    return via == CI_LINT_VIA or via in TOOL_OWNED_VIA
 
 
 def resolve_prefix(via: str, family_id: str) -> str | None:
@@ -189,7 +206,7 @@ def resolve_prefix(via: str, family_id: str) -> str | None:
     should already have rejected it as CT-002; this function just must
     never fabricate a prefix for something it doesn't know."""
 
-    if via == CI_LINT_VIA:
+    if is_ci_lint_keyed(via):
         return f"{family_id}-{CI_LINT_KEY_VERSION}-"
     shape = EXTERNAL_SHAPES_BY_VIA.get(via)
     return shape.prefix if shape is not None else None

@@ -85,6 +85,21 @@ class DefinitionTest(unittest.TestCase):
         self.assertIsNotNone(validate_gate_path("go/all/vet"))
         self.assertIsNotNone(validate_gate_path("rust/all"))
 
+    def test_cpp_ecosystem_gate_paths(self) -> None:
+        # zackees/ci.yml#393: C/C++ (CMake) gates are cpp/<platform>/<check>.
+        self.assertIsNone(validate_gate_path("cpp/linux-x64/ctest"))
+        self.assertIsNone(validate_gate_path("cpp/all/clang-format"))
+        self.assertIsNone(validate_gate_path("cpp/windows-arm64/build"))
+        self.assertIsNone(validate_gate_path("cpp/x86_64-unknown-linux-gnu/tier2"))
+        self.assertIsNotNone(validate_gate_path("cpp/linux/ctest"))  # no arch
+        self.assertIsNotNone(validate_gate_path("cpp/solaris-x64/ctest"))
+        self.assertIsNotNone(validate_gate_path("c++/linux-x64/ctest"))
+        text = "version: 1\ngates:\n  cpp/linux-x64/tier2: {lane: tier2}\njobs:\n  ci.yml:tier2: [cpp/linux-x64/tier2]\n"
+        load = parse_definition(text, lanes=("tier2",))
+        self.assertEqual(load.findings, [])
+        assert load.definition is not None
+        self.assertEqual([g.path for g in load.definition.gates], ["cpp/linux-x64/tier2"])
+
     def test_definition_and_lane_cross_check(self) -> None:
         loaded = parse_definition(DEFINITION, lanes=("rust", "tests"))
         assert loaded.definition is not None

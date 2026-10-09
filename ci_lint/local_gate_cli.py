@@ -32,7 +32,9 @@ from ci_lint.first_pass import DEFAULT_MIN_PRS, DEFAULT_TARGET, collect, render_
 from ci_lint.github_api import GitHubApiError, default_fetch
 from ci_lint.gate_bare_tools import check_no_bare_rust
 from ci_lint.remote_only import check_gate_012
+from ci_lint.rules.cpp_ctest import check_cpp_001
 from ci_lint.rules.swatinem_ban import check_cache_025
+from ci_lint.rules.tools import CI_SCRIPT_RE
 from ci_lint.gate_trust import TrustDecision, TrustInput
 from ci_lint.gate_trust import decide as decide_trust
 from ci_lint.lane_cache import ToolVersions, lane_key, lookup, run_audit, simulate, tree_entries
@@ -258,6 +260,10 @@ def _cmd_lint(args: argparse.Namespace) -> int:
     if config is not None:
         findings = findings + check_gate_static(config, repo) + check_no_bare_rust(repo, config.run) + check_gate_012(repo)
         findings = findings + check_cache_025(repo)
+        gate_scripts = tuple(
+            tok for argv in (config.run, *(lane.run for lane in config.lanes)) for tok in argv if CI_SCRIPT_RE.match(tok)
+        )
+        findings = findings + check_cpp_001(repo, extra_scripts=gate_scripts)
     for finding in findings:
         print(finding.render())
     violations = [f for f in findings if f.status == Status.VIOLATION]

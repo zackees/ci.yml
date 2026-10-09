@@ -68,6 +68,33 @@ class CachePayload007StaticTest(unittest.TestCase):
         self.assertEqual([], check_cache_007_static(ci, repo))
 
 
+class CachePayload007CmakeTest(unittest.TestCase):
+    """zackees/ci.yml#393: a CMake build tree is never a cache payload; the
+    ccache/zccache object store is."""
+
+    def test_classifies_cmake_build_trees(self) -> None:
+        tree = ["build", "build/", "build-linux/", "cmake-build-debug", "out/build/linux-ci",
+                "build/CMakeFiles/obs.dir/a.c.o", "build/CMakeCache.txt"]
+        violations = classify_payload_paths(tree)
+        self.assertEqual(tree, [v.path for v in violations])
+        self.assertTrue(all(v.content_class == "CMake build tree" for v in violations))
+
+    def test_object_caches_and_lookalikes_are_allowed(self) -> None:
+        ok = ["~/.ccache", "build/.ccache", ".zccache", "~/.cache/zccache", "src/build.rs", "deps/buildspec.json"]
+        self.assertEqual([], classify_payload_paths(ok))
+
+    @requires_yaml_tooling
+    def test_static_red_and_green(self) -> None:
+        repo = fixture("CACHE-007", "red-cmake")
+        ci, _ = load_ci_toml(repo)
+        findings = check_cache_007_static(ci, repo)
+        self.assertEqual(["CACHE-007"] * 2, [f.rule for f in findings])
+        self.assertTrue(all("CMake build tree" in f.message for f in findings))
+        repo = fixture("CACHE-007", "green-cmake")
+        ci, _ = load_ci_toml(repo)
+        self.assertEqual([], check_cache_007_static(ci, repo))
+
+
 class CachePayload007ManifestTest(unittest.TestCase):
     def test_manifest_flags_nextest_archive(self) -> None:
         with tempfile.TemporaryDirectory() as td:

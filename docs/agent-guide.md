@@ -9,7 +9,7 @@ Use this guide when investigating or implementing fleet CI checks. The goal is t
    For native artifacts, record the execution host and each artifact target separately: Linux musl versus glibc 2.17, Windows GNU versus MSVC, and x64 versus ARM64. Do not infer libc or ABI from the runner name. Validate the artifact and its runtime compatibility where evidence is available.
 3. Query Actions `pull_request` runs and their jobs and steps. Calculate the required PR critical path and job execution separately from queue time. Collect representative run, job, workflow, and commit links. Treat `pull_request_target` runs separately because their permissions and trigger semantics can differ.
 4. Compare current configuration with historical runs. Mark fixed cases as historical; never infer that deleting a slow workflow preserved test coverage. Collect explicit cache restore/save and toolchain identity evidence for Dylint cache findings.
-5. Apply the [general](policy-general.md) and [Rust](policy-rust.md) rules. Emit a machine-readable result for each rule: status, repository, rule ID, subject, evidence URLs, observed values, and applicable exception. Send only violations and unresolved cases to agent review.
+5. Apply the [general](policy-general.md), [Rust](policy-rust.md) and [C/C++](policy-cpp.md) rules. Emit a machine-readable result for each rule: status, repository, rule ID, subject, evidence URLs, observed values, and applicable exception. Send only violations and unresolved cases to agent review.
 
 GitHub documents the [workflow run](https://docs.github.com/en/rest/actions/workflow-runs) and [workflow job](https://docs.github.com/en/rest/actions/workflow-jobs) APIs needed for timing collection. Reusable workflows can hide jobs behind a caller, so inspect their definitions as well as the caller; see [GitHub's reuse reference](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations).
 
@@ -28,7 +28,7 @@ local runner gap. Preserve routine required checks and full release validation.
 
 ## Findings and issue lifecycle
 
-Use the stable `GEN-*`, `PY-*`, and `PERF-001` IDs in the [general policy](policy-general.md) and `RUST-*` and `PKG-*` IDs in the [Rust policy](policy-rust.md). Keep these IDs stable when implementing the result schema; change a rule's version rather than reusing an ID for different behavior.
+Use the stable `GEN-*`, `PY-*`, and `PERF-001` IDs in the [general policy](policy-general.md) and `RUST-*` and `PKG-*` IDs in the [Rust policy](policy-rust.md), and `CPP-*` IDs in the [C/C++ policy](policy-cpp.md). Keep these IDs stable when implementing the result schema; change a rule's version rather than reusing an ID for different behavior.
 
 For a confirmed finding, fingerprint `owner/repo + rule ID + workflow/job identity`. Search for an open issue with that fingerprint. Create one issue if absent; otherwise add new measurements and current workflow evidence to it. Include the violated rule, current file/line link, representative run and job links with dates and durations, whether cache state is known, affected coverage, and one concrete remedy. Do not file issues from a single ambiguous run or a text-only match to a script name.
 

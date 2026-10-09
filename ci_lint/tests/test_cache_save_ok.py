@@ -24,6 +24,25 @@ class SaveOkTest(unittest.TestCase):
         defaults.update(overrides)
         return SaveOkRequest(**defaults)  # type: ignore[arg-type]
 
+    # -- C/C++ object-cache families (zackees/ci.yml#393) -----------------
+    def test_ccache_family_follows_the_base_layer_writer_rule(self) -> None:
+        ci, findings = load_ci_toml(FIXTURES / "CACHE-004" / "green-cpp")
+        assert ci is not None, findings
+        for fam in ("ccache", "zccache"):
+            pr = evaluate_save_ok(ci, SaveOkRequest(family=fam, flow="pr", event="pull_request"))
+            self.assertEqual((False, 2), (pr.save, pr.rule), fam)
+            main = evaluate_save_ok(ci, SaveOkRequest(family=fam, flow="main", event="push",
+                                                      paths=("~/.ccache", "build/.zccache")))
+            self.assertTrue(main.save, main.reason)
+
+    # -- rule 11 ---------------------------------------------------------
+    def test_rule_11_cmake_build_tree(self) -> None:
+        r = evaluate_save_ok(self.ci, self._base_req(paths=("~/.ccache", "build/")))
+        self.assertEqual((False, 11), (r.save, r.rule))
+        self.assertIn("build/", r.reason)
+        r = evaluate_save_ok(self.ci, self._base_req(paths=("out/build/linux-ci/CMakeCache.txt",)))
+        self.assertEqual(11, r.rule)
+
     # -- rule 1 --------------------------------------------------------
     def test_rule_1_fork(self) -> None:
         r = evaluate_save_ok(self.ci, self._base_req(fork=True))

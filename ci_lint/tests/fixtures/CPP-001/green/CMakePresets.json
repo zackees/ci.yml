@@ -1,0 +1,7 @@
+{
+  "version": 6,
+  "testPresets": [
+    {"name": "base", "hidden": true, "execution": {"jobs": 8}},
+    {"name": "ci", "inherits": "base", "configurePreset": "ci"}
+  ]
+}

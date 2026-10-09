@@ -1,0 +1,4 @@
+{
+  "version": 6,
+  "testPresets": [{"name": "serial", "configurePreset": "ci", "output": {"outputOnFailure": true}}]
+}

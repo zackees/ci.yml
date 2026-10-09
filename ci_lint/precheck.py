@@ -39,6 +39,7 @@ from ci_lint.rules.doc_claims import check_gen_010_static
 from ci_lint.rules.ghapi_reread import check_ghapi_001
 from ci_lint.rules.release_gate import check_group11
 from ci_lint.rules.rust_dylint_target import check_rust_016
+from ci_lint.rules.cpp_ctest import check_cpp_001
 from ci_lint.rules.rust_nocapture import check_rust_017
 from ci_lint.rules.rust_test_selectors import check_rust_015
 from ci_lint.rules.rust_units import check_group7
@@ -174,6 +175,7 @@ def run_precheck(repo_root: Path, *, title: str = "", local: bool = False, live:
         all_findings.extend(gen_010_findings)
         all_findings.extend(check_group_m2_22(ci, repo_root))
         all_findings.extend(check_rust_017(repo_root))
+        all_findings.extend(check_cpp_001(repo_root))
         all_findings.extend(check_rust_015(repo_root))
         all_findings.extend(check_rust_016(repo_root))
         all_findings.extend(check_gen_021(repo_root))

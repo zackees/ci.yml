@@ -14,7 +14,8 @@ which remote job each gate stands in for:
 
 Gate paths follow the platform schema pattern `<ecosystem>/<platform>/<check>`:
 `rust/<target triple | all>/<check>` first, then `python/...`, then
-`general/...`. The file is parsed with `ci_lint.mini_yaml` (restricted YAML,
+`cpp/<os-arch | target triple | all>/<check>` (C/C++, CMake; zackees/ci.yml#393,
+docs/policy-cpp.md), then `general/...`. The file is parsed with `ci_lint.mini_yaml` (restricted YAML,
 standard library only), so a bare developer host can read it.
 
 **Attestation (compact JSON, the transit form).** `ci-lint local-gate run`
@@ -56,10 +57,15 @@ DEFINITION_FILE = "ci-attestations.yml"
 TRAILER_KEY = "Ci-Attestation"
 VERSION = 1
 STAMP_HEX = 32
-ECOSYSTEMS: tuple[str, ...] = ("rust", "python", "general")
+ECOSYSTEMS: tuple[str, ...] = ("rust", "python", "cpp", "general")
 FIDELITIES: tuple[str, ...] = ("native", "vm", "emulation")
 _GATE = re.compile(r"^(?P<eco>[a-z]+)/(?P<platform>[A-Za-z0-9_.-]+)/(?P<check>[a-z0-9][a-z0-9-]*)$")
 _TRIPLE = re.compile(r"^[a-z0-9_]+(-[a-z0-9_]+){2,3}$")
+# C/C++ platforms (#393): `all`, `<os>-<arch>` (the CMake-preset / runner
+# spelling, e.g. `linux-x64`, `windows-arm64`), or a target triple.
+CPP_OSES: tuple[str, ...] = ("linux", "windows", "macos", "freebsd", "android", "ios")
+CPP_ARCHES: tuple[str, ...] = ("x64", "x86", "arm64", "armv7", "riscv64", "universal")
+_CPP_OS_ARCH = re.compile(rf"^(?:{'|'.join(CPP_OSES)})-(?:{'|'.join(CPP_ARCHES)})$")
 _TRAILER = re.compile(rf"^{TRAILER_KEY}:\s*(?P<body>\{{.*\}})\s*$", re.MULTILINE)
 _JOB = re.compile(r"^[^/:]+:[^:]+$")
 
@@ -122,6 +128,8 @@ def validate_gate_path(path: str) -> str | None:
     plat = match.group("platform")
     if match.group("eco") == "rust" and plat != "all" and not _TRIPLE.match(plat):
         return f"Rust platform '{plat}' is not 'all' or a target triple"
+    if match.group("eco") == "cpp" and plat != "all" and not (_CPP_OS_ARCH.match(plat) or _TRIPLE.match(plat)):
+        return f"C/C++ platform '{plat}' is not 'all', '<os>-<arch>' (e.g. linux-x64) or a target triple"
     return None
 
 

@@ -61,11 +61,44 @@ DECLARATION_BASENAMES: frozenset[str] = frozenset({"local-gate.toml", "ci.toml"}
 class EcosystemPins:
     """Lockfiles and toolchain pins a lane must treat as inputs when it
     drives any of `tools` (design revision 3, #177: soldr's Python-lint lane
-    was invalidated by every Cargo.lock bump it cannot be affected by)."""
+    was invalidated by every Cargo.lock bump it cannot be affected by).
+
+    `globs` are repository-path patterns for pins that are not one file name
+    (a CMake module tree, `conanfile.*`); `identity` names extra tools whose
+    `--version` joins the key whenever the ecosystem matches -- the compiler
+    a CMake lane resolves (`cc`/`c++`) without the lane naming it (#393)."""
 
     tools: frozenset[str]
     basenames: frozenset[str]
+    globs: tuple[str, ...] = ()
+    identity: tuple[str, ...] = ()
+    # The subset of `tools` that compiles; `identity` is probed only for a
+    # lane declaring one of these (a clang-format-only lane never compiles).
+    identity_when: frozenset[str] = frozenset()
 
+
+# C/C++ (CMake) tools a lane may declare (zackees/ci.yml#393, docs/policy-cpp.md).
+CPP_TOOLS: frozenset[str] = frozenset(
+    {
+        "cmake", "ctest", "cpack", "ninja", "make", "gmake", "meson",
+        "cc", "c++", "gcc", "g++", "clang", "clang++", "clang-cl", "cl",
+        "clang-format", "clang-tidy", "gersemi", "ccache", "zccache", "sccache",
+        "vcpkg", "conan",
+    }
+)  # fmt: skip
+CPP_PIN_BASENAMES: frozenset[str] = frozenset(
+    {
+        "CMakeLists.txt", "CMakePresets.json", "CMakeUserPresets.json",
+        "vcpkg.json", "vcpkg-configuration.json", "conanfile.txt", "conanfile.py",
+        "buildspec.json", ".gitmodules", ".clang-format", ".clang-tidy",
+        ".gersemirc", "toolchain.cmake",
+    }
+)  # fmt: skip
+# Root-anchored: `cmake/**` is the conventional CMake module directory; the
+# `*.cmake` glob catches modules and toolchain files kept anywhere else.
+CPP_PIN_GLOBS: tuple[str, ...] = ("cmake/**", "**/*.cmake", "**/conanfile.*")
+CPP_COMPILER_IDENTITY: tuple[str, ...] = ("cc", "c++")
+CPP_FORMAT_TOOLS: frozenset[str] = frozenset({"clang-format", "gersemi"})
 
 ECOSYSTEM_PINS: tuple[EcosystemPins, ...] = (
     EcosystemPins(
@@ -80,8 +113,13 @@ ECOSYSTEM_PINS: tuple[EcosystemPins, ...] = (
         frozenset({"node", "npm", "npx", "pnpm", "yarn"}),
         frozenset({"package-lock.json", "pnpm-lock.yaml", "yarn.lock"}),
     ),
+    EcosystemPins(CPP_TOOLS, CPP_PIN_BASENAMES, CPP_PIN_GLOBS, CPP_COMPILER_IDENTITY, CPP_TOOLS - CPP_FORMAT_TOOLS),
 )
 ALL_PIN_BASENAMES: frozenset[str] = frozenset().union(*(e.basenames for e in ECOSYSTEM_PINS))
+
+
+def _matched_ecosystems(tools: tuple[str, ...]) -> tuple[EcosystemPins, ...]:
+    return tuple(e for e in ECOSYSTEM_PINS if e.tools & set(tools))
 
 
 def pin_basenames(tools: tuple[str, ...]) -> frozenset[str]:
@@ -89,10 +127,28 @@ def pin_basenames(tools: tuple[str, ...]) -> frozenset[str]:
     recognized tool gets every pin: the safe default when the gate cannot
     tell what the lane resolves."""
 
-    matched = [e.basenames for e in ECOSYSTEM_PINS if e.tools & set(tools)]
+    matched = [e.basenames for e in _matched_ecosystems(tools)]
     if not matched:
         return ALL_PIN_BASENAMES
     return frozenset().union(*matched)
+
+
+def pin_globs(tools: tuple[str, ...]) -> tuple[str, ...]:
+    """Path-pattern pins (`cmake/**`, `**/*.cmake`, ...), with the same
+    every-pin default as `pin_basenames` for a lane with no recognized tool."""
+
+    matched = _matched_ecosystems(tools) or ECOSYSTEM_PINS
+    return tuple(g for e in matched for g in e.globs)
+
+
+def key_tools(tools: tuple[str, ...]) -> tuple[str, ...]:
+    """The tools whose `--version` a lane's key covers: the declared ones
+    plus each matched ecosystem's identity tools (a compiling C/C++ lane's
+    `cc`/`c++`, #393). Only for recognized compiling tools: an unknown-tool
+    or format-only lane is not assumed to compile anything."""
+
+    implied = {t for e in _matched_ecosystems(tools) if e.identity_when & set(tools) for t in e.identity}
+    return tuple(sorted(set(tools) | implied))
 
 
 @dataclass(frozen=True)
@@ -195,6 +251,9 @@ def mandatory_paths(lane: LaneConfig, gate_run: tuple[str, ...], gate_source: st
     named.add(gate_source)
     always = DECLARATION_BASENAMES | pin_basenames(lane.tools)
     named.update(p for p in paths if p.rsplit("/", 1)[-1] in always)
+    globs = [glob_to_regex(g) for g in pin_globs(lane.tools)]
+    if globs:
+        named.update(p for p in paths if any(r.match(p) for r in globs))
     return named & paths
 
 
@@ -290,7 +349,7 @@ def lane_key(
     header = KeyHeader(
         v=KEY_VERSION,
         run=lane.run,
-        tools=tuple(versions.get(tool) for tool in sorted(set(lane.tools))),
+        tools=tuple(versions.get(tool) for tool in key_tools(lane.tools)),
         env=tuple(EnvValue(name, env.get(name, "")) for name in sorted(set(lane.env))),
         provider=provider,
     )
