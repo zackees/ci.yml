@@ -164,6 +164,12 @@ class LaneConfig:
     # chain; `heavy` lanes (the default: compilers, test suites) run one at a
     # time, in declared order, so they do not fight over CPU.
     weight: str = "heavy"
+    # Heavy lanes in different groups run as independent concurrent chains
+    # (#399); each group is serial in declared order and stops at its own
+    # first failure. Only for lanes that share no build directory or other
+    # exclusive resource (e.g. a test suite in an isolated container beside
+    # host compiles). "" is the default group.
+    group: str = ""
     # A lane that cannot run on every host (a local VM, an emulator): it may
     # exit NOT_APPLICABLE_EXIT to say "not on this host". It is then never
     # cached and never attested (omission = not run), and the gate passes.
@@ -189,6 +195,7 @@ def parse_lanes(raw: dict[str, TomlValue], *, path: str, source: str, findings: 
         max_age = sub.int_("max-age-hours", required=False)
         weight = sub.str_("weight", required=False, default="heavy") or "heavy"
         optional = bool(sub.bool_("optional", required=False, default=False))
+        group = sub.str_("group", required=False, default=None)
         sub.finish()
         if weight not in LANE_WEIGHTS:
             findings.append(
@@ -196,6 +203,13 @@ def parse_lanes(raw: dict[str, TomlValue], *, path: str, source: str, findings: 
                         fix=f"set it to one of {', '.join(LANE_WEIGHTS)}")
             )
             weight = "heavy"
+        if group is not None and (not group.strip() or weight == "light"):
+            findings.append(
+                Finding(rule="GATE-007", path=source,
+                        message=f"'{lane_path}.group' is {group!r} on a {weight} lane",
+                        fix="name a non-empty group, and only on heavy lanes (light lanes already run concurrently)")
+            )
+            group = None
         if not run:
             continue
         lanes.append(
@@ -208,6 +222,7 @@ def parse_lanes(raw: dict[str, TomlValue], *, path: str, source: str, findings: 
                 env=env,
                 max_age_hours=float(max_age) if max_age is not None else DEFAULT_MAX_AGE_HOURS,
                 weight=weight,
+                group=group or "",
                 optional=optional,
             )
         )

@@ -579,7 +579,8 @@ class _Pending:
 
 def _heavy_chain(repo: Path, chain: list[_Pending], log_dir: Path,
                  config: GateConfig, head: str, tree: str) -> list[LaneOutcome]:
-    """Heavy lanes one at a time, in declared order; stop at the first failure."""
+    """One group's heavy lanes one at a time, in declared order; stop at the
+    group's first failure."""
 
     out: list[LaneOutcome] = []
     for item in chain:
@@ -692,7 +693,8 @@ def _execute_full_lanes(repo: Path, config: GateConfig, head: str, tree: str, re
 def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache: bool) -> LaneRun:  # noqa: C901
     """Run (or reuse) every declared lane (GATE-007). Cache hits are
     resolved first; then `light` lanes run concurrently alongside the
-    `heavy` chain (heavy lanes one at a time, declared order). Every lane
+    `heavy` chains: one per heavy-lane `group` (#399), each running its
+    lanes one at a time in declared order. Every lane
     that passed is recorded if the tree is still untouched -- even when
     another lane failed, so fixing that one does not rerun these."""
 
@@ -722,20 +724,23 @@ def run_lanes(repo: Path, config: GateConfig, head: str, tree: str, *, use_cache
     if config.full_run is not None and len(pending) >= config.full_run.min_misses:
         return _run_full_lanes(repo, config, head, tree, reused, pending, log_dir)
     light = [p for p in pending if p.lane.weight == "light"]
-    heavy = [p for p in pending if p.lane.weight != "light"]
+    groups: dict[str, list[_Pending]] = {}
+    for p in pending:
+        if p.lane.weight != "light":
+            groups.setdefault(p.lane.group, []).append(p)
     outcomes: list[LaneOutcome] = []
-    with ThreadPoolExecutor(max_workers=len(light) + 1) as pool:
+    with ThreadPoolExecutor(max_workers=len(light) + max(len(groups), 1)) as pool:
         futures = []
         for p in light:
             print(f"local-gate: lane {p.lane.id}: started (light)", file=sys.stderr, flush=True)
             futures.append(pool.submit(_run_lane, repo, p.lane, p.key, log_dir, config, head, tree))
-        chain = pool.submit(_heavy_chain, repo, heavy, log_dir, config, head, tree) if heavy else None
+        chains = [pool.submit(_heavy_chain, repo, chain, log_dir, config, head, tree) for chain in groups.values()]
         for future in as_completed(futures):
             outcome = future.result()
             _report(outcome)
             outcomes.append(outcome)
-        if chain is not None:
-            outcomes.extend(chain.result())
+        for chain_future in chains:
+            outcomes.extend(chain_future.result())
     problem = _execution_changed(repo, head, config)
     if problem is not None:
         print(f"local-gate: {problem}", file=sys.stderr)
