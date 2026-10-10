@@ -52,7 +52,8 @@ GATE_PY = """\
 import pathlib, sys
 lane = sys.argv[sys.argv.index("--lane") + 1]
 log = pathlib.Path(sys.argv[sys.argv.index("--log") + 1])
-log.write_text(log.read_text() + lane + "\\n" if log.exists() else lane + "\\n")
+with log.open("a") as fh:  # append: concurrent lanes must not lose a line
+    fh.write(lane + "\\n")
 import time
 if pathlib.Path("sleep").exists():
     time.sleep(float(pathlib.Path("sleep").read_text()))
@@ -292,6 +293,61 @@ class ParallelTest(LanedRepo):
     def test_bad_weight(self) -> None:
         text = (self.repo / "local-gate.toml").read_text(encoding="utf-8").replace(
             'tools = ["git"]\n\n[gate.lanes.tests]', 'tools = ["git"]\nweight = "medium"\n\n[gate.lanes.tests]'
+        )
+        (self.repo / "local-gate.toml").write_text(text, encoding="utf-8")
+        self.assertEqual([f.rule for f in load_gate_config(self.repo).findings], ["GATE-007"])
+
+
+class HeavyGroupTest(LanedRepo):
+    """Heavy lanes in independent groups run as concurrent chains (#399)."""
+
+    def _lanes(self, groups: dict[str, str | None]) -> None:
+        py = sys.executable
+        lanes = "".join(
+            f'[gate.lanes.{lane}]\nrun = ["{py}", "gate.py", "--lane", "{lane}", "--log", "{self.log}"]\n'
+            f'tools = ["git"]\n' + (f'group = "{group}"\n' if group else "") + "\n"
+            for lane, group in groups.items()
+        )
+        (self.repo / "local-gate.toml").write_text(f'[gate]\nrun = ["{py}", "gate.py"]\n\n{lanes}', encoding="utf-8")
+        self.write("sleep", "1.5")
+        self.commit("grouped lanes")
+
+    def test_independent_groups_overlap(self) -> None:
+        self._lanes({"rust": None, "tests": "isolated"})
+        start = time.monotonic()
+        self.assertEqual(self.gate(), "rust:run,tests:run")
+        self.assertLess(time.monotonic() - start, 2.8)  # one chain would be >= 3.0 s
+
+    def test_lanes_in_one_group_stay_sequential(self) -> None:
+        self._lanes({"rust": None, "cross": None, "tests": "isolated"})
+        start = time.monotonic()
+        self.assertEqual(self.gate(), "rust:run,cross:run,tests:run")
+        self.assertGreaterEqual(time.monotonic() - start, 2.9)  # rust then cross
+
+    def test_a_failure_stops_only_its_own_group(self) -> None:
+        self._lanes({"rust": None, "cross": None, "tests": "isolated"})
+        self.write("fail-rust", "")
+        self.write("sleep", "0")
+        self.commit("rust fails")
+        self.log.unlink(missing_ok=True)
+        self.assertEqual(run_gate(self.repo, self.config()).exit_code, 4)
+        self.assertEqual(sorted(self.runs()), ["rust", "tests"])  # cross never started
+        # tests passed in its own group: same tree, so only rust reruns.
+        self.log.unlink(missing_ok=True)
+        run_gate(self.repo, self.config())
+        self.assertEqual(self.runs(), ["rust"])
+
+    def test_group_on_a_light_lane_is_a_finding(self) -> None:
+        text = (self.repo / "local-gate.toml").read_text(encoding="utf-8").replace(
+            'tools = ["git"]\n\n[gate.lanes.tests]',
+            'tools = ["git"]\nweight = "light"\ngroup = "x"\n\n[gate.lanes.tests]',
+        )
+        (self.repo / "local-gate.toml").write_text(text, encoding="utf-8")
+        self.assertEqual([f.rule for f in load_gate_config(self.repo).findings], ["GATE-007"])
+
+    def test_empty_group_is_a_finding(self) -> None:
+        text = (self.repo / "local-gate.toml").read_text(encoding="utf-8").replace(
+            'tools = ["git"]\n\n[gate.lanes.tests]', 'tools = ["git"]\ngroup = ""\n\n[gate.lanes.tests]'
         )
         (self.repo / "local-gate.toml").write_text(text, encoding="utf-8")
         self.assertEqual([f.rule for f in load_gate_config(self.repo).findings], ["GATE-007"])
