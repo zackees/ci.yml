@@ -219,24 +219,31 @@ family that does not exist describes nothing, and is `CT-002`. `scope = "repo"`
 is only coherent for a family whose key is `lockfile = true`, since that is what
 makes every branch's entry interchangeable.
 
-**Promotion's mechanism exists, is unreleased, and the fleet cannot reach it.** `zackees/setup-soldr`
-shipped `src/lib/ancestor-cache.ts` in [#566](https://github.com/zackees/setup-soldr/pull/566),
-gated by `autoKeyEnabled` in `src/main.ts` and present in both built bundles. But it is an
-opt-in pilot: `auto-key` defaults to `"false"`, and `auto-key-trusted-writers` must name
-reviewed immutable writer jobs
-(`owner/repo/.github/workflows/file.yml@FULL_SOURCE_SHA:RUN_ID:ATTEMPT:JOB_ID`). As of
-2026-10-05 **no fleet repository has a single live `setup-soldr-ancestor-build-v1-*`
-entry**, so promotion is available everywhere and enabled nowhere.
-**No release carries it.** `git tag --contains afdd8bf` is empty and no released tag's
-`action.yml` declares `auto-key` (`v0.9.85` predates #566 by three days). Since `SEC-004`
-requires a 40-hex SHA pin, **no fleet repository can opt in yet** — soldr pins `a07bab94`
-and bosn `fe965fc7`, neither with `auto-key`. The failure is silent: `cache-key: auto`
-parses as an ordinary input, the pilot never runs, and restores fall back to the legacy key
-with no error. `RUST-014` cannot catch it, because it flags pins predating a release marked
-*critical* and this feature is ahead of the tags. **The `v0` float is not an escape hatch.** `zackees/setup-soldr@v0` resolves to `dfbe962`
-(#532), which is **33 commits behind `main`** and declares no `auto-key` — it trails
-`v0.9.85` too. So `SEC-004`'s one sanctioned float cannot reach the pilot either: every
-legal way to reference the action lands before #566. `CACHE-032` is the static half.
+**Promotion's mechanism is reachable through `v0`, and is still a pilot on GitHub-hosted runners.**
+`zackees/setup-soldr` shipped `src/lib/ancestor-cache.ts` in
+[#566](https://github.com/zackees/setup-soldr/pull/566), gated by `autoKeyEnabled` in
+`src/main.ts`. On 2026-10-10 the sanctioned `zackees/setup-soldr@v0` float moved to
+`b05310a` ([#574](https://github.com/zackees/setup-soldr/pull/574)), so a repository can
+opt in with `key: auto` (or `auto-key: "true"`) without breaking `SEC-004`. No immutable
+`v0.9.x` tag carries it yet. A repository that pins a 40-hex SHA older than `b05310a` is
+still silently inert: the input parses, the pilot never runs, and restores fall back to the
+legacy key.
+
+The behaviour depends on the runner:
+- **GitHub-hosted:** an opt-in pilot. `auto-key-trusted-writers` must name reviewed
+  immutable writer jobs
+  (`owner/repo/.github/workflows/file.yml@FULL_SOURCE_SHA:RUN_ID:ATTEMPT:JOB_ID`). Without
+  one, saves go under per-source keys and restores use the legacy key.
+- **Local runner (`ACT=true`, act/act2 under bosn), since #574:** no token and no reviewed
+  writer are needed, because the local cache server holds only that machine's saves. The
+  build cache saves under the source's own ancestor key and restores the newest
+  same-identity entry, then the legacy keys. A stale legacy key that exact-hits therefore
+  no longer blocks saving new workspace units. This is "newest", not true DAG-nearest.
+  Zccache entries are content-addressed, so the choice affects speed only.
+
+#574 also makes the save gate count compiles from a cargo nested in another tool (for
+example uv -> a PEP 517 backend -> `soldr cargo build`) through `<build-cache>/history/`.
+That fixes setup-soldr#573's "0 new compile(s)" skip.
 [setup-soldr#552](https://github.com/zackees/setup-soldr/issues/552) tracks the rollout.
 
 `CACHE-030` therefore reports `mode = "ancestor"` as **`needs_review`** — not because

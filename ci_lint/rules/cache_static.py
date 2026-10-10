@@ -745,13 +745,10 @@ def check_cache_032(ci: CiToml) -> list[Finding]:
     critical, and there is no release here to mark -- the feature is ahead of
     the tags.
 
-    The `v0` float is NOT an escape hatch. `zackees/setup-soldr@v0` resolves to
-    `dfbe962` (#532), which is 33 commits BEHIND `main` and has no `auto-key`;
-    `v0` trails `v0.9.85` as well. So SEC-004's single sanctioned float cannot
-    reach the pilot either -- every legal way to reference the action lands
-    before #566. An earlier revision of this rule claimed the float "can
-    legitimately be ahead of the pilot"; that was wrong, and measured against
-    the tags on 2026-10-05.
+    The `v0` float: measured 2026-10-05, `v0` was `dfbe962` (#532), behind
+    the pilot. Since 2026-10-10 it resolves to `b05310a` (setup-soldr#574),
+    which carries the pilot, so `@v0` reaches it and an older 40-hex pin
+    does not.
 
     It stays `needs_review` rather than a violation because the gate is a
     release cadence, not a repository defect: nothing in this repository is
